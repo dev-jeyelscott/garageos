@@ -22,3 +22,17 @@ pnpm lint
 pnpm typecheck
 pnpm test
 ```
+
+## Local Development Environment
+
+### Requirements
+
+- Node.js LTS
+- pnpm
+- Docker Desktop or Docker Engine
+
+### Start local PostgreSQL
+
+```bash
+pnpm dev:db
+```

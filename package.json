@@ -19,7 +19,11 @@
     "start:web": "pnpm --filter @garageos/web start",
     "start:api": "pnpm --filter @garageos/api start",
     "start:worker": "pnpm --filter @garageos/worker start",
-    "start:scheduler": "pnpm --filter @garageos/scheduler start"
+    "start:scheduler": "pnpm --filter @garageos/scheduler start",
+    "dev:db": "docker compose up -d postgres",
+    "dev:db:down": "docker compose down",
+    "dev:db:reset": "docker compose down -v && docker compose up -d postgres",
+    "dev:db:logs": "docker compose logs -f postgres"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,json,md,yml,yaml}": [
