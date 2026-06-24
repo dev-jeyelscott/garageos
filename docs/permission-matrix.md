@@ -2,7 +2,7 @@
 
 **Status:** Draft for review  
 **Generated:** 2026-06-24  
-**Source of Truth:** `requirements-v2.4.md`, `database-design.md`, `database-schema.md`, `architecture.md`, `api-contracts.md`
+**Source of Truth:** `requirements.md`, `database-design.md`, `database-schema.md`, `architecture.md`, `api-contracts.md`
 
 ## 1. Purpose
 
@@ -10,13 +10,13 @@ This document defines the GarageOS permission matrix for implementation, QA, API
 
 ## 2. Source Review Summary
 
-| Source Document        | Permission-Relevant Findings                                                                                                                                                                                                 |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `requirements-v2.4.md` | Defines tenant/platform lifecycle access gates, tenant role templates, custom role behavior, additive permission resolution, branch access, tenant-wide entity visibility, required permission set, and role-template rules. |
-| `database-design.md`   | Treated as source-of-truth support for RBAC persistence and tenant isolation; no additional permission codes were introduced from this document.                                                                             |
-| `database-schema.md`   | Defines `permissions`, `roles`, `role_permissions`, `user_roles`, seeded role type enums, employee invitations, and branch assignment persistence.                                                                           |
-| `architecture.md`      | Defines enforcement pipeline: authentication, tenant status, permission guard, branch guard, service validation, repository scoping, and database defense-in-depth.                                                          |
-| `api-contracts.md`     | Defines endpoint-level required permissions, idempotency expectations, subscription guard behavior, branch access resolution, and error semantics.                                                                           |
+| Source Document      | Permission-Relevant Findings                                                                                                                                                                                                 |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `requirements.md`    | Defines tenant/platform lifecycle access gates, tenant role templates, custom role behavior, additive permission resolution, branch access, tenant-wide entity visibility, required permission set, and role-template rules. |
+| `database-design.md` | Treated as source-of-truth support for RBAC persistence and tenant isolation; no additional permission codes were introduced from this document.                                                                             |
+| `database-schema.md` | Defines `permissions`, `roles`, `role_permissions`, `user_roles`, seeded role type enums, employee invitations, and branch assignment persistence.                                                                           |
+| `architecture.md`    | Defines enforcement pipeline: authentication, tenant status, permission guard, branch guard, service validation, repository scoping, and database defense-in-depth.                                                          |
+| `api-contracts.md`   | Defines endpoint-level required permissions, idempotency expectations, subscription guard behavior, branch access resolution, and error semantics.                                                                           |
 
 ## 3. Panel Brainstorm Summary
 

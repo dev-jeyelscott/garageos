@@ -4,7 +4,7 @@
 **Project:** GarageOS — Motorcycle Shop Management System SaaS  
 **Generated:** 2026-06-24  
 **Status:** Draft for team review  
-**Source of Truth:** `requirements-v2.4.md`, `database-design.md`, `database-schema.md`, `architecture.md`, `api-contracts.md`  
+**Source of Truth:** `requirements.md`, `database-design.md`, `database-schema.md`, `architecture.md`, `api-contracts.md`  
 **Scope Rule:** This plan covers only functionality, workflows, constraints, and non-functional requirements documented in the approved source documents. It does not introduce new modules, product phases, or excluded capabilities.
 
 ---
@@ -19,13 +19,13 @@ The plan is intended for QA engineers, product managers, business stakeholders, 
 
 ## 2. Source Document Alignment
 
-| Source Document        | QA Usage                                                                                                                                                                 |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `requirements-v2.4.md` | Primary source for business scope, exclusions, workflows, acceptance criteria, security, non-functional targets, and operational rules.                                  |
-| `database-design.md`   | Source for data integrity expectations, transactional boundaries, isolation, indexing, and database-level QA strategy.                                                   |
-| `database-schema.md`   | Source for physical schema validation, enums, constraints, seed data, immutable records, idempotency tables, background job tables, and schema QA checklist.             |
-| `architecture.md`      | Source for test pyramid, deployment assumptions, mobile-first PWA architecture, background jobs, observability, security controls, and architecture acceptance criteria. |
-| `api-contracts.md`     | Source for endpoint behavior, request/response envelopes, error semantics, idempotency, authorization, workflow endpoints, and API contract testing.                     |
+| Source Document      | QA Usage                                                                                                                                                                 |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `requirements.md`    | Primary source for business scope, exclusions, workflows, acceptance criteria, security, non-functional targets, and operational rules.                                  |
+| `database-design.md` | Source for data integrity expectations, transactional boundaries, isolation, indexing, and database-level QA strategy.                                                   |
+| `database-schema.md` | Source for physical schema validation, enums, constraints, seed data, immutable records, idempotency tables, background job tables, and schema QA checklist.             |
+| `architecture.md`    | Source for test pyramid, deployment assumptions, mobile-first PWA architecture, background jobs, observability, security controls, and architecture acceptance criteria. |
+| `api-contracts.md`   | Source for endpoint behavior, request/response envelopes, error semantics, idempotency, authorization, workflow endpoints, and API contract testing.                     |
 
 ### 2.1 Scope Included
 

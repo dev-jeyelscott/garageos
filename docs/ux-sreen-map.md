@@ -7,7 +7,7 @@
 **Status:** Source-aligned UX documentation draft  
 **Source Documents:**
 
-1. `requirements-v2.4.md`
+1. `requirements.md`
 2. `database-design.md`
 3. `database-schema.md`
 4. `architecture.md`

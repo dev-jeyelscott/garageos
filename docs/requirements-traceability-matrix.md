@@ -19,19 +19,19 @@ The matrix is intentionally aligned to the existing source documents only. It do
 
 ## 2. Source Documents Reviewed
 
-| Source                 | Role in Traceability                                                                                            | Status Used             |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------- | ----------------------- |
-| `requirements-v2.4.md` | Primary product scope, business rules, exclusions, permissions, workflows, acceptance criteria, NFRs            | Primary source of truth |
-| `database-design.md`   | Logical database design and data integrity model                                                                | Supporting source       |
-| `database-schema.md`   | PostgreSQL physical schema blueprint, enums, constraints, indexes, seed data, QA schema checklist               | Supporting source       |
-| `architecture.md`      | Recommended production architecture, module boundaries, transaction architecture, deployment, risks, validation | Supporting source       |
-| `api-contracts.md`     | REST API contract, endpoints, validation model, auth boundaries, idempotency, error model, contract tests       | Supporting source       |
+| Source               | Role in Traceability                                                                                            | Status Used             |
+| -------------------- | --------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| `requirements.md`    | Primary product scope, business rules, exclusions, permissions, workflows, acceptance criteria, NFRs            | Primary source of truth |
+| `database-design.md` | Logical database design and data integrity model                                                                | Supporting source       |
+| `database-schema.md` | PostgreSQL physical schema blueprint, enums, constraints, indexes, seed data, QA schema checklist               | Supporting source       |
+| `architecture.md`    | Recommended production architecture, module boundaries, transaction architecture, deployment, risks, validation | Supporting source       |
+| `api-contracts.md`   | REST API contract, endpoints, validation model, auth boundaries, idempotency, error model, contract tests       | Supporting source       |
 
 ---
 
 ## 3. Traceability Rules
 
-1. `requirements-v2.4.md` is the highest authority for scope and business behavior.
+1. `requirements.md` is the highest authority for scope and business behavior.
 2. Architecture, schema, and API traces must not override PRD rules.
 3. Excluded capabilities remain explicitly out of scope.
 4. Technical choices listed as remaining engineering decisions are not treated as product ambiguity.
