@@ -13,7 +13,6 @@
     "isolatedModules": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
-    "declaration": true,
     "sourceMap": true,
     "paths": {
       "@garageos/shared": ["./packages/shared/src/index.ts"],
