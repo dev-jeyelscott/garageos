@@ -1,0 +1,28 @@
+export const API_ERROR_CODES = {
+  UNAUTHENTICATED: 'unauthenticated',
+  EMAIL_NOT_VERIFIED: 'email_not_verified',
+  FORBIDDEN: 'forbidden',
+  BRANCH_ACCESS_DENIED: 'branch_access_denied',
+  TENANT_ACCESS_DENIED: 'tenant_access_denied',
+  SUBSCRIPTION_ACCESS_BLOCKED: 'subscription_access_blocked',
+  PLAN_LIMIT_EXCEEDED: 'plan_limit_exceeded',
+  VALIDATION_FAILED: 'validation_failed',
+  WORKFLOW_TRANSITION_BLOCKED: 'workflow_transition_blocked',
+  RESOURCE_NOT_FOUND: 'resource_not_found',
+  DUPLICATE_RESOURCE: 'duplicate_resource',
+  VERSION_CONFLICT: 'version_conflict',
+  IDEMPOTENCY_CONFLICT: 'idempotency_conflict',
+  INVENTORY_INSUFFICIENT_AVAILABLE_STOCK: 'inventory_insufficient_available_stock',
+  INVENTORY_RESERVED_BELOW_ON_HAND: 'inventory_reserved_below_on_hand',
+  FIFO_ALLOCATION_CONFLICT: 'fifo_allocation_conflict',
+  INVOICE_OVERPAYMENT_BLOCKED: 'invoice_overpayment_blocked',
+  REFUND_AMOUNT_EXCEEDS_REFUNDABLE: 'refund_amount_exceeds_refundable',
+  INVOICE_OVERBILLING_BLOCKED: 'invoice_overbilling_blocked',
+  RATE_LIMITED: 'rate_limited',
+  BACKGROUND_JOB_FAILED: 'background_job_failed',
+  BAD_REQUEST: 'bad_request',
+  INTERNAL_SERVER_ERROR: 'internal_server_error',
+  SERVICE_UNAVAILABLE: 'service_unavailable',
+} as const;
+
+export type ApiErrorCode = (typeof API_ERROR_CODES)[keyof typeof API_ERROR_CODES];

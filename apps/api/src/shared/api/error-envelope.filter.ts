@@ -1,22 +1,18 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus } from '@nestjs/common';
+import { API_ERROR_CODES, type ApiErrorCode } from './api-error-code';
+import { GarageOsApiException } from './api-exception';
+import type { ApiErrorDetail } from './api-error-detail';
 import {
   createCorrelationId,
   createRequestId,
   type GarageOsHttpRequest,
 } from '../observability/request-context.middleware';
 
-interface ErrorDetail {
-  field?: string;
-  code?: string;
-  message?: string;
-  required_permission?: string;
-}
-
 interface ErrorResponseBody {
   error: {
-    code: string;
+    code: ApiErrorCode;
     message: string;
-    details: ErrorDetail[];
+    details: ApiErrorDetail[];
     request_id: string;
     correlation_id: string;
   };
@@ -28,22 +24,24 @@ interface HttpResponseLike {
   };
 }
 
-function defaultErrorCodeForStatus(status: number): string {
+function defaultErrorCodeForStatus(status: number): ApiErrorCode {
   switch (status) {
     case HttpStatus.UNAUTHORIZED:
-      return 'unauthenticated';
+      return API_ERROR_CODES.UNAUTHENTICATED;
     case HttpStatus.FORBIDDEN:
-      return 'forbidden';
+      return API_ERROR_CODES.FORBIDDEN;
     case HttpStatus.NOT_FOUND:
-      return 'resource_not_found';
+      return API_ERROR_CODES.RESOURCE_NOT_FOUND;
     case HttpStatus.CONFLICT:
-      return 'version_conflict';
+      return API_ERROR_CODES.VERSION_CONFLICT;
     case HttpStatus.UNPROCESSABLE_ENTITY:
-      return 'validation_failed';
+      return API_ERROR_CODES.VALIDATION_FAILED;
     case HttpStatus.TOO_MANY_REQUESTS:
-      return 'rate_limited';
+      return API_ERROR_CODES.RATE_LIMITED;
+    case HttpStatus.SERVICE_UNAVAILABLE:
+      return API_ERROR_CODES.SERVICE_UNAVAILABLE;
     default:
-      return status >= 500 ? 'internal_server_error' : 'bad_request';
+      return status >= 500 ? API_ERROR_CODES.INTERNAL_SERVER_ERROR : API_ERROR_CODES.BAD_REQUEST;
   }
 }
 
@@ -61,6 +59,8 @@ function defaultMessageForStatus(status: number): string {
       return 'One or more fields are invalid.';
     case HttpStatus.TOO_MANY_REQUESTS:
       return 'Rate limit exceeded.';
+    case HttpStatus.SERVICE_UNAVAILABLE:
+      return 'The service is temporarily unavailable.';
     default:
       return status >= 500
         ? 'An unexpected error occurred.'
@@ -90,6 +90,41 @@ function extractMessage(exception: HttpException, status: number): string {
   return defaultMessageForStatus(status);
 }
 
+function extractErrorPayload(
+  exception: unknown,
+  status: number,
+): {
+  code: ApiErrorCode;
+  message: string;
+  details: ApiErrorDetail[];
+} {
+  if (exception instanceof GarageOsApiException) {
+    return exception.toErrorPayload();
+  }
+
+  if (status === HttpStatus.NOT_FOUND) {
+    return {
+      code: API_ERROR_CODES.RESOURCE_NOT_FOUND,
+      message: defaultMessageForStatus(status),
+      details: [],
+    };
+  }
+
+  if (exception instanceof HttpException) {
+    return {
+      code: defaultErrorCodeForStatus(status),
+      message: extractMessage(exception, status),
+      details: [],
+    };
+  }
+
+  return {
+    code: defaultErrorCodeForStatus(status),
+    message: defaultMessageForStatus(status),
+    details: [],
+  };
+}
+
 @Catch()
 export class ErrorEnvelopeFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost): void {
@@ -101,21 +136,16 @@ export class ErrorEnvelopeFilter implements ExceptionFilter {
     const status =
       exception instanceof HttpException ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
 
-    const message =
-      status === HttpStatus.NOT_FOUND
-        ? defaultMessageForStatus(status)
-        : exception instanceof HttpException
-          ? extractMessage(exception, status)
-          : defaultMessageForStatus(status);
+    const error = extractErrorPayload(exception, status);
 
     const requestId = request.request_id ?? createRequestId();
     const correlationId = request.correlation_id ?? createCorrelationId();
 
     response.status(status).json({
       error: {
-        code: defaultErrorCodeForStatus(status),
-        message,
-        details: [],
+        code: error.code,
+        message: error.message,
+        details: error.details,
         request_id: requestId,
         correlation_id: correlationId,
       },
