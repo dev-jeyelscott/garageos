@@ -14,7 +14,11 @@
     "prepare": "husky",
     "audit:deps": "pnpm audit --audit-level high",
     "milestone:check": "pnpm format && pnpm lint && pnpm  typecheck && pnpm test",
+    "db:migrate": "node-pg-migrate up --migrations-dir packages/db/migrations --migrations-table schema_migrations",
+    "db:migrate:down": "node-pg-migrate down --migrations-dir packages/db/migrations --migrations-table schema_migrations",
+    "db:migrate:create": "node-pg-migrate create --migrations-dir packages/db/migrations --migration-file-language js",
     "db:migrate:validate": "echo \"Migration validation placeholder: no migrations exist yet. Replace in Milestone 1.\"",
+    "db:seed": "pnpm --filter @garageos/db seed",
     "dev:web": "pnpm --filter @garageos/web dev",
     "dev:api": "pnpm --filter @garageos/api dev",
     "dev:worker": "pnpm --filter @garageos/worker dev",
@@ -46,14 +50,19 @@
     "@typescript-eslint/eslint-plugin": "^8.62.0",
     "@typescript-eslint/parser": "^8.62.0",
     "@vitest/coverage-v8": "^4.1.9",
+    "dotenv-cli": "^11.0.0",
     "eslint": "^10.5.0",
     "eslint-config-prettier": "^10.1.8",
     "husky": "^9.1.7",
     "lint-staged": "^17.0.8",
+    "node-pg-migrate": "^8.0.4",
     "prettier": "^3.8.4",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.62.0",
     "vitest": "^4.1.9"
+  },
+  "dependencies": {
+    "pg": "^8.22.0"
   }
 }
