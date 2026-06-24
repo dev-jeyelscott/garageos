@@ -2,14 +2,14 @@
   "name": "@garageos/worker",
   "version": "0.0.0",
   "private": true,
-  "type": "module",
   "scripts": {
-    "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests",
-    "test:watch": "vitest"
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
+    "typecheck": "tsc --noEmit"
   },
-  "dependencies": {
-    "@garageos/shared": "workspace:*"
+  "devDependencies": {
+    "@types/node": "latest",
+    "tsx": "latest",
+    "typescript": "latest"
   }
 }

@@ -12,7 +12,14 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "prepare": "husky",
-    "dev": "echo \"dev services not configured yet\""
+    "dev:web": "pnpm --filter @garageos/web dev",
+    "dev:api": "pnpm --filter @garageos/api dev",
+    "dev:worker": "pnpm --filter @garageos/worker dev",
+    "dev:scheduler": "pnpm --filter @garageos/scheduler dev",
+    "start:web": "pnpm --filter @garageos/web start",
+    "start:api": "pnpm --filter @garageos/api start",
+    "start:worker": "pnpm --filter @garageos/worker start",
+    "start:scheduler": "pnpm --filter @garageos/scheduler start"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,json,md,yml,yaml}": [
