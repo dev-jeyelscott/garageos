@@ -1,6 +1,9 @@
 import 'reflect-metadata';
-import { Controller, Get, Module } from '@nestjs/common';
+import { Controller, Get, MiddlewareConsumer, Module, type NestModule } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { ErrorEnvelopeFilter } from './shared/api/error-envelope.filter';
+import { ResponseEnvelopeInterceptor } from './shared/api/response-envelope.interceptor';
+import { RequestContextMiddleware } from './shared/observability/request-context.middleware';
 
 @Controller()
 class HealthController {
@@ -16,12 +19,19 @@ class HealthController {
 @Module({
   controllers: [HealthController],
 })
-class AppModule {}
+class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(RequestContextMiddleware).forRoutes('*');
+  }
+}
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
 
   app.setGlobalPrefix('api/v1');
+
+  app.useGlobalFilters(new ErrorEnvelopeFilter());
+  app.useGlobalInterceptors(new ResponseEnvelopeInterceptor());
 
   const port = Number(process.env.PORT ?? 3001);
 
