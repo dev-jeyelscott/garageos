@@ -8,6 +8,7 @@
     "migrate:down": "node-pg-migrate down --migrations-dir migrations --migrations-table schema_migrations",
     "migrate:create": "node-pg-migrate create --migrations-dir migrations --migration-file-language js",
     "seed": "node ./scripts/seed.cjs",
+    "validate": "node ./scripts/validate-schema.cjs",
     "test": "echo \"No db tests yet\""
   },
   "dependencies": {

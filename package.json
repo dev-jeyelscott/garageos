@@ -19,6 +19,7 @@
     "db:migrate:create": "node-pg-migrate create --migrations-dir packages/db/migrations --migration-file-language js",
     "db:migrate:validate": "echo \"Migration validation placeholder: no migrations exist yet. Replace in Milestone 1.\"",
     "db:seed": "pnpm --filter @garageos/db seed",
+    "db:validate": "pnpm --filter @garageos/db validate",
     "dev:web": "pnpm --filter @garageos/web dev",
     "dev:api": "pnpm --filter @garageos/api dev",
     "dev:worker": "pnpm --filter @garageos/worker dev",
