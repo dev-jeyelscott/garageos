@@ -1,6 +1,6 @@
 # GarageOS Build Roadmap v1.3
 
-**Document:** `garageos-build-roadmap-v1.3.md`  
+**Document:** `build-roadmap.md`  
 **Project:** GarageOS — Motorcycle Shop Management System SaaS  
 **Generated:** 2026-06-24  
 **Status:** Source-aligned implementation roadmap  
@@ -31,7 +31,7 @@ The roadmap answers:
 
 The roadmap follows these source documents in priority order:
 
-1. `requirements-v2.4.md`
+1. `requirements.md`
 2. `database-design.md`
 3. `database-schema.md`
 4. `architecture.md`
@@ -42,10 +42,10 @@ The roadmap follows these source documents in priority order:
 9. `ux-sreen-map.md`
 10. `qa-acceptance-test-plan.md`
 11. `tech-stack.md`
-12. `garageos-architecture-records.md`
+12. `architecture-records.md`
 13. Existing `build-roadmap.md` / `build-roadmap-v1.2.md`
 
-If this roadmap conflicts with `requirements-v2.4.md`, the PRD wins. If this roadmap conflicts with the schema, architecture, API contracts, QA plan, permission matrix, tech stack, or ARDs, update the dependent artifact instead of inventing undocumented behavior.
+If this roadmap conflicts with `requirements.md`, the PRD wins. If this roadmap conflicts with the schema, architecture, API contracts, QA plan, permission matrix, tech stack, or ARDs, update the dependent artifact instead of inventing undocumented behavior.
 
 ---
 
