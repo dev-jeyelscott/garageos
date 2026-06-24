@@ -102,9 +102,11 @@ export class ErrorEnvelopeFilter implements ExceptionFilter {
       exception instanceof HttpException ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
 
     const message =
-      exception instanceof HttpException
-        ? extractMessage(exception, status)
-        : defaultMessageForStatus(status);
+      status === HttpStatus.NOT_FOUND
+        ? defaultMessageForStatus(status)
+        : exception instanceof HttpException
+          ? extractMessage(exception, status)
+          : defaultMessageForStatus(status);
 
     const requestId = request.request_id ?? createRequestId();
     const correlationId = request.correlation_id ?? createCorrelationId();
