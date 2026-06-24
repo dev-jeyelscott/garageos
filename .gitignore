@@ -13,6 +13,16 @@ coverage
 .env
 .env.*
 !.env.example
+!**/.env.example
+
+# Next.js local env
+apps/web/.env.local
+apps/web/.env*.local
+
+# API local env
+apps/api/.env
+apps/api/.env.*
+!apps/api/.env.example
 
 # Logs
 *.log
