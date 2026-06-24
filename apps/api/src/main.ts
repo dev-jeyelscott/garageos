@@ -4,8 +4,8 @@ import { NestFactory } from '@nestjs/core';
 
 @Controller()
 class HealthController {
-  @Get('/health')
-  health() {
+  @Get('health')
+  health(): { status: string; service: string } {
     return {
       status: 'ok',
       service: 'api',
@@ -18,13 +18,16 @@ class HealthController {
 })
 class AppModule {}
 
-async function bootstrap() {
+async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
+
+  app.setGlobalPrefix('api/v1');
+
   const port = Number(process.env.PORT ?? 3001);
 
   await app.listen(port);
 
-  console.log(`GarageOS API running on http://localhost:${port}`);
+  console.log(`GarageOS API running on http://localhost:${port}/api/v1`);
 }
 
 void bootstrap();
