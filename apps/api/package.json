@@ -4,8 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "lint": "echo \"lint placeholder: api\"",
-    "typecheck": "echo \"typecheck placeholder: api\"",
-    "test": "echo \"test placeholder: api\""
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@garageos/shared": "workspace:*"
   }
 }

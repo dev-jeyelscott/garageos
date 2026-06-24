@@ -797,12 +797,7 @@ Request:
 ```json
 {
   "name": "Senior Cashier",
-  "permission_codes": [
-    "invoices.read",
-    "invoices.issue",
-    "payments.create",
-    "receipts.read"
-  ],
+  "permission_codes": ["invoices.read", "invoices.issue", "payments.create", "receipts.read"],
   "change_reason": "Update cashier responsibilities.",
   "lock_version": 3
 }
