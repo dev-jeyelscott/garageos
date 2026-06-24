@@ -1,0 +1,11 @@
+{
+  "name": "@garageos/config",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "echo \"lint placeholder: config\"",
+    "typecheck": "echo \"typecheck placeholder: config\"",
+    "test": "echo \"test placeholder: config\""
+  }
+}

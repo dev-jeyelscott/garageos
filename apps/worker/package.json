@@ -1,0 +1,11 @@
+{
+  "name": "@garageos/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "echo \"lint placeholder: worker\"",
+    "typecheck": "echo \"typecheck placeholder: worker\"",
+    "test": "echo \"test placeholder: worker\""
+  }
+}

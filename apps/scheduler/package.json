@@ -1,0 +1,11 @@
+{
+  "name": "@garageos/scheduler",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "echo \"lint placeholder: scheduler\"",
+    "typecheck": "echo \"typecheck placeholder: scheduler\"",
+    "test": "echo \"test placeholder: scheduler\""
+  }
+}

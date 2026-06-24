@@ -1,0 +1,11 @@
+{
+  "name": "@garageos/test-utils",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "echo \"lint placeholder: test-utils\"",
+    "typecheck": "echo \"typecheck placeholder: test-utils\"",
+    "test": "echo \"test placeholder: test-utils\""
+  }
+}

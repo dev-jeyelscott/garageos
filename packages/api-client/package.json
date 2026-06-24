@@ -1,0 +1,11 @@
+{
+  "name": "@garageos/api-client",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "echo \"lint placeholder: api-client\"",
+    "typecheck": "echo \"typecheck placeholder: api-client\"",
+    "test": "echo \"test placeholder: api-client\""
+  }
+}

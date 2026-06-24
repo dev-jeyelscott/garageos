@@ -1,0 +1,548 @@
+# GarageOS Permission Matrix
+
+**Status:** Draft for review  
+**Generated:** 2026-06-24  
+**Source of Truth:** `requirements-v2.4.md`, `database-design.md`, `database-schema.md`, `architecture.md`, `api-contracts.md`
+
+## 1. Purpose
+
+This document defines the GarageOS permission matrix for implementation, QA, API contract validation, seeded role configuration, and access-control testing. It is derived only from the approved source documents and does not introduce modules, permissions, roles, or workflows that are not already documented.
+
+## 2. Source Review Summary
+
+| Source Document | Permission-Relevant Findings |
+| --- | --- |
+| `requirements-v2.4.md` | Defines tenant/platform lifecycle access gates, tenant role templates, custom role behavior, additive permission resolution, branch access, tenant-wide entity visibility, required permission set, and role-template rules. |
+| `database-design.md` | Treated as source-of-truth support for RBAC persistence and tenant isolation; no additional permission codes were introduced from this document. |
+| `database-schema.md` | Defines `permissions`, `roles`, `role_permissions`, `user_roles`, seeded role type enums, employee invitations, and branch assignment persistence. |
+| `architecture.md` | Defines enforcement pipeline: authentication, tenant status, permission guard, branch guard, service validation, repository scoping, and database defense-in-depth. |
+| `api-contracts.md` | Defines endpoint-level required permissions, idempotency expectations, subscription guard behavior, branch access resolution, and error semantics. |
+
+## 3. Panel Brainstorm Summary
+
+| Role | Review Output |
+| --- | --- |
+| Business Owner | Keep subscription enforcement, owner renewal/export access, and platform support access aligned with SaaS monetization and retention rules. |
+| Product Manager / BA | Use action-level permission codes exactly as documented; do not invent role defaults where the PRD only says “when assigned the corresponding permissions.” |
+| SMEs | Preserve shop workflow separation: service intake, repair execution, cashiering, inventory/purchasing, and management approvals. |
+| End Users | Keep owner full access; keep mechanic screens focused on assigned repair work and avoid accidental financial exposure. |
+| Architect | Implement layered authorization: tenant status gate before permission and branch checks, then service/business-rule validation. |
+| Senior Engineers | Persist permissions through normalized RBAC tables; cache effective permissions per session carefully and invalidate on role changes. |
+| UX Designer | Disable or hide unavailable actions, but always rely on backend authorization as authoritative. Show subscription and plan-limit errors clearly. |
+| QA | Build tests for every endpoint permission, branch access check, subscription state, custom role behavior, and role-template edit impact warning. |
+| Security | Treat platform support access, force adjustment, refunds, voids, exports, audit logs, and role assignment as high-risk, audited actions. |
+| DevOps | Include authorization denials, auth failures, tenant/support context, and required permission in structured logs without leaking secrets. |
+| Project Manager | Permission matrix is ready for implementation planning, but non-owner default role grants require product approval before seed migration finalization. |
+
+## 4. Key Access-Control Decisions
+
+1. **Shop Owner has all tenant permissions and tenant-wide branch access.**
+2. **Platform permissions are not tenant role permissions.** They are reserved for platform admin users and platform-admin APIs.
+3. **Non-owner seeded tenant roles are role templates, not immutable system roles.** They may be edited by authorized users except the protected Shop Owner capabilities.
+4. **Manager, Service Advisor, Mechanic, Cashier, and Inventory Clerk entries below are role-supported/eligible mappings, not confirmed default seed grants.** The PRD states these roles can perform listed actions “when assigned the corresponding permissions,” so final seed grants need explicit product approval.
+5. **Permission resolution is additive.** A user with multiple active roles receives the union of all permissions from those roles. No explicit deny permissions exist in this build scope.
+6. **Branch access is separate from permission access.** A user must have the action-level permission and either tenant-wide branch access or assignment to the branch for branch-specific records.
+7. **Tenant lifecycle gates can override permissions.** `read_only`, `suspended`, `pending_deletion`, and `deleted` states block operational access even when the user has the action permission, except for documented renewal/export/password/logout exceptions.
+8. **Plan limits can also override permissions.** Notification channels, branch limits, branch comparison reports, and advanced reports must pass effective plan capability checks.
+
+## 5. Legend
+
+| Symbol | Meaning |
+| --- | --- |
+| `✓ Platform` | Platform admin permission only. Not assignable to tenant roles. |
+| `✓ Required` | Required on protected Shop Owner role. |
+| `○ Eligible` | Documented as supported by that role when assigned the corresponding permission. Not a confirmed default seed grant. |
+| `✓ Assignable` | Assignable through custom tenant roles, subject to tenant/branch/status/plan guards. |
+| `—` | No direct seeded-role support found in source docs. Can still be assigned through custom tenant roles if tenant-scoped. |
+| `N/A` | Not applicable to tenant roles. |
+
+## 6. Global Access Gates
+
+| Gate | Rule | Implementation Requirement |
+| --- | --- | --- |
+| Authentication | User must have a valid active session and verified email before operational screens. | Enforce in auth middleware before tenant/permission checks. |
+| Tenant ownership | Tenant users belong to exactly one tenant; tenant clients must not supply arbitrary tenant scope. | Resolve tenant from session, not request body. |
+| Tenant status | Operational writes are allowed in `active` and `grace_period`; blocked in `read_only`, `suspended`, `pending_deletion`, and `deleted` with documented exceptions. | Tenant status guard runs before business validation. |
+| Branch access | Branch-specific records require branch assignment or tenant-wide branch access. | Enforce for job orders, invoices, purchases, inventory, transfers, expenses, reports, and linked histories. |
+| Permission | Endpoint/action must require a documented permission code. | Permission guard uses effective union of active assigned roles. |
+| Plan capability | Branch limits, notification channels, and report tiers must pass effective plan rules. | Plan guard must produce `plan_limit_exceeded` where applicable. |
+| Support access | Platform support access requires reason, mode, expiration, and audit logging. | Default support access is read-only; write access must be explicit and audited. |
+| Offline mode | Offline shell/cache is read-only only. | Block all offline writes regardless of permission. |
+
+## 7. Tenant Status Access Matrix
+
+| Tenant Status | Read Existing Records | Operational Writes | Owner Renewal | Owner Export | Non-Owner Access | Platform Support Access |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `pending_setup` | Limited setup/profile/subscription only | Onboarding/setup only | Yes, where applicable | No operational export specified | No operational screens | Platform admin may view setup status |
+| `active` | Yes, based on permissions and branch scope | Yes, based on permissions and branch scope | Yes | Yes, with `shop.export_data` | Yes | Audited access only |
+| `grace_period` | Yes, based on permissions and branch scope | Yes, based on permissions and branch scope | Yes | Yes, with `shop.export_data` | Yes | Audited access only |
+| `read_only` | Yes, based on permissions and branch scope | No operational writes | Yes | Shop Owner only | Yes, read/search/report/password/logout only | Audited access only |
+| `suspended` | Owner renewal/export screens only | No | Shop Owner only | Shop Owner until export window closes | Blocked | Audited access retained |
+| `pending_deletion` | Operational access blocked | No | Emergency/platform-dependent only | Disabled unless platform admin grants emergency extension | Blocked | Audited platform access only |
+| `deleted` | No tenant operational access | No | No | No | Blocked | Platform-retained audit/deletion context only |
+
+## 8. Role Template Matrix
+
+This matrix identifies role-supported permission eligibility from the PRD role descriptions. It must not be treated as final seeded defaults for non-owner roles until the Product Manager/BA approves seed grants.
+
+| Permission | Module | Platform Admin | Shop Owner | Manager | Service Advisor | Mechanic | Cashier | Inventory Clerk | Custom Tenant Role | Scope / Guard | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `platform.tenants.read` | Platform Administration | ✓ Platform | — | — | — | — | — | — | N/A | Platform-wide; not tenant employee scope. | Platform admin only; tenant roles must not receive platform permissions. |
+| `platform.tenants.create` | Platform Administration | ✓ Platform | — | — | — | — | — | — | N/A | Platform-wide; not tenant employee scope. | Platform admin only; tenant roles must not receive platform permissions. |
+| `platform.tenants.update` | Platform Administration | ✓ Platform | — | — | — | — | — | — | N/A | Platform-wide; not tenant employee scope. | Platform admin only; tenant roles must not receive platform permissions. |
+| `platform.subscriptions.update` | Platform Administration | ✓ Platform | — | — | — | — | — | — | N/A | Platform-wide; not tenant employee scope. | Platform admin only; tenant roles must not receive platform permissions. |
+| `platform.plans.update` | Platform Administration | ✓ Platform | — | — | — | — | — | — | N/A | Platform-wide; not tenant employee scope. | Platform admin only; tenant roles must not receive platform permissions. |
+| `platform.support_access` | Platform Administration | ✓ Platform | — | — | — | — | — | — | N/A | Platform-wide; not tenant employee scope. | Platform admin only; tenant roles must not receive platform permissions. |
+| `platform.audit_logs.read` | Platform Administration | ✓ Platform | — | — | — | — | — | — | N/A | Platform-wide; not tenant employee scope. | Platform admin only; tenant roles must not receive platform permissions. |
+| `shop.read` | Shop / Settings | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access applies where a branch-specific record is involved. |  |
+| `shop.update` | Shop / Settings | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access applies where a branch-specific record is involved. |  |
+| `shop.billing.update` | Shop / Settings | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access applies where a branch-specific record is involved. | Mechanic access prohibited unless explicitly granted through custom permissions. |
+| `shop.export_data` | Shop / Settings | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access applies where a branch-specific record is involved. |  |
+| `branches.create` | Branch Management | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access applies where a branch-specific record is involved. |  |
+| `branches.read` | Branch Management | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access applies where a branch-specific record is involved. |  |
+| `branches.update` | Branch Management | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access applies where a branch-specific record is involved. |  |
+| `branches.deactivate` | Branch Management | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access applies where a branch-specific record is involved. |  |
+| `branches.reactivate` | Branch Management | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access applies where a branch-specific record is involved. |  |
+| `users.create` | Employee / User Management | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access applies where a branch-specific record is involved. |  |
+| `users.read` | Employee / User Management | — | ✓ Required | ○ Eligible | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access applies where a branch-specific record is involved. |  |
+| `users.update` | Employee / User Management | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access applies where a branch-specific record is involved. |  |
+| `users.deactivate` | Employee / User Management | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access applies where a branch-specific record is involved. |  |
+| `users.reset_password` | Employee / User Management | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access applies where a branch-specific record is involved. |  |
+| `users.assign_roles` | Employee / User Management | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access applies where a branch-specific record is involved. | High-risk permission; require audit logging and management review. |
+| `users.assign_branches` | Employee / User Management | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access applies where a branch-specific record is involved. | High-risk permission; require audit logging and management review. |
+| `roles.create` | Roles & Permissions | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access applies where a branch-specific record is involved. |  |
+| `roles.read` | Roles & Permissions | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access applies where a branch-specific record is involved. |  |
+| `roles.update` | Roles & Permissions | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access applies where a branch-specific record is involved. | High-risk permission; require audit logging and management review. |
+| `roles.deactivate` | Roles & Permissions | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access applies where a branch-specific record is involved. |  |
+| `permissions.read` | Roles & Permissions | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access applies where a branch-specific record is involved. |  |
+| `customers.create` | Customers | — | ✓ Required | — | ○ Eligible | — | — | — | ✓ Assignable | Tenant-wide entity; linked operational history remains branch-filtered. |  |
+| `customers.read` | Customers | — | ✓ Required | — | ○ Eligible | — | — | — | ✓ Assignable | Tenant-wide entity; linked operational history remains branch-filtered. |  |
+| `customers.update` | Customers | — | ✓ Required | — | ○ Eligible | — | — | — | ✓ Assignable | Tenant-wide entity; linked operational history remains branch-filtered. |  |
+| `customers.merge` | Customers | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-wide entity; linked operational history remains branch-filtered. |  |
+| `customers.soft_delete` | Customers | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-wide entity; linked operational history remains branch-filtered. |  |
+| `customers.restore` | Customers | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-wide entity; linked operational history remains branch-filtered. |  |
+| `motorcycles.create` | Motorcycles | — | ✓ Required | — | ○ Eligible | — | — | — | ✓ Assignable | Tenant-wide entity; linked operational history remains branch-filtered. |  |
+| `motorcycles.read` | Motorcycles | — | ✓ Required | — | ○ Eligible | — | — | — | ✓ Assignable | Tenant-wide entity; linked operational history remains branch-filtered. |  |
+| `motorcycles.update` | Motorcycles | — | ✓ Required | — | ○ Eligible | — | — | — | ✓ Assignable | Tenant-wide entity; linked operational history remains branch-filtered. |  |
+| `motorcycles.soft_delete` | Motorcycles | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-wide entity; linked operational history remains branch-filtered. |  |
+| `motorcycles.restore` | Motorcycles | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-wide entity; linked operational history remains branch-filtered. |  |
+| `job_orders.create` | Job Orders | — | ✓ Required | ○ Eligible | ○ Eligible | — | — | — | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. |  |
+| `job_orders.read` | Job Orders | — | ✓ Required | ○ Eligible | ○ Eligible | ○ Eligible | ○ Eligible | — | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. |  |
+| `job_orders.update` | Job Orders | — | ✓ Required | ○ Eligible | ○ Eligible | ○ Eligible | — | — | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. |  |
+| `job_orders.cancel` | Job Orders | — | ✓ Required | ○ Eligible | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. |  |
+| `job_orders.change_status` | Job Orders | — | ✓ Required | ○ Eligible | ○ Eligible | — | — | — | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. |  |
+| `job_orders.correct_status` | Job Orders | — | ✓ Required | ○ Eligible | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. |  |
+| `job_orders.release` | Job Orders | — | ✓ Required | ○ Eligible | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. |  |
+| `job_orders.release_with_balance` | Job Orders | — | ✓ Required | ○ Eligible | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. | High-risk permission; require audit logging and management review. |
+| `job_orders.attach_files` | Job Orders | — | ✓ Required | — | ○ Eligible | ○ Eligible | — | — | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. |  |
+| `estimates.create` | Estimates | — | ✓ Required | — | ○ Eligible | — | — | — | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. |  |
+| `estimates.read` | Estimates | — | ✓ Required | — | ○ Eligible | — | — | — | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. |  |
+| `estimates.update` | Estimates | — | ✓ Required | — | ○ Eligible | — | — | — | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. |  |
+| `estimates.present` | Estimates | — | ✓ Required | — | ○ Eligible | — | — | — | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. |  |
+| `estimates.approve` | Estimates | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. |  |
+| `estimates.convert` | Estimates | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. |  |
+| `estimates.cancel` | Estimates | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. |  |
+| `services.create` | Service Catalog | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access applies where a branch-specific record is involved. |  |
+| `services.read` | Service Catalog | — | ✓ Required | — | ○ Eligible | — | — | — | ✓ Assignable | Tenant-scoped; branch access applies where a branch-specific record is involved. |  |
+| `services.update` | Service Catalog | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access applies where a branch-specific record is involved. |  |
+| `services.deactivate` | Service Catalog | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access applies where a branch-specific record is involved. |  |
+| `mechanic_sessions.create` | Mechanic Time Tracking | — | ✓ Required | — | — | ○ Eligible | — | — | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. |  |
+| `mechanic_sessions.read` | Mechanic Time Tracking | — | ✓ Required | ○ Eligible | — | ○ Eligible | — | — | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. |  |
+| `mechanic_sessions.pause` | Mechanic Time Tracking | — | ✓ Required | — | — | ○ Eligible | — | — | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. |  |
+| `mechanic_sessions.resume` | Mechanic Time Tracking | — | ✓ Required | — | — | ○ Eligible | — | — | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. |  |
+| `mechanic_sessions.finish` | Mechanic Time Tracking | — | ✓ Required | — | — | ○ Eligible | — | — | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. |  |
+| `products.create` | Products | — | ✓ Required | — | — | — | — | ○ Eligible | ✓ Assignable | Tenant-wide entity; linked operational history remains branch-filtered. |  |
+| `products.read` | Products | — | ✓ Required | — | ○ Eligible | ○ Eligible | — | ○ Eligible | ✓ Assignable | Tenant-wide entity; linked operational history remains branch-filtered. |  |
+| `products.update` | Products | — | ✓ Required | — | — | — | — | ○ Eligible | ✓ Assignable | Tenant-wide entity; linked operational history remains branch-filtered. |  |
+| `products.deactivate` | Products | — | ✓ Required | — | — | — | — | ○ Eligible | ✓ Assignable | Tenant-wide entity; linked operational history remains branch-filtered. |  |
+| `product_categories.manage` | Products | — | ✓ Required | — | — | — | — | ○ Eligible | ✓ Assignable | Tenant-scoped; branch access applies where a branch-specific record is involved. |  |
+| `inventory.read` | Inventory | — | ✓ Required | ○ Eligible | — | — | — | ○ Eligible | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. |  |
+| `inventory.adjust` | Inventory | — | ✓ Required | — | — | — | — | ○ Eligible | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. |  |
+| `inventory.adjust.approve` | Inventory | — | ✓ Required | ○ Eligible | — | — | — | ○ Eligible | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. | High-risk permission; require audit logging and management review. |
+| `inventory.reserve` | Inventory | — | ✓ Required | — | ○ Eligible | — | — | ○ Eligible | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. |  |
+| `inventory.release_reservation` | Inventory | — | ✓ Required | — | ○ Eligible | — | — | ○ Eligible | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. |  |
+| `inventory.transfer.create` | Inventory | — | ✓ Required | — | — | — | — | ○ Eligible | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. |  |
+| `inventory.transfer.send` | Inventory | — | ✓ Required | — | — | — | — | ○ Eligible | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. |  |
+| `inventory.transfer.receive` | Inventory | — | ✓ Required | — | — | — | — | ○ Eligible | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. |  |
+| `inventory.transfer.cancel` | Inventory | — | ✓ Required | ○ Eligible | — | — | — | ○ Eligible | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. |  |
+| `inventory.force_adjust` | Inventory | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. | Exceptional corrective permission; should be tightly restricted. |
+| `suppliers.create` | Suppliers | — | ✓ Required | — | — | — | — | ○ Eligible | ✓ Assignable | Tenant-wide entity; linked operational history remains branch-filtered. |  |
+| `suppliers.read` | Suppliers | — | ✓ Required | — | — | — | — | ○ Eligible | ✓ Assignable | Tenant-wide entity; linked operational history remains branch-filtered. |  |
+| `suppliers.update` | Suppliers | — | ✓ Required | — | — | — | — | ○ Eligible | ✓ Assignable | Tenant-wide entity; linked operational history remains branch-filtered. |  |
+| `suppliers.deactivate` | Suppliers | — | ✓ Required | — | — | — | — | ○ Eligible | ✓ Assignable | Tenant-wide entity; linked operational history remains branch-filtered. |  |
+| `purchases.create` | Purchasing / AP | — | ✓ Required | — | — | — | — | ○ Eligible | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. |  |
+| `purchases.read` | Purchasing / AP | — | ✓ Required | — | — | — | — | ○ Eligible | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. |  |
+| `purchases.update` | Purchasing / AP | — | ✓ Required | — | — | — | — | ○ Eligible | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. |  |
+| `purchases.cancel` | Purchasing / AP | — | ✓ Required | — | — | — | — | ○ Eligible | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. |  |
+| `purchases.receive` | Purchasing / AP | — | ✓ Required | — | — | — | — | ○ Eligible | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. |  |
+| `supplier_returns.create` | Purchasing / AP | — | ✓ Required | — | — | — | — | ○ Eligible | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. |  |
+| `supplier_returns.read` | Purchasing / AP | — | ✓ Required | — | — | — | — | ○ Eligible | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. |  |
+| `supplier_credits.create` | Purchasing / AP | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access applies where a branch-specific record is involved. |  |
+| `supplier_credits.read` | Purchasing / AP | — | ✓ Required | — | — | — | — | ○ Eligible | ✓ Assignable | Tenant-scoped; branch access applies where a branch-specific record is involved. | Mechanic access prohibited unless explicitly granted through custom permissions. |
+| `supplier_payments.create` | Purchasing / AP | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access applies where a branch-specific record is involved. | Mechanic access prohibited unless explicitly granted through custom permissions. |
+| `supplier_payments.read` | Purchasing / AP | — | ✓ Required | — | — | — | — | ○ Eligible | ✓ Assignable | Tenant-scoped; branch access applies where a branch-specific record is involved. | Mechanic access prohibited unless explicitly granted through custom permissions. |
+| `invoices.create` | Invoicing / AR | — | ✓ Required | — | — | — | ○ Eligible | — | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. | Mechanic access prohibited unless explicitly granted through custom permissions. |
+| `invoices.read` | Invoicing / AR | — | ✓ Required | — | — | — | ○ Eligible | — | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. | Mechanic access prohibited unless explicitly granted through custom permissions. |
+| `invoices.update_draft` | Invoicing / AR | — | ✓ Required | — | — | — | ○ Eligible | — | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. | Mechanic access prohibited unless explicitly granted through custom permissions. |
+| `invoices.issue` | Invoicing / AR | — | ✓ Required | — | — | — | ○ Eligible | — | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. | Mechanic access prohibited unless explicitly granted through custom permissions. |
+| `invoices.cancel` | Invoicing / AR | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. | Mechanic access prohibited unless explicitly granted through custom permissions. |
+| `invoices.void` | Invoicing / AR | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. | Mechanic access prohibited unless explicitly granted through custom permissions. High-risk permission; require audit logging and management review. |
+| `invoices.refund` | Invoicing / AR | — | ✓ Required | ○ Eligible | — | — | ○ Eligible | — | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. | Mechanic access prohibited unless explicitly granted through custom permissions. High-risk permission; require audit logging and management review. |
+| `payments.create` | Payments / Receipts / Refunds | — | ✓ Required | — | — | — | ○ Eligible | — | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. | Mechanic access prohibited unless explicitly granted through custom permissions. |
+| `payments.read` | Payments / Receipts / Refunds | — | ✓ Required | — | — | — | ○ Eligible | — | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. | Mechanic access prohibited unless explicitly granted through custom permissions. |
+| `payments.refund` | Payments / Receipts / Refunds | — | ✓ Required | ○ Eligible | — | — | ○ Eligible | — | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. | Mechanic access prohibited unless explicitly granted through custom permissions. High-risk permission; require audit logging and management review. |
+| `receipts.read` | Payments / Receipts / Refunds | — | ✓ Required | — | — | — | ○ Eligible | — | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. | Mechanic access prohibited unless explicitly granted through custom permissions. |
+| `expenses.create` | Expenses | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. |  |
+| `expenses.read` | Expenses | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. |  |
+| `expenses.update` | Expenses | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. |  |
+| `expenses.void` | Expenses | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access required when record is branch-specific. |  |
+| `expense_categories.manage` | Expenses | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access applies where a branch-specific record is involved. |  |
+| `reminders.create` | Customer Reminders | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access applies where a branch-specific record is involved. | Notification channel availability must also pass effective plan limits. |
+| `reminders.read` | Customer Reminders | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access applies where a branch-specific record is involved. | Notification channel availability must also pass effective plan limits. |
+| `reminders.update` | Customer Reminders | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access applies where a branch-specific record is involved. | Notification channel availability must also pass effective plan limits. |
+| `reminders.cancel` | Customer Reminders | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access applies where a branch-specific record is involved. | Notification channel availability must also pass effective plan limits. |
+| `reminders.send` | Customer Reminders | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access applies where a branch-specific record is involved. | Notification channel availability must also pass effective plan limits. |
+| `notifications.read` | Notifications | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access applies where a branch-specific record is involved. | Notification channel availability must also pass effective plan limits. |
+| `notifications.update_preferences` | Notifications | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access applies where a branch-specific record is involved. | Notification channel availability must also pass effective plan limits. |
+| `notifications.send` | Notifications | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access applies where a branch-specific record is involved. | Notification channel availability must also pass effective plan limits. |
+| `reports.view_basic` | Reports | — | ✓ Required | ○ Eligible | — | — | ○ Eligible | — | ✓ Assignable | Tenant-scoped; report data filtered by branch access and plan level. | Mechanic access prohibited unless explicitly granted through custom permissions. Plan limits apply: branch comparison requires Mid/High; advanced reports require High unless overridden. |
+| `reports.view_branch` | Reports | — | ✓ Required | ○ Eligible | — | — | — | — | ✓ Assignable | Tenant-scoped; report data filtered by branch access and plan level. | Mechanic access prohibited unless explicitly granted through custom permissions. Plan limits apply: branch comparison requires Mid/High; advanced reports require High unless overridden. |
+| `reports.view_advanced` | Reports | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; report data filtered by branch access and plan level. | Mechanic access prohibited unless explicitly granted through custom permissions. Plan limits apply: branch comparison requires Mid/High; advanced reports require High unless overridden. |
+| `reports.export` | Reports | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; report data filtered by branch access and plan level. | Plan limits apply: branch comparison requires Mid/High; advanced reports require High unless overridden. |
+| `files.upload` | Files | — | ✓ Required | — | ○ Eligible | ○ Eligible | — | — | ✓ Assignable | Tenant-scoped; linked entity permission and branch access required. |  |
+| `files.read` | Files | — | ✓ Required | — | ○ Eligible | ○ Eligible | — | — | ✓ Assignable | Tenant-scoped; linked entity permission and branch access required. |  |
+| `files.soft_delete` | Files | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; linked entity permission and branch access required. |  |
+| `files.restore` | Files | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; linked entity permission and branch access required. |  |
+| `audit_logs.read` | Tenant Audit Logs | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access applies where a branch-specific record is involved. | High-risk permission; require audit logging and management review. |
+| `settings.update` | Shop / Settings | — | ✓ Required | — | — | — | — | — | ✓ Assignable | Tenant-scoped; branch access applies where a branch-specific record is involved. | High-risk permission; require audit logging and management review. |
+
+## 9. Endpoint Permission Matrix
+
+Endpoint permissions are copied from `api-contracts.md`. Where the API contract says “or specific permission,” “context-specific,” or similar, implementation must resolve the exact documented permission from the workflow command and must not add undocumented permission codes.
+
+| Base Path | Method | Path | Required Permission / Access Rule | Idempotency | Description |
+| --- | --- | --- | --- | --- | --- |
+| `/api/v1/auth` | `POST` | `/signup-owner` | Public | Recommended | Owner signup tenant flow. Blocked if default plan/duration missing. |
+| `/api/v1/auth` | `POST` | `/login` | Public | No | Login with rate limiting. |
+| `/api/v1/auth` | `POST` | `/refresh` | Authenticated refresh session | No | Rotate refresh token and return new access token. |
+| `/api/v1/auth` | `POST` | `/logout` | Authenticated | No | Logout current device. |
+| `/api/v1/auth` | `POST` | `/logout-all` | Authenticated | No | Revoke all sessions for user. |
+| `/api/v1/auth` | `POST` | `/email-verification/resend` | Authenticated/unverified | No | Resend verification email with rate limit. |
+| `/api/v1/auth` | `POST` | `/email-verification/confirm` | Public token | No | Confirm email verification token. |
+| `/api/v1/auth` | `POST` | `/password/forgot` | Public | No | Request reset link with rate limit. |
+| `/api/v1/auth` | `POST` | `/password/reset` | Public token | No | Reset password using single-use token. |
+| `/api/v1/auth` | `POST` | `/password/change` | Authenticated | No | Change own password. |
+| `/api/v1/auth` | `GET` | `/session` | Authenticated | No | Return current user, tenant, permissions, branches, plan, subscription status. |
+| `/api/v1/platform` | `GET` | `/tenants` | `platform.tenants.read` | No | List tenants. |
+| `/api/v1/platform` | `POST` | `/tenants` | `platform.tenants.create` | Yes | Create platform-created tenant. |
+| `/api/v1/platform` | `GET` | `/tenants/{tenant_id}` | `platform.tenants.read` | No | Get tenant detail. |
+| `/api/v1/platform` | `PATCH` | `/tenants/{tenant_id}` | `platform.tenants.update` | No | Update tenant platform metadata. |
+| `/api/v1/platform` | `POST` | `/tenants/{tenant_id}/subscription` | `platform.subscriptions.update` | Yes | Assign/update plan, expiration date, or status override. |
+| `/api/v1/platform` | `POST` | `/tenants/{tenant_id}/read-only` | `platform.subscriptions.update` | Yes | Apply read-only override. |
+| `/api/v1/platform` | `POST` | `/tenants/{tenant_id}/suspend` | `platform.subscriptions.update` | Yes | Suspend tenant. |
+| `/api/v1/platform` | `POST` | `/tenants/{tenant_id}/support-access-sessions` | `platform.support_access` | Yes | Start audited support access session. |
+| `/api/v1/platform` | `POST` | `/support-access-sessions/{session_id}/end` | `platform.support_access` | Yes | End support access session. |
+| `/api/v1/platform` | `POST` | `/tenants/{tenant_id}/exports` | `platform.tenants.update` | Yes | Trigger tenant export. |
+| `/api/v1/platform` | `POST` | `/tenants/{tenant_id}/deletion-jobs` | `platform.tenants.update` | Yes | Queue tenant deletion when eligible. |
+| `/api/v1/platform` | `GET` | `/audit-logs` | `platform.audit_logs.read` | No | Search platform audit logs. |
+| `/api/v1/platform` | `GET` | `/plans` | `platform.plans.update` or read policy | No | List subscription plans and limits. |
+| `/api/v1/platform` | `PATCH` | `/plans/{plan_id}` | `platform.plans.update` | No | Update configurable plan settings. |
+| `/api/v1/shop` | `GET` | `/onboarding-state` | Authenticated owner/setup access | No | Get onboarding completion requirements. |
+| `/api/v1/shop` | `PUT` | `/profile` | `shop.update` or setup owner | No | Create/update shop profile during onboarding or settings. |
+| `/api/v1/shop` | `POST` | `/complete-onboarding` | Shop Owner | Yes | Complete onboarding once required records exist. |
+| `/api/v1/shop` | `GET` | `/profile` | `shop.read` | No | Get shop profile/settings. |
+| `/api/v1/shop` | `PATCH` | `/settings` | `settings.update` | No | Update mutable tenant settings. |
+| `/api/v1/shop` | `PATCH` | `/billing-settings` | `shop.billing.update` | No | Update billing-related settings allowed in read-only where specified. |
+| `/api/v1/shop` | `POST` | `/renewal-request` | Shop Owner | Yes | Submit external-payment renewal request. |
+| `/api/v1/branches` | `GET` | `/` | `branches.read` | No | List branches. |
+| `/api/v1/branches` | `POST` | `/` | `branches.create` | Yes | Create branch within plan limit. |
+| `/api/v1/branches` | `GET` | `/{branch_id}` | `branches.read` | No | Get branch detail. |
+| `/api/v1/branches` | `PATCH` | `/{branch_id}` | `branches.update` | No | Update branch. |
+| `/api/v1/branches` | `POST` | `/{branch_id}/deactivate` | `branches.deactivate` | Yes | Deactivate branch after blocking checks. |
+| `/api/v1/branches` | `POST` | `/{branch_id}/reactivate` | `branches.reactivate` | Yes | Reactivate branch after plan limit re-check. |
+| `/api/v1/employees` | `GET` | `/` | `users.read` | No | List employees. |
+| `/api/v1/employees` | `POST` | `/invitations` | `users.create` | Yes | Create employee invitation. |
+| `/api/v1/employees` | `POST` | `/` | `users.create` | Yes | Direct employee creation with password setup/reset link. |
+| `/api/v1/employees` | `GET` | `/{employee_id}` | `users.read` | No | Get employee profile. |
+| `/api/v1/employees` | `PATCH` | `/{employee_id}` | `users.update` | No | Update employee profile, branch access, roles. |
+| `/api/v1/employees` | `POST` | `/{employee_id}/deactivate` | `users.deactivate` | Yes | Deactivate employee and revoke sessions. |
+| `/api/v1/employees` | `POST` | `/{employee_id}/reactivate` | `users.update` | Yes | Reactivate employee after role/branch/email checks. |
+| `/api/v1/employees` | `POST` | `/{employee_id}/password-reset` | `users.reset_password` | Yes | Send password reset link. |
+| `/api/v1/employees` | `GET` | `/{employee_id}/activity` | `users.read` | No | View employee activity/audit events. |
+| `/api/v1/roles` | `GET` | `/` | `roles.read` | No | List roles. |
+| `/api/v1/roles` | `POST` | `/` | `roles.create` | Yes | Create custom role. |
+| `/api/v1/roles` | `GET` | `/{role_id}` | `roles.read` | No | Get role. |
+| `/api/v1/roles` | `PATCH` | `/{role_id}` | `roles.update` | No | Update role name or permissions. |
+| `/api/v1/roles` | `POST` | `/{role_id}/deactivate` | `roles.deactivate` | Yes | Deactivate role if no user depends solely on it. |
+| `/api/v1/roles` | `GET` | `/permissions` | `permissions.read` | No | List permission catalog. |
+| `/api/v1/customers` | `GET` | `/` | `customers.read` | No | Search/list active customers. |
+| `/api/v1/customers` | `POST` | `/` | `customers.create` | Yes | Create customer with duplicate warning behavior. |
+| `/api/v1/customers` | `GET` | `/{customer_id}` | `customers.read` | No | Get customer detail. |
+| `/api/v1/customers` | `PATCH` | `/{customer_id}` | `customers.update` | No | Update customer. |
+| `/api/v1/customers` | `POST` | `/{customer_id}/soft-delete` | `customers.soft_delete` | Yes | Soft delete customer after blocking checks. |
+| `/api/v1/customers` | `POST` | `/{customer_id}/restore` | `customers.restore` | Yes | Restore with duplicate re-check. |
+| `/api/v1/customers` | `POST` | `/merge` | `customers.merge` | Yes | Merge duplicate customers into survivor. |
+| `/api/v1/customers` | `GET` | `/{customer_id}/history` | `customers.read` | No | Tenant-wide profile plus branch-filtered operational history. |
+| `/api/v1/customers` | `GET` | `/{customer_id}/motorcycles` | `motorcycles.read` | No | List customer's motorcycles. |
+| `/api/v1/motorcycles` | `GET` | `/` | `motorcycles.read` | No | Search/list motorcycles. |
+| `/api/v1/motorcycles` | `POST` | `/` | `motorcycles.create` | Yes | Create motorcycle linked to active customer. |
+| `/api/v1/motorcycles` | `GET` | `/{motorcycle_id}` | `motorcycles.read` | No | Get motorcycle detail. |
+| `/api/v1/motorcycles` | `PATCH` | `/{motorcycle_id}` | `motorcycles.update` | No | Update motorcycle, including authorized customer link change. |
+| `/api/v1/motorcycles` | `POST` | `/{motorcycle_id}/soft-delete` | `motorcycles.soft_delete` | Yes | Soft delete after blocking checks. |
+| `/api/v1/motorcycles` | `POST` | `/{motorcycle_id}/restore` | `motorcycles.restore` | Yes | Restore when linked customer is active. |
+| `/api/v1/motorcycles` | `GET` | `/{motorcycle_id}/service-history` | `motorcycles.read` | No | Branch-access-filtered service history. |
+| `/api/v1/motorcycles` | `POST` | `/{motorcycle_id}/mileage-corrections` | `motorcycles.update` | Yes | Correct mileage lower than latest with reason. |
+| `/api/v1/services` | `GET` | `/` | `services.read` | No | List/search active services. |
+| `/api/v1/services` | `POST` | `/` | `services.create` | Yes | Create predefined service. |
+| `/api/v1/services` | `GET` | `/{service_id}` | `services.read` | No | Get service. |
+| `/api/v1/services` | `PATCH` | `/{service_id}` | `services.update` | No | Update service. |
+| `/api/v1/services` | `POST` | `/{service_id}/deactivate` | `services.deactivate` | Yes | Deactivate if not referenced by open workflows. |
+| `/api/v1/services` | `POST` | `/{service_id}/reactivate` | `services.update` | Yes | Reactivate if name remains unique. |
+| `/api/v1/estimates` | `GET` | `/` | `estimates.read` | No | List estimates. |
+| `/api/v1/estimates` | `POST` | `/` | `estimates.create` | Yes | Create draft estimate and number. |
+| `/api/v1/estimates` | `GET` | `/{estimate_id}` | `estimates.read` | No | Get estimate. |
+| `/api/v1/estimates` | `PATCH` | `/{estimate_id}` | `estimates.update` | No | Update draft estimate. |
+| `/api/v1/estimates` | `POST` | `/{estimate_id}/present` | `estimates.present` | Yes | Move draft to presented. |
+| `/api/v1/estimates` | `POST` | `/{estimate_id}/approve` | `estimates.approve` | Yes | Record customer approval. |
+| `/api/v1/estimates` | `POST` | `/{estimate_id}/convert` | `estimates.convert` | Yes | Convert approved estimate to job order lines. |
+| `/api/v1/estimates` | `POST` | `/{estimate_id}/cancel` | `estimates.cancel` | Yes | Cancel with reason. |
+| `/api/v1/estimates` | `GET` | `/{estimate_id}/status-events` | `estimates.read` | No | View estimate transition history. |
+| `/api/v1/job-orders` | `GET` | `/` | `job_orders.read` | No | List job orders. |
+| `/api/v1/job-orders` | `POST` | `/` | `job_orders.create` | Yes | Create job order and number. |
+| `/api/v1/job-orders` | `GET` | `/{job_order_id}` | `job_orders.read` | No | Get job order. |
+| `/api/v1/job-orders` | `PATCH` | `/{job_order_id}` | `job_orders.update` | No | Edit before release/cancel under line rules. |
+| `/api/v1/job-orders` | `POST` | `/{job_order_id}/service-lines` | `job_orders.update` | Yes | Add service/labor line. |
+| `/api/v1/job-orders` | `PATCH` | `/{job_order_id}/lines/{line_id}` | `job_orders.update` | No | Update editable line. |
+| `/api/v1/job-orders` | `DELETE` | `/{job_order_id}/lines/{line_id}` | `job_orders.update` | Yes | Remove editable line and release reservation if part line. |
+| `/api/v1/job-orders` | `POST` | `/{job_order_id}/part-lines` | `inventory.reserve` or `job_orders.update` | Yes | Add part line and create reservation. |
+| `/api/v1/job-orders` | `POST` | `/{job_order_id}/assign-mechanics` | `job_orders.update` | No | Assign primary/additional mechanics. |
+| `/api/v1/job-orders` | `POST` | `/{job_order_id}/status-transitions` | `job_orders.change_status` or specific permission | Yes | Generic status transition with validation. |
+| `/api/v1/job-orders` | `POST` | `/{job_order_id}/complete` | `job_orders.change_status` | Yes | Complete and consume reserved inventory. |
+| `/api/v1/job-orders` | `POST` | `/{job_order_id}/release` | `job_orders.release` | Yes | Release after release rule validation. |
+| `/api/v1/job-orders` | `POST` | `/{job_order_id}/cancel` | `job_orders.cancel` | Yes | Cancel with reason and reservation release. |
+| `/api/v1/job-orders` | `POST` | `/{job_order_id}/files` | `job_orders.attach_files` | Yes | Attach uploaded files. |
+| `/api/v1/job-orders` | `GET` | `/{job_order_id}/status-events` | `job_orders.read` | No | View status history. |
+| `/api/v1/mechanic-sessions` | `GET` | `/` | `mechanic_sessions.read` | No | List work sessions. |
+| `/api/v1/mechanic-sessions` | `POST` | `/` | `mechanic_sessions.create` | Yes | Start work session. |
+| `/api/v1/mechanic-sessions` | `POST` | `/{session_id}/pause` | `mechanic_sessions.pause` | Yes | Pause active session. |
+| `/api/v1/mechanic-sessions` | `POST` | `/{session_id}/resume` | `mechanic_sessions.resume` | Yes | Resume paused session. |
+| `/api/v1/mechanic-sessions` | `POST` | `/{session_id}/finish` | `mechanic_sessions.finish` | Yes | Finish active/paused session and calculate duration. |
+| `/api/v1/product-categories` | `GET` | `/` | `products.read` | No | List categories. |
+| `/api/v1/product-categories` | `POST` | `/` | `product_categories.manage` | Yes | Create category. |
+| `/api/v1/product-categories` | `PATCH` | `/{category_id}` | `product_categories.manage` | No | Update category. |
+| `/api/v1/product-categories` | `POST` | `/{category_id}/deactivate` | `product_categories.manage` | Yes | Deactivate if no active products assigned. |
+| `/api/v1/product-categories` | `POST` | `/{category_id}/reactivate` | `product_categories.manage` | Yes | Reactivate if name unique. |
+| `/api/v1/products` | `GET` | `/` | `products.read` | No | Search/list products. |
+| `/api/v1/products` | `POST` | `/` | `products.create` | Yes | Create product. |
+| `/api/v1/products` | `GET` | `/{product_id}` | `products.read` | No | Get product. |
+| `/api/v1/products` | `PATCH` | `/{product_id}` | `products.update` | No | Update product. |
+| `/api/v1/products` | `POST` | `/{product_id}/deactivate` | `products.deactivate` | Yes | Deactivate if no stock/reservations/open refs. |
+| `/api/v1/products` | `POST` | `/{product_id}/reactivate` | `products.update` | Yes | Reactivate if SKU/barcode unique. |
+| `/api/v1/products` | `GET` | `/{product_id}/stock` | `inventory.read` | No | Stock per accessible branch. |
+| `/api/v1/products` | `GET` | `/{product_id}/fifo-layers` | `inventory.read` | No | FIFO layers visible by branch access. |
+| `/api/v1/inventory` | `GET` | `/stock-balances` | `inventory.read` | No | List stock balances by branch/product. |
+| `/api/v1/inventory` | `GET` | `/ledger` | `inventory.read` | No | Paginated immutable inventory movement history. |
+| `/api/v1/inventory` | `GET` | `/fifo-layers` | `inventory.read` | No | FIFO layer report source. |
+| `/api/v1/inventory` | `GET` | `/low-stock-alerts` | `inventory.read` | No | Active low stock alerts. |
+| `/api/v1/inventory-adjustments` | `GET` | `/` | `inventory.read` | No | List inventory adjustments. |
+| `/api/v1/inventory-adjustments` | `POST` | `/` | `inventory.adjust` | Yes | Create draft adjustment. |
+| `/api/v1/inventory-adjustments` | `GET` | `/{adjustment_id}` | `inventory.read` | No | Get adjustment. |
+| `/api/v1/inventory-adjustments` | `PATCH` | `/{adjustment_id}` | `inventory.adjust` | No | Update draft adjustment. |
+| `/api/v1/inventory-adjustments` | `POST` | `/{adjustment_id}/submit` | `inventory.adjust` | Yes | Submit for approval or post if below threshold. |
+| `/api/v1/inventory-adjustments` | `POST` | `/{adjustment_id}/approve` | `inventory.adjust.approve` | Yes | Approve pending adjustment. |
+| `/api/v1/inventory-adjustments` | `POST` | `/{adjustment_id}/reject` | `inventory.adjust.approve` | Yes | Reject with reason. |
+| `/api/v1/inventory-adjustments` | `POST` | `/{adjustment_id}/cancel` | `inventory.adjust` | Yes | Cancel draft/pending before posting. |
+| `/api/v1/inventory-adjustments` | `POST` | `/{adjustment_id}/post` | `inventory.adjust` or `inventory.adjust.approve` | Yes | Post approved adjustment and stock ledger entries. |
+| `/api/v1/inventory-adjustments` | `POST` | `/force` | `inventory.force_adjust` | Yes | Exceptional corrective force adjustment. |
+| `/api/v1/inventory-transfers` | `GET` | `/` | `inventory.read` | No | List transfers. |
+| `/api/v1/inventory-transfers` | `POST` | `/` | `inventory.transfer.create` | Yes | Create draft transfer and number. |
+| `/api/v1/inventory-transfers` | `GET` | `/{transfer_id}` | `inventory.read` | No | Get transfer. |
+| `/api/v1/inventory-transfers` | `PATCH` | `/{transfer_id}` | `inventory.transfer.create` | No | Update draft transfer. |
+| `/api/v1/inventory-transfers` | `POST` | `/{transfer_id}/submit` | `inventory.transfer.create` | Yes | Move draft to pending and reserve source stock. |
+| `/api/v1/inventory-transfers` | `POST` | `/{transfer_id}/send` | `inventory.transfer.send` | Yes | Move pending to in_transit with sent quantities. |
+| `/api/v1/inventory-transfers` | `POST` | `/{transfer_id}/receive` | `inventory.transfer.receive` | Yes | Receive transfer, move FIFO cost layers, record variance if any. |
+| `/api/v1/inventory-transfers` | `POST` | `/{transfer_id}/cancel` | `inventory.transfer.cancel` | Yes | Cancel pending/in_transit with disposition rules. |
+| `/api/v1/inventory-transfers` | `GET` | `/{transfer_id}/status-events` | `inventory.read` | No | View transition history. |
+| `/api/v1/suppliers` | `GET` | `/` | `suppliers.read` | No | List/search suppliers. |
+| `/api/v1/suppliers` | `POST` | `/` | `suppliers.create` | Yes | Create supplier. |
+| `/api/v1/suppliers` | `GET` | `/{supplier_id}` | `suppliers.read` | No | Get supplier. |
+| `/api/v1/suppliers` | `PATCH` | `/{supplier_id}` | `suppliers.update` | No | Update supplier. |
+| `/api/v1/suppliers` | `POST` | `/{supplier_id}/deactivate` | `suppliers.deactivate` | Yes | Deactivate when no open PO/unpaid AP. |
+| `/api/v1/suppliers` | `POST` | `/{supplier_id}/reactivate` | `suppliers.update` | Yes | Reactivate with active-name uniqueness check. |
+| `/api/v1/suppliers` | `GET` | `/{supplier_id}/balance` | `supplier_payments.read` or AP report permission | No | Supplier payable balance. |
+| `/api/v1/suppliers` | `GET` | `/{supplier_id}/history` | `suppliers.read` | No | Purchase/payment/return history. |
+| `/api/v1/suppliers` | `POST` | `/{supplier_id}/payments` | `supplier_payments.create` | Yes | Record manual supplier payment. |
+| `/api/v1/suppliers` | `POST` | `/{supplier_id}/credits` | `supplier_credits.create` | Yes | Create supplier credit adjustment. |
+| `/api/v1/purchase-orders` | `GET` | `/` | `purchases.read` | No | List purchase orders. |
+| `/api/v1/purchase-orders` | `POST` | `/` | `purchases.create` | Yes | Create draft purchase order and number. |
+| `/api/v1/purchase-orders` | `GET` | `/{purchase_order_id}` | `purchases.read` | No | Get purchase order. |
+| `/api/v1/purchase-orders` | `PATCH` | `/{purchase_order_id}` | `purchases.update` | No | Update draft/eligible purchase order. |
+| `/api/v1/purchase-orders` | `POST` | `/{purchase_order_id}/order` | `purchases.update` | Yes | Move draft to ordered. |
+| `/api/v1/purchase-orders` | `POST` | `/{purchase_order_id}/receivings` | `purchases.receive` | Yes | Receive stock and create FIFO layers. |
+| `/api/v1/purchase-orders` | `POST` | `/{purchase_order_id}/close` | `purchases.update` | Yes | Close after receiving/AP confirmation. |
+| `/api/v1/purchase-orders` | `POST` | `/{purchase_order_id}/cancel` | `purchases.cancel` | Yes | Cancel if no stock received. |
+| `/api/v1/supplier-returns` | `GET` | `/` | `supplier_returns.read` | No | List supplier returns. |
+| `/api/v1/supplier-returns` | `POST` | `/` | `supplier_returns.create` | Yes | Create draft supplier return. |
+| `/api/v1/supplier-returns` | `GET` | `/{supplier_return_id}` | `supplier_returns.read` | No | Get supplier return. |
+| `/api/v1/supplier-returns` | `PATCH` | `/{supplier_return_id}` | `supplier_returns.create` | No | Update draft supplier return. |
+| `/api/v1/supplier-returns` | `POST` | `/{supplier_return_id}/post` | `supplier_returns.create` | Yes | Post return, consume FIFO, reduce stock, AP/credit effect. |
+| `/api/v1/supplier-returns` | `POST` | `/{supplier_return_id}/cancel` | `supplier_returns.create` | Yes | Cancel draft return. |
+| `/api/v1/invoices` | `GET` | `/` | `invoices.read` | No | List invoices. |
+| `/api/v1/invoices` | `POST` | `/` | `invoices.create` | Yes | Create draft invoice and number from one or more job orders. |
+| `/api/v1/invoices` | `GET` | `/{invoice_id}` | `invoices.read` | No | Get invoice. |
+| `/api/v1/invoices` | `PATCH` | `/{invoice_id}` | `invoices.update_draft` | No | Edit draft invoice only. |
+| `/api/v1/invoices` | `POST` | `/{invoice_id}/issue` | `invoices.issue` | Yes | Issue invoice, copy tax fields, finalize allocations. |
+| `/api/v1/invoices` | `POST` | `/{invoice_id}/cancel` | `invoices.cancel` | Yes | Cancel draft/pending zero-payment invoice. |
+| `/api/v1/invoices` | `POST` | `/{invoice_id}/void` | `invoices.void` | Yes | Void issued invoice after required refunds. |
+| `/api/v1/invoices` | `GET` | `/{invoice_id}/status-events` | `invoices.read` | No | View invoice status history. |
+| `/api/v1/invoices` | `GET` | `/{invoice_id}/print` | `invoices.read` | No | Printable invoice document metadata or signed URL. |
+| `/api/v1/invoices/{invoice_id}/payments` | `GET` | `/` | `payments.read` | No | List invoice payments. |
+| `/api/v1/invoices/{invoice_id}/payments` | `POST` | `/` | `payments.create` | Yes | Record payment and generate immutable receipt. |
+| `/api/v1/receipts` | `GET` | `/` | `receipts.read` | No | List receipts. |
+| `/api/v1/receipts` | `GET` | `/{receipt_id}` | `receipts.read` | No | Get immutable receipt. |
+| `/api/v1/receipts` | `GET` | `/{receipt_id}/print` | `receipts.read` | No | Printable receipt metadata or signed URL. |
+| `/api/v1/payments/{payment_id}/refunds` | `GET` | `/` | `payments.read` | No | List payment refunds. |
+| `/api/v1/payments/{payment_id}/refunds` | `POST` | `/` | `payments.refund` or `invoices.refund` | Yes | Record partial/full refund. |
+| `/api/v1/accounts` | `GET` | `/receivable` | `invoices.read` or reports permission |  | AR list for pending/partially paid/overdue invoices with collectible balance. |
+| `/api/v1/accounts` | `GET` | `/receivable/summary` | `reports.view_basic` |  | AR totals and aging buckets. |
+| `/api/v1/accounts` | `GET` | `/payable` | `supplier_payments.read` or reports permission |  | AP list based on supplier payable balance. |
+| `/api/v1/accounts` | `GET` | `/payable/summary` | `reports.view_basic` |  | AP totals by supplier/branch. |
+| `/api/v1/expenses` | `GET` | `/` | `expenses.read` | No | List expenses. |
+| `/api/v1/expenses` | `POST` | `/` | `expenses.create` | Yes | Record expense. |
+| `/api/v1/expenses` | `GET` | `/{expense_id}` | `expenses.read` | No | Get expense. |
+| `/api/v1/expenses` | `PATCH` | `/{expense_id}` | `expenses.update` | No | Edit active expense with reason for report-affecting changes. |
+| `/api/v1/expenses` | `POST` | `/{expense_id}/void` | `expenses.void` | Yes | Void expense with reason. |
+| `/api/v1/expense-categories` | `GET` | `/` | `expenses.read` | No | List expense categories. |
+| `/api/v1/expense-categories` | `POST` | `/` | `expense_categories.manage` | Yes | Create category. |
+| `/api/v1/expense-categories` | `PATCH` | `/{category_id}` | `expense_categories.manage` | No | Update category. |
+| `/api/v1/expense-categories` | `POST` | `/{category_id}/deactivate` | `expense_categories.manage` | Yes | Deactivate category. |
+| `/api/v1/expense-categories` | `POST` | `/{category_id}/reactivate` | `expense_categories.manage` | Yes | Reactivate category. |
+| `/api/v1/reminders` | `GET` | `/` | `reminders.read` | No | List reminders. |
+| `/api/v1/reminders` | `POST` | `/` | `reminders.create` | Yes | Create reminder. |
+| `/api/v1/reminders` | `GET` | `/{reminder_id}` | `reminders.read` | No | Get reminder. |
+| `/api/v1/reminders` | `PATCH` | `/{reminder_id}` | `reminders.update` | No | Update scheduled reminder. |
+| `/api/v1/reminders` | `POST` | `/{reminder_id}/cancel` | `reminders.cancel` | Yes | Cancel reminder. |
+| `/api/v1/reminders` | `POST` | `/{reminder_id}/send` | `reminders.send` | Yes | Manually trigger send when due/eligible. |
+| `/api/v1/reminders` | `GET` | `/{reminder_id}/deliveries` | `reminders.read` | No | View per-channel delivery statuses. |
+| `/api/v1/notifications` | `GET` | `/` | `notifications.read` |  | List current user's in-app notifications. |
+| `/api/v1/notifications` | `POST` | `/{notification_id}/read` | `notifications.read` |  | Mark notification as read. |
+| `/api/v1/notifications` | `POST` | `/{notification_id}/dismiss` | `notifications.read` |  | Dismiss notification. |
+| `/api/v1/notifications` | `GET` | `/preferences` | `notifications.read` |  | Get current user notification preferences. |
+| `/api/v1/notifications` | `PUT` | `/preferences` | `notifications.update_preferences` |  | Update preferences, enforcing plan channel limits. |
+| `/api/v1/files` | `POST` | `/upload-intents` | `files.upload` | Yes | Create upload intent with tenant-scoped object key and constraints. |
+| `/api/v1/files` | `POST` | `/complete-upload` | `files.upload` | Yes | Register uploaded file after storage upload/scanning state. |
+| `/api/v1/files` | `GET` | `/{file_id}` | `files.read` | No | Get file metadata if linked entity accessible. |
+| `/api/v1/files` | `GET` | `/{file_id}/download-url` | `files.read` | No | Generate time-limited signed download URL. |
+| `/api/v1/files` | `POST` | `/{file_id}/soft-delete` | `files.soft_delete` | Yes | Soft delete file. |
+| `/api/v1/files` | `POST` | `/{file_id}/restore` | `files.restore` | Yes | Restore file within retention period. |
+| `/api/v1/files` | `POST` | `/{file_id}/links` | `files.upload` | Yes | Link file to supported entity. |
+| `/api/v1/dashboard` | `GET` | `/summary` | `reports.view_basic` |  | Daily sales, monthly revenue, pending jobs, AR/AP, low stock, open transfers. |
+| `/api/v1/dashboard` | `GET` | `/charts/revenue` | `reports.view_basic` |  | Revenue chart by date range and branch scope. |
+| `/api/v1/dashboard` | `GET` | `/inventory-alerts` | `inventory.read` |  | Low stock dashboard data. |
+| `/api/v1/reports` | `GET` | `/sales` | `reports.view_basic` |  | Daily/weekly/monthly/yearly sales and payment method summary. |
+| `/api/v1/reports` | `GET` | `/services` | `reports.view_basic` |  | Service reports. |
+| `/api/v1/reports` | `GET` | `/inventory` | `reports.view_basic` |  | Inventory reports. |
+| `/api/v1/reports` | `GET` | `/customers` | `reports.view_basic` |  | Customer reports. |
+| `/api/v1/reports` | `GET` | `/financial` | `reports.view_basic` |  | Revenue, expenses, gross profit, COGS, AR, AP. |
+| `/api/v1/reports` | `GET` | `/branch-comparison` | `reports.view_branch` |  | Branch comparison report. |
+| `/api/v1/reports` | `GET` | `/advanced/{report_code}` | `reports.view_advanced` |  | Advanced operational reports. |
+| `/api/v1/reports` | `POST` | `/exports` | `reports.export` |  | Queue report export as PDF, Excel, or CSV when large/explicit export. |
+| `/api/v1/exports` | `GET` | `/` | `shop.export_data` | No | List tenant export jobs. |
+| `/api/v1/exports` | `POST` | `/` | `shop.export_data` | Yes | Queue full tenant export. |
+| `/api/v1/exports` | `GET` | `/{export_job_id}` | `shop.export_data` | No | Get export job status. |
+| `/api/v1/exports` | `GET` | `/{export_job_id}/download-url` | `shop.export_data` | No | Get signed download URL when complete. |
+| `/api/v1/audit-logs` | `GET` | `/` | `audit_logs.read` |  | Search tenant-visible audit logs. |
+| `/api/v1/audit-logs` | `GET` | `/{audit_log_id}` | `audit_logs.read` |  | Get audit detail. |
+| `/api/v1/background-jobs` | `GET` | `/{job_id}` | Context-specific |  | Get job status. |
+| `/api/v1/background-jobs` | `GET` | `/{job_id}/attempts` | Platform/support only |  | View retry attempts with sanitized errors. |
+| `/api/v1/background-jobs` | `POST` | `/{job_id}/cancel` | Context-specific |  | Cancel if job is cancellable. |
+| `/api/v1/offline-cache` | `GET` | `/manifest` | Authenticated |  | Get current user's offline cache manifest for recently viewed records. |
+| `/api/v1/offline-cache` | `GET` | `/recent-records` | Authenticated |  | Get minimal read-only cache payload. |
+| `/api/v1/offline-cache` | `DELETE` | `/current-user` | Authenticated |  | Clear current user's server-side offline cache manifest if used. |
+
+## 10. Implementation Notes
+
+### 10.1 Effective Permission Resolution
+
+```text
+effective_permissions = union(active role_permissions for active user_roles)
+
+request_allowed =
+  authenticated_user_active
+  AND email_verified
+  AND tenant_status_allows_action
+  AND required_permission IN effective_permissions
+  AND branch_scope_allows_record_access
+  AND plan_capability_allows_action
+  AND resource_workflow_state_allows_action
+```
+
+### 10.2 Recommended Middleware Order
+
+1. Request/correlation ID
+2. HTTPS/rate-limit guard
+3. Authentication
+4. Email verification
+5. Tenant status/subscription guard
+6. Platform/support access guard
+7. Permission guard
+8. Branch access guard
+9. Request validation
+10. Idempotency guard for critical writes
+11. Service transaction and audit/outbox logging
+
+### 10.3 RBAC Persistence
+
+The schema should use the documented `permissions`, `roles`, `role_permissions`, and `user_roles` tables. Role assignment changes must preserve history through `removed_at`, role edits must audit old/new permission values when safe, and role changes must invalidate/recompute active users’ effective permissions immediately.
+
+### 10.4 High-Risk Permissions
+
+The following permissions require extra audit visibility, UI confirmation, and focused QA/security tests:
+
+- `platform.support_access`
+- `platform.subscriptions.update`
+- `shop.export_data`
+- `users.assign_roles`
+- `users.assign_branches`
+- `roles.update`
+- `branches.deactivate` / `branches.reactivate`
+- `job_orders.correct_status`
+- `job_orders.release_with_balance`
+- `inventory.adjust.approve`
+- `inventory.force_adjust`
+- `inventory.transfer.cancel`
+- `supplier_credits.create`
+- `supplier_payments.create`
+- `invoices.issue` / `invoices.cancel` / `invoices.void` / `invoices.refund`
+- `payments.create` / `payments.refund`
+- `expenses.update` / `expenses.void`
+- `files.soft_delete` / `files.restore`
+- `audit_logs.read`
+
+## 11. QA Acceptance Criteria
+
+1. Every protected endpoint rejects users without the documented required permission.
+2. Tenant users cannot access records from another tenant.
+3. Branch-scoped users cannot access branch-specific records outside assigned active branches unless they have tenant-wide branch access.
+4. Shop Owner role always includes all tenant permissions and tenant-wide branch access.
+5. The system prevents deactivation/demotion of the last active Shop Owner.
+6. Editing a role immediately changes effective permissions for assigned active users and writes audit logs.
+7. Deactivating a role is blocked when active users depend solely on that role.
+8. Mechanic users cannot access invoices, payments, supplier balances, financial reports, or subscription settings unless explicitly granted through custom permissions.
+9. Operational writes are blocked in `read_only`, `suspended`, `pending_deletion`, and `deleted` statuses, except documented owner/platform exceptions.
+10. Plan-disabled notification/report/branch capabilities return plan-limit errors even when the user has action permission.
+11. Critical write endpoints require idempotency where specified by the API contract.
+12. Authorization failures are logged with request/correlation ID, actor, tenant where applicable, required permission, and sanitized error code.
+
+## 12. Open Questions / Required Product Decisions
+
+| ID | Question | Owner | Why It Matters | Recommendation |
+| --- | --- | --- | --- | --- |
+| PM-001 | What exact permission grants should be seeded for Manager, Service Advisor, Mechanic, Cashier, and Inventory Clerk? | Product Manager / BA + Business Owner | Source docs define supported actions when assigned permissions, but not final default grants. | Approve a separate `role-template-configuration-matrix.md` before seed migrations. |
+| PM-002 | Should refund approval and refund execution be separated into distinct permissions? | Product Manager / BA + Security | Source docs mention Manager approval and Cashier processing, but only `payments.refund` and `invoices.refund` exist. | Do not add new permission codes unless PRD is revised; implement approval workflow using existing documented permissions or update source docs. |
+| PM-003 | Should supplier balance access use `supplier_payments.read`, `suppliers.read`, or report permissions for all screens? | Product Manager / BA + Architect | API contract allows supplier balance via `supplier_payments.read` or AP report permission. | Keep endpoint-specific rules from API contract and add tests for both accepted access paths. |
+| PM-004 | What exact permission should govern generic background job status for tenant export/report jobs? | Architect + DevOps + QA | API contract says context-specific. | Resolve per job type: export jobs use `shop.export_data`, report exports use `reports.export`, platform jobs use platform permissions. |
+
+## 13. Out of Scope
+
+The permission matrix intentionally excludes any permission or workflow for native apps, offline write sync, customer portal, standalone POS, payroll, full accounting/general ledger, direct tax filing, payment-gateway subscription charging, loyalty, e-commerce marketplace, service packages, advanced AI analytics, and 2FA because those capabilities are excluded from the build scope.

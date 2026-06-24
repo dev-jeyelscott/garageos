@@ -1,0 +1,11 @@
+{
+  "name": "@garageos/shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "echo \"lint placeholder: shared\"",
+    "typecheck": "echo \"typecheck placeholder: shared\"",
+    "test": "echo \"test placeholder: shared\""
+  }
+}
