@@ -1,1 +1,1 @@
-export const GARAGEOS_APP_NAME = 'GarageOS';
+export const TYPESCRIPT_STRICT_MODE_REQUIRED = true;

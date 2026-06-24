@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { GARAGEOS_APP_NAME } from './index';
 
-describe('shared package', () => {
-  it('exports the application name', () => {
-    expect(GARAGEOS_APP_NAME).toBe('GarageOS');
+import { TYPESCRIPT_STRICT_MODE_REQUIRED } from './index';
+
+describe('@garageos/config', () => {
+  it('exports shared config markers', () => {
+    expect(TYPESCRIPT_STRICT_MODE_REQUIRED).toBe(true);
   });
 });
