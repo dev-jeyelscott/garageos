@@ -7,6 +7,11 @@ import {
   LoginRequest,
   ResetPasswordRequest,
 } from '../api/auth.schemas';
+import {
+  AuthLoginResponseData,
+  AuthRefreshResponseData,
+  AuthSessionResponseData,
+} from '../contracts';
 
 @Injectable()
 export class AuthService {
@@ -14,14 +19,12 @@ export class AuthService {
     return this.authUnavailable();
   }
 
-  login(request: LoginRequest): never {
-    void request;
-
-    return this.authUnavailable();
+  login(request: LoginRequest): AuthLoginResponseData {
+    throw GarageOsApiException.serviceUnavailable('Authentication is not available yet.');
   }
 
-  refresh(): never {
-    return this.authUnavailable();
+  refresh(): AuthRefreshResponseData {
+    throw GarageOsApiException.serviceUnavailable('Authentication is not available yet.');
   }
 
   logout(): never {
@@ -60,8 +63,8 @@ export class AuthService {
     return this.authUnavailable();
   }
 
-  getSession(): never {
-    return this.authUnavailable();
+  getSession(): AuthSessionResponseData {
+    throw GarageOsApiException.serviceUnavailable('Authentication is not available yet.');
   }
 
   private authUnavailable(): never {

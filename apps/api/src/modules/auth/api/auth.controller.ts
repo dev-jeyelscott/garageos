@@ -13,6 +13,11 @@ import {
   type ResetPasswordRequest,
   resetPasswordRequestSchema,
 } from './auth.schemas';
+import type {
+  AuthLoginResponseData,
+  AuthRefreshResponseData,
+  AuthSessionResponseData,
+} from '../contracts';
 
 @Controller('auth')
 export class AuthController {
@@ -28,8 +33,15 @@ export class AuthController {
   }
 
   @Post('login')
-  login(@Body(new ZodValidationPipe(loginRequestSchema)) request: LoginRequest): never {
+  login(
+    @Body(new ZodValidationPipe(loginRequestSchema)) request: LoginRequest,
+  ): AuthLoginResponseData {
     return this.authService.login(request);
+  }
+
+  @Post('refresh')
+  refresh(): AuthRefreshResponseData {
+    return this.authService.refresh();
   }
 
   @Post('logout')
@@ -80,7 +92,7 @@ export class AuthController {
   }
 
   @Get('session')
-  getSession(): never {
+  getSession(): AuthSessionResponseData {
     return this.authService.getSession();
   }
 }
