@@ -1,8 +1,8 @@
 import { type PipeTransform } from '@nestjs/common';
 import { ZodError, type ZodIssue, type ZodTypeAny, z } from 'zod';
 
-import { GarageOsApiException } from './api-exception.js';
-import type { ApiErrorDetail } from './api-error-detail.js';
+import { GarageOsApiException } from './api-exception';
+import type { ApiErrorDetail } from './api-error-detail';
 
 function toDotPath(path: ZodIssue['path']): string | undefined {
   if (path.length === 0) {

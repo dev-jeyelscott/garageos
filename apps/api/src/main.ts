@@ -1,5 +1,12 @@
 import 'reflect-metadata';
-import { Controller, Get, MiddlewareConsumer, Module, type NestModule } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  MiddlewareConsumer,
+  Module,
+  RequestMethod,
+  type NestModule,
+} from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { ErrorEnvelopeFilter } from './shared/api/error-envelope.filter';
 import { ResponseEnvelopeInterceptor } from './shared/api/response-envelope.interceptor';
@@ -23,7 +30,10 @@ class HealthController {
 })
 class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(RequestContextMiddleware).forRoutes('*');
+    consumer.apply(RequestContextMiddleware).forRoutes({
+      path: '{*path}',
+      method: RequestMethod.ALL,
+    });
   }
 }
 

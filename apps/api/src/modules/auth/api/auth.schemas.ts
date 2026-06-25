@@ -7,6 +7,8 @@ export const garageOsPasswordSchema = z
   .regex(/[a-z]/, 'Password must contain at least one lowercase letter.')
   .regex(/[0-9]/, 'Password must contain at least one number.');
 
+export const authTokenSchema = z.string().trim().min(1, 'Token is required.');
+
 export const loginRequestSchema = z
   .object({
     email: z.string().trim().email(),
@@ -15,4 +17,36 @@ export const loginRequestSchema = z
   })
   .strict();
 
+export const emailVerificationConfirmRequestSchema = z
+  .object({
+    token: authTokenSchema,
+  })
+  .strict();
+
+export const forgotPasswordRequestSchema = z
+  .object({
+    email: z.string().trim().email(),
+  })
+  .strict();
+
+export const resetPasswordRequestSchema = z.object({
+  token: authTokenSchema,
+  new_password: garageOsPasswordSchema,
+});
+
+export const changePasswordRequestSchema = z
+  .object({
+    current_password: z.string().trim().min(1, 'Current password is required.'),
+    new_password: garageOsPasswordSchema,
+  })
+  .strict();
+
 export type LoginRequest = z.infer<typeof loginRequestSchema>;
+
+export type EmailVerificationConfirmRequest = z.infer<typeof emailVerificationConfirmRequestSchema>;
+
+export type ForgotPasswordRequest = z.infer<typeof forgotPasswordRequestSchema>;
+
+export type ResetPasswordRequest = z.infer<typeof resetPasswordRequestSchema>;
+
+export type ChangePasswordRequest = z.infer<typeof changePasswordRequestSchema>;

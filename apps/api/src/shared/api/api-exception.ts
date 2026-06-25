@@ -133,4 +133,14 @@ export class GarageOsApiException extends HttpException {
       status: HttpStatus.TOO_MANY_REQUESTS,
     });
   }
+
+  static serviceUnavailable(
+    message = 'This service is temporarily unavailable.',
+  ): GarageOsApiException {
+    return new GarageOsApiException({
+      code: API_ERROR_CODES.SERVICE_UNAVAILABLE,
+      message,
+      status: HttpStatus.SERVICE_UNAVAILABLE,
+    });
+  }
 }
