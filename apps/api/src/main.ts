@@ -4,6 +4,7 @@ import { NestFactory } from '@nestjs/core';
 import { ErrorEnvelopeFilter } from './shared/api/error-envelope.filter';
 import { ResponseEnvelopeInterceptor } from './shared/api/response-envelope.interceptor';
 import { RequestContextMiddleware } from './shared/observability/request-context.middleware';
+import { AuthModule } from './modules/auth/auth.module';
 
 @Controller()
 class HealthController {
@@ -17,6 +18,7 @@ class HealthController {
 }
 
 @Module({
+  imports: [AuthModule],
   controllers: [HealthController],
 })
 class AppModule implements NestModule {
