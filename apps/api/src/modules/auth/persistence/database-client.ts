@@ -1,10 +1,16 @@
+import type { Provider } from '@nestjs/common';
+
+import {
+  API_DATABASE_CLIENT,
+  type DatabaseQueryClient,
+  type DatabaseQueryResult,
+} from '../../../shared/database/database-client';
+
 export const AUTH_DATABASE_CLIENT = Symbol('AUTH_DATABASE_CLIENT');
 
-export interface DatabaseQueryResult<Row> {
-  readonly rows: readonly Row[];
-  readonly rowCount: number | null;
-}
+export type { DatabaseQueryClient, DatabaseQueryResult };
 
-export interface DatabaseQueryClient {
-  query<Row>(text: string, values?: readonly unknown[]): Promise<DatabaseQueryResult<Row>>;
-}
+export const AUTH_DATABASE_CLIENT_PROVIDER: Provider = {
+  provide: AUTH_DATABASE_CLIENT,
+  useExisting: API_DATABASE_CLIENT,
+};

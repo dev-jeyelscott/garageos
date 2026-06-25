@@ -38,7 +38,23 @@ describe('AccessTokenService', () => {
     const signed = await service.sign(payload);
     const verified = await service.verify(signed.access_token);
 
-    expect(verified).toEqual(payload);
+    expect(verified).toEqual(
+      expect.objectContaining({
+        ...payload,
+        token_type: 'access',
+        sub: payload.user_id,
+        user_id: payload.user_id,
+        session_id: payload.session_id,
+        tenant_id: payload.tenant_id,
+        user_type: payload.user_type,
+        email_verified: payload.email_verified,
+        iat: expect.any(Number),
+        exp: expect.any(Number),
+        jti: expect.any(String),
+      }),
+    );
+
+    expect(verified.exp).toBeGreaterThan(verified.iat);
   });
 
   it('rejects an empty access token', async () => {

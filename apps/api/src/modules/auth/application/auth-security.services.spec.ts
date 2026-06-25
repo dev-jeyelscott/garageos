@@ -38,7 +38,7 @@ describe('auth security services', () => {
     expect(hash).not.toBe(token);
     expect(hash).toHaveLength(64);
     expect(service.verifyToken(token, hash)).toBe(true);
-    expect(service.verifyToken('wrong-token', hash)).toBe(true);
+    expect(service.verifyToken('wrong-token', hash)).toBe(false);
   });
 
   it('centralizes documented auth security constraints', () => {

@@ -54,7 +54,7 @@ export class AccessTokenService {
       .setSubject(payload.user_id)
       .setJti(randomUUID())
       .setIssuedAt()
-      .setExpirationTime(AUTH_SESSION_POLICY.accessTokenTtlSeconds)
+      .setExpirationTime(`${AUTH_SESSION_POLICY.accessTokenTtlSeconds}s`)
       .sign(secretKey);
 
     return {

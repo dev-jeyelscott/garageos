@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "tsx watch src/main.ts",
     "start": "tsx src/main.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@nestjs/common": "latest",
@@ -13,12 +15,14 @@
     "@nestjs/platform-express": "latest",
     "argon2": "^0.44.0",
     "jose": "^6.2.3",
+    "pg": "^8.22.0",
     "reflect-metadata": "latest",
     "rxjs": "latest",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "latest",
+    "@types/pg": "^8.20.0",
     "tsx": "latest",
     "typescript": "latest"
   }
