@@ -10,6 +10,7 @@ import {
   AUTH_DATABASE_CLIENT,
   type DatabaseQueryClient,
   type DatabaseQueryResult,
+  type DatabaseRow,
 } from './database-client';
 
 interface RefreshSessionRow {
@@ -145,7 +146,10 @@ export class PostgresRefreshSessionRepository extends RefreshSessionStore {
   }
 }
 
-function getRequiredRow<Row>(result: DatabaseQueryResult<Row>, operation: string): Row {
+function getRequiredRow<Row extends DatabaseRow>(
+  result: DatabaseQueryResult<Row>,
+  operation: string,
+): Row {
   const row = result.rows[0];
 
   if (row === undefined) {

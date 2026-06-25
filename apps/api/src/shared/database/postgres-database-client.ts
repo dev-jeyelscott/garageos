@@ -1,28 +1,55 @@
-import { Injectable, type OnModuleDestroy } from '@nestjs/common';
+import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import { Pool } from 'pg';
 
-import type { DatabaseQueryClient, DatabaseQueryResult } from './database-client';
+import type {
+  DatabaseConnection,
+  DatabaseConnectionProvider,
+  DatabaseQueryResult,
+  DatabaseRow,
+} from './database-client';
 
 export const DATABASE_URL_ENV_VAR = 'DATABASE_URL';
 
 @Injectable()
-export class PostgresDatabaseClient implements DatabaseQueryClient, OnModuleDestroy {
+export class PostgresDatabaseClient implements DatabaseConnectionProvider, OnModuleDestroy {
   private readonly pool: Pool;
 
   constructor() {
-    const connectionString = getRequiredDatabaseUrl(process.env);
-
     this.pool = new Pool({
-      connectionString,
+      connectionString: process.env[DATABASE_URL_ENV_VAR],
     });
   }
 
-  async query<Row>(text: string, values?: readonly unknown[]): Promise<DatabaseQueryResult<Row>> {
-    const result = await this.pool.query(text, values === undefined ? undefined : [...values]);
+  async query<Row extends DatabaseRow = DatabaseRow>(
+    text: string,
+    values?: readonly unknown[],
+  ): Promise<DatabaseQueryResult<Row>> {
+    const result = await this.pool.query<Row>(text, toPgQueryValues(values));
 
     return {
-      rows: result.rows as Row[],
+      rows: result.rows,
       rowCount: result.rowCount,
+    };
+  }
+
+  async connect(): Promise<DatabaseConnection> {
+    const client = await this.pool.connect();
+
+    return {
+      query: async <Row extends DatabaseRow = DatabaseRow>(
+        text: string,
+        values?: readonly unknown[],
+      ): Promise<DatabaseQueryResult<Row>> => {
+        const result = await client.query<Row>(text, toPgQueryValues(values));
+
+        return {
+          rows: result.rows,
+          rowCount: result.rowCount,
+        };
+      },
+      release: (): void => {
+        client.release();
+      },
     };
   }
 
@@ -31,13 +58,6 @@ export class PostgresDatabaseClient implements DatabaseQueryClient, OnModuleDest
   }
 }
 
-function getRequiredDatabaseUrl(environment: NodeJS.ProcessEnv): string {
-  const databaseUrl = environment[DATABASE_URL_ENV_VAR]?.trim();
-
-  if (databaseUrl === undefined || databaseUrl.length === 0) {
-    throw new Error(`${DATABASE_URL_ENV_VAR} is required to initialize the API database client.`);
-  }
-
-  return databaseUrl;
+function toPgQueryValues(values: readonly unknown[] | undefined): unknown[] | undefined {
+  return values === undefined ? undefined : [...values];
 }
-    

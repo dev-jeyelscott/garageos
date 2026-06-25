@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { DatabaseQueryClient, DatabaseQueryResult } from './database-client';
+import type { DatabaseQueryClient, DatabaseQueryResult, DatabaseRow } from './database-client';
 import { PostgresRefreshSessionRepository } from './refresh-session.repository';
 
 interface QueryCall {
@@ -10,16 +10,19 @@ interface QueryCall {
 
 class FakeDatabaseQueryClient implements DatabaseQueryClient {
   readonly calls: QueryCall[] = [];
-  private responses: DatabaseQueryResult<unknown>[] = [];
+  private responses: DatabaseQueryResult<DatabaseRow>[] = [];
 
-  enqueueRows<Row>(rows: readonly Row[]): void {
+  enqueueRows<Row extends DatabaseRow = DatabaseRow>(rows: readonly Row[]): void {
     this.responses.push({
       rows,
       rowCount: rows.length,
     });
   }
 
-  async query<Row>(text: string, values?: readonly unknown[]): Promise<DatabaseQueryResult<Row>> {
+  async query<Row extends DatabaseRow = DatabaseRow>(
+    text: string,
+    values?: readonly unknown[],
+  ): Promise<DatabaseQueryResult<Row>> {
     this.calls.push({
       text,
       values,
