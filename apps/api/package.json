@@ -12,7 +12,8 @@
     "@nestjs/core": "latest",
     "@nestjs/platform-express": "latest",
     "reflect-metadata": "latest",
-    "rxjs": "latest"
+    "rxjs": "latest",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "latest",
