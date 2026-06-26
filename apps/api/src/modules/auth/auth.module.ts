@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { DatabaseModule } from '../../shared/database/database.module';
 import { AuthController } from './api/auth.controller';
 import { AUTH_RATE_LIMIT_EXPORTS, AUTH_RATE_LIMIT_PROVIDERS } from './auth-rate-limit.providers';
+import { AUTH_USER_PROVIDERS } from './auth-user.providers';
 import { AuthRateLimitService } from './application/auth-rate-limit.service';
 import { AuthService } from './application/auth.service';
 import { AuthTokenTransportService } from './application/auth-token-transport.service';
@@ -36,6 +37,7 @@ import {
     AccessTokenService,
     ...AUTH_RATE_LIMIT_PROVIDERS,
     ...AUTH_SESSION_PROVIDERS,
+    ...AUTH_USER_PROVIDERS,
   ],
   exports: [
     AuthService,

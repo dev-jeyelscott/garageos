@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Inject, Post } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Ip, Post } from '@nestjs/common';
 import { AuthService } from '../application/auth.service';
 import { ZodValidationPipe } from '../../../shared/api/zod-validation.pipe';
 import {
@@ -35,8 +35,11 @@ export class AuthController {
   @Post('login')
   login(
     @Body(new ZodValidationPipe(loginRequestSchema)) request: LoginRequest,
-  ): AuthLoginResponseData {
-    return this.authService.login(request);
+    @Ip() ipAddress: string | undefined,
+  ): Promise<AuthLoginResponseData> {
+    return this.authService.login(request, {
+      ipAddress: ipAddress ?? null,
+    });
   }
 
   @Post('refresh')
