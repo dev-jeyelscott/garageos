@@ -114,9 +114,15 @@ class FakeRefreshSessionStore extends RefreshSessionStore {
   readonly revokedAllForUserInputs: { readonly userId: string; readonly revokedAt: Date }[] = [];
 
   private readonly sessionsByHash = new Map<string, RefreshSessionRecord>();
+  private readonly sessionsById = new Map<string, RefreshSessionRecord>();
+
+  private saveSession(record: RefreshSessionRecord): void {
+    this.sessionsByHash.set(record.refreshTokenHash, record);
+    this.sessionsById.set(record.id, record);
+  }
 
   setActiveSession(record: RefreshSessionRecord): void {
-    this.sessionsByHash.set(record.refreshTokenHash, record);
+    this.saveSession(record);
   }
 
   async create(input: CreateRefreshSessionInput): Promise<RefreshSessionRecord> {
@@ -135,9 +141,19 @@ class FakeRefreshSessionStore extends RefreshSessionStore {
       createdAt: new Date('2026-06-26T00:00:00.000Z'),
     };
 
-    this.sessionsByHash.set(record.refreshTokenHash, record);
+    this.saveSession(record);
 
     return record;
+  }
+
+  async findActiveById(sessionId: string, now: Date): Promise<RefreshSessionRecord | null> {
+    const session = this.sessionsById.get(sessionId);
+
+    if (session === undefined || session.revokedAt !== null || session.expiresAt <= now) {
+      return null;
+    }
+
+    return session;
   }
 
   async findActiveByRefreshTokenHash(
@@ -167,7 +183,11 @@ class FakeRefreshSessionStore extends RefreshSessionStore {
       return null;
     }
 
-    this.sessionsByHash.delete(input.currentRefreshTokenHash);
+    this.saveSession({
+      ...current,
+      revokedAt: input.rotatedAt,
+      replacedBySessionId: input.replacementSessionId,
+    });
 
     const replacement: RefreshSessionRecord = {
       id: input.replacementSessionId,
@@ -182,7 +202,7 @@ class FakeRefreshSessionStore extends RefreshSessionStore {
       createdAt: input.rotatedAt,
     };
 
-    this.sessionsByHash.set(replacement.refreshTokenHash, replacement);
+    this.saveSession(replacement);
 
     return replacement;
   }
@@ -191,10 +211,28 @@ class FakeRefreshSessionStore extends RefreshSessionStore {
 
   async revokeCurrentDevice(sessionId: string, revokedAt: Date): Promise<void> {
     this.revokedCurrentDeviceInputs.push({ sessionId, revokedAt });
+
+    const current = this.sessionsById.get(sessionId);
+
+    if (current !== undefined && current.revokedAt === null) {
+      this.saveSession({
+        ...current,
+        revokedAt,
+      });
+    }
   }
 
   async revokeAllForUser(userId: string, revokedAt: Date): Promise<void> {
     this.revokedAllForUserInputs.push({ userId, revokedAt });
+
+    for (const session of this.sessionsById.values()) {
+      if (session.userId === userId && session.revokedAt === null) {
+        this.saveSession({
+          ...session,
+          revokedAt,
+        });
+      }
+    }
   }
 }
 
@@ -351,6 +389,22 @@ function createLoginContext(
       },
     ],
     tenantWideBranchAccess: true,
+    effectivePlan: {
+      code: 'basic',
+      name: 'Basic',
+      limits: {
+        max_active_branches: 1,
+        customer_email_reminders: false,
+        customer_sms_reminders: false,
+      },
+    },
+    subscription: {
+      status: 'active',
+      expiration_date: '2026-07-24',
+      days_until_expiration: 30,
+      renewal_required: false,
+      warnings: [],
+    },
   };
 }
 
@@ -940,6 +994,107 @@ describe('AuthService forgotPassword', () => {
 
     expect(userStore.lookups).toEqual([]);
     expect(passwordResetTokenStore.createInputs).toEqual([]);
+  });
+});
+
+describe('AuthService getSession', () => {
+  it('returns the current authenticated session context for a valid bearer access token', async () => {
+    const { service } = createService();
+
+    const loginResponse = await service.login({
+      email: 'owner@example.com',
+      password: 'Secret123',
+      remember_me: true,
+    });
+
+    const response = await service.getSession(`Bearer ${loginResponse.access_token}`);
+
+    expect(response).toEqual({
+      user: {
+        id: '11111111-1111-4111-8111-111111111111',
+        user_type: 'tenant_user',
+        full_name: 'Juan Dela Cruz',
+        email: 'owner@example.com',
+        email_verified: true,
+        status: 'active',
+      },
+      tenant: {
+        id: '22222222-2222-4222-8222-222222222222',
+        business_name: 'Moto Garage',
+        status: 'active',
+        timezone: 'Asia/Manila',
+        country: 'PH',
+        currency: 'PHP',
+      },
+      effective_permissions: ['customers.read', 'job_orders.create'],
+      branches: [
+        {
+          id: '33333333-3333-4333-8333-333333333333',
+          name: 'Main Branch',
+        },
+      ],
+      tenant_wide_branch_access: true,
+      effective_plan: {
+        code: 'basic',
+        name: 'Basic',
+        limits: {
+          max_active_branches: 1,
+          customer_email_reminders: false,
+          customer_sms_reminders: false,
+        },
+      },
+      subscription: {
+        status: 'active',
+        expiration_date: '2026-07-24',
+        days_until_expiration: 30,
+        renewal_required: false,
+        warnings: [],
+      },
+      access: {
+        can_access_operational_modules: true,
+        read_only: false,
+      },
+    });
+  });
+
+  it('rejects missing authorization headers', async () => {
+    const { service } = createService();
+
+    await expect(service.getSession(null)).rejects.toMatchObject({
+      code: 'unauthenticated',
+    });
+  });
+
+  it('rejects access tokens when the backing refresh session has been revoked', async () => {
+    const { service } = createService();
+
+    const loginResponse = await service.login({
+      email: 'owner@example.com',
+      password: 'Secret123',
+      remember_me: true,
+    });
+
+    await service.logout(loginResponse.refreshToken);
+
+    await expect(service.getSession(`Bearer ${loginResponse.access_token}`)).rejects.toMatchObject({
+      code: 'unauthenticated',
+    });
+  });
+
+  it('rejects access tokens when the user is no longer active', async () => {
+    const { service, userStore } = createService();
+
+    const loginResponse = await service.login({
+      email: 'owner@example.com',
+      password: 'Secret123',
+      remember_me: true,
+    });
+
+    userStore.setContext(null);
+
+    await expect(service.getSession(`Bearer ${loginResponse.access_token}`)).rejects.toMatchObject({
+      code: 'unauthenticated',
+    });
   });
 });
 

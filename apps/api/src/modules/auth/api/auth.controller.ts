@@ -165,8 +165,10 @@ export class AuthController {
   }
 
   @Get('session')
-  getSession(): AuthSessionResponseData {
-    return this.authService.getSession();
+  async getSession(
+    @Headers('authorization') authorizationHeader: string | undefined,
+  ): Promise<AuthSessionResponseData> {
+    return this.authService.getSession(authorizationHeader ?? null);
   }
 
   private setRefreshTokenCookie(

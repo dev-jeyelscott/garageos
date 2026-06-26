@@ -23,6 +23,11 @@ export interface RevokeAllRefreshSessionsForUserInput {
   readonly revokedAt: Date;
 }
 
+export interface FindActiveRefreshSessionByIdInput {
+  readonly sessionId: string;
+  readonly now: Date;
+}
+
 @Injectable()
 export class AuthSessionService {
   constructor(
@@ -58,5 +63,11 @@ export class AuthSessionService {
     input: RevokeAllRefreshSessionsForUserInput,
   ): Promise<void> {
     await this.refreshSessionStore.revokeAllForUser(input.userId, input.revokedAt);
+  }
+
+  async findActiveRefreshSessionById(
+    input: FindActiveRefreshSessionByIdInput,
+  ): Promise<RefreshSessionRecord | null> {
+    return this.refreshSessionStore.findActiveById(input.sessionId, input.now);
   }
 }

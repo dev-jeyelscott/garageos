@@ -1,5 +1,7 @@
 import type {
   AuthBranchSummary,
+  AuthEffectivePlanSummary,
+  AuthSubscriptionSummary,
   AuthTenantStatus,
   AuthTenantSummary,
   AuthUserStatus,
@@ -23,6 +25,8 @@ export interface AuthLoginContext {
   readonly permissions: readonly string[];
   readonly branches: readonly AuthBranchSummary[];
   readonly tenantWideBranchAccess: boolean;
+  readonly effectivePlan: AuthEffectivePlanSummary | null;
+  readonly subscription: AuthSubscriptionSummary | null;
 }
 
 export interface FindLoginContextByEmailInput {

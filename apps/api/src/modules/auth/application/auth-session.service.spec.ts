@@ -63,6 +63,24 @@ class FakeRefreshSessionStore extends RefreshSessionStore {
     return this.activeSession;
   }
 
+  async findActiveById(sessionId: string, now: Date): Promise<RefreshSessionRecord | null> {
+    this.calls.push({
+      method: 'findActiveById',
+      input: { sessionId, now },
+    });
+
+    if (
+      this.activeSession === null ||
+      this.activeSession.id !== sessionId ||
+      this.activeSession.revokedAt !== null ||
+      this.activeSession.expiresAt <= now
+    ) {
+      return null;
+    }
+
+    return this.activeSession;
+  }
+
   async rotate(input: RotateRefreshSessionInput): Promise<RefreshSessionRecord | null> {
     this.calls.push({ method: 'rotate', input });
 

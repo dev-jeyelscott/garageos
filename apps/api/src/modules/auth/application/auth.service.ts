@@ -10,8 +10,10 @@ import {
   ResetPasswordRequest,
 } from '../api/auth.schemas';
 import {
+  AuthAccessTokenPayload,
   AuthLoginResponseData,
   AuthRefreshResponseData,
+  AuthSessionAccessSummary,
   AuthSessionResponseData,
   AuthUserSummary,
 } from '../contracts';
@@ -360,6 +362,89 @@ export class AuthService {
     return {};
   }
 
+  private getBearerAccessToken(authorizationHeader: string | null | undefined): string {
+    const normalizedHeader = authorizationHeader?.trim();
+
+    if (normalizedHeader === undefined || normalizedHeader.length === 0) {
+      throw this.invalidAccessSession();
+    }
+
+    const [scheme, token, ...extraParts] = normalizedHeader.split(/\s+/);
+
+    if (
+      scheme?.toLowerCase() !== 'bearer' ||
+      token === undefined ||
+      token.length === 0 ||
+      extraParts.length > 0
+    ) {
+      throw this.invalidAccessSession();
+    }
+
+    return token;
+  }
+
+  private assertAccessTokenMatchesRefreshSession(
+    accessTokenPayload: AuthAccessTokenPayload,
+    refreshSession: RefreshSessionRecord,
+  ): void {
+    if (
+      refreshSession.id !== accessTokenPayload.session_id ||
+      refreshSession.userId !== accessTokenPayload.user_id ||
+      refreshSession.tenantId !== accessTokenPayload.tenant_id
+    ) {
+      throw this.invalidAccessSession();
+    }
+  }
+
+  private assertAccessTokenMatchesLoginContext(
+    accessTokenPayload: AuthAccessTokenPayload,
+    loginContext: AuthLoginContext,
+  ): void {
+    if (
+      loginContext.user.id !== accessTokenPayload.user_id ||
+      loginContext.user.userType !== accessTokenPayload.user_type ||
+      loginContext.user.tenantId !== accessTokenPayload.tenant_id
+    ) {
+      throw this.invalidAccessSession();
+    }
+  }
+
+  private buildSessionAccess(loginContext: AuthLoginContext): AuthSessionAccessSummary {
+    if (loginContext.user.emailVerifiedAt === null) {
+      return {
+        can_access_operational_modules: false,
+        read_only: false,
+      };
+    }
+
+    const tenantStatus = loginContext.tenant?.status ?? null;
+
+    switch (tenantStatus) {
+      case 'active':
+      case 'grace_period':
+        return {
+          can_access_operational_modules: true,
+          read_only: false,
+        };
+
+      case 'read_only':
+        return {
+          can_access_operational_modules: true,
+          read_only: true,
+        };
+
+      case 'pending_setup':
+      case 'suspended':
+      case 'pending_deletion':
+      case 'deleted':
+      case null:
+        return {
+          can_access_operational_modules: false,
+          read_only: false,
+        };
+    }
+  }
+
   private async assertEmailVerificationResendRateLimitAllowed(
     normalizedEmail: string,
   ): Promise<void> {
@@ -465,8 +550,44 @@ export class AuthService {
     });
   }
 
-  getSession(): AuthSessionResponseData {
-    throw GarageOsApiException.serviceUnavailable('Authentication is not available yet.');
+  async getSession(
+    authorizationHeader: string | null | undefined,
+  ): Promise<AuthSessionResponseData> {
+    const accessToken = this.getBearerAccessToken(authorizationHeader);
+    const accessTokenPayload = await this.accessTokenService.verify(accessToken);
+    const now = new Date();
+
+    const refreshSession = await this.authSessionService.findActiveRefreshSessionById({
+      sessionId: accessTokenPayload.session_id,
+      now,
+    });
+
+    if (refreshSession === null) {
+      throw this.invalidAccessSession();
+    }
+
+    this.assertAccessTokenMatchesRefreshSession(accessTokenPayload, refreshSession);
+
+    const loginContext = await this.authUserStore.findActiveLoginContextByUserId({
+      userId: accessTokenPayload.user_id,
+    });
+
+    if (loginContext === null) {
+      throw this.invalidAccessSession();
+    }
+
+    this.assertAccessTokenMatchesLoginContext(accessTokenPayload, loginContext);
+
+    return {
+      user: this.toUserSummary(loginContext),
+      tenant: loginContext.tenant,
+      effective_permissions: loginContext.permissions,
+      branches: loginContext.branches,
+      tenant_wide_branch_access: loginContext.tenantWideBranchAccess,
+      effective_plan: loginContext.effectivePlan,
+      subscription: loginContext.subscription,
+      access: this.buildSessionAccess(loginContext),
+    };
   }
 
   private async assertLoginRateLimitAllowed(
@@ -601,6 +722,10 @@ export class AuthService {
       email_verified: loginContext.user.emailVerifiedAt !== null,
       status: loginContext.user.status,
     };
+  }
+
+  private invalidAccessSession(): GarageOsApiException {
+    return GarageOsApiException.unauthenticated('Access session is invalid or expired.');
   }
 
   private invalidCredentials(): GarageOsApiException {

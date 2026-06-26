@@ -43,6 +43,8 @@ export abstract class RefreshSessionStore {
     now: Date,
   ): Promise<RefreshSessionRecord | null>;
 
+  abstract findActiveById(sessionId: string, now: Date): Promise<RefreshSessionRecord | null>;
+
   abstract rotate(input: RotateRefreshSessionInput): Promise<RefreshSessionRecord | null>;
 
   abstract markReplaced(input: ReplaceRefreshSessionInput): Promise<void>;

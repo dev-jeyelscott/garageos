@@ -110,6 +110,38 @@ export class PostgresRefreshSessionRepository extends RefreshSessionStore {
     return mapRefreshSessionRow(row);
   }
 
+  async findActiveById(sessionId: string, now: Date): Promise<RefreshSessionRecord | null> {
+    const result = await this.database.query<RefreshSessionRow>(
+      `
+      select
+        id,
+        user_id,
+        tenant_id,
+        token_family_id,
+        refresh_token_hash,
+        remember_me,
+        expires_at,
+        revoked_at,
+        replaced_by_session_id,
+        created_at
+      from refresh_sessions
+      where id = $1
+        and revoked_at is null
+        and expires_at > $2::timestamptz
+      limit 1
+    `,
+      [sessionId, now],
+    );
+
+    const row = result.rows[0];
+
+    if (row === undefined) {
+      return null;
+    }
+
+    return mapRefreshSessionRow(row);
+  }
+
   async rotate(input: RotateRefreshSessionInput): Promise<RefreshSessionRecord | null> {
     const result = await this.database.query<RefreshSessionRow>(
       `
