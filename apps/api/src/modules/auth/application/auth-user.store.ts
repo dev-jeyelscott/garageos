@@ -35,6 +35,12 @@ export interface UpdateAuthUserPasswordHashInput {
   readonly passwordChangedAt: Date;
 }
 
+export interface MarkAuthUserEmailVerifiedInput {
+  readonly userId: string;
+  readonly email: string;
+  readonly emailVerifiedAt: Date;
+}
+
 export abstract class AuthUserStore {
   abstract findActiveLoginContextByNormalizedEmail(
     input: FindLoginContextByEmailInput,
@@ -45,6 +51,8 @@ export abstract class AuthUserStore {
   ): Promise<AuthLoginContext | null>;
 
   abstract updatePasswordHash(input: UpdateAuthUserPasswordHashInput): Promise<void>;
+
+  abstract markEmailVerified(input: MarkAuthUserEmailVerifiedInput): Promise<boolean>;
 }
 
 export function toAuthTenantStatus(value: string): AuthTenantStatus {

@@ -27,6 +27,7 @@ import { TokenHashingService } from './token-hashing.service';
 import { AUTH_SESSION_POLICY } from './auth-session.policy';
 import type { RefreshSessionRecord } from './refresh-session.store';
 import { PasswordResetTokenStore } from './password-reset-token.store';
+import { EmailVerificationTokenStore } from './email-verification-token.store';
 
 export interface AuthLoginRequestContext {
   readonly ipAddress?: string | null;
@@ -61,6 +62,8 @@ export class AuthService {
     private readonly authSessionService: AuthSessionService,
     @Inject(PasswordResetTokenStore)
     private readonly passwordResetTokenStore: PasswordResetTokenStore,
+    @Inject(EmailVerificationTokenStore)
+    private readonly emailVerificationTokenStore: EmailVerificationTokenStore,
     @Inject(SecureTokenService)
     private readonly secureTokenService: SecureTokenService,
     @Inject(TokenHashingService)
@@ -208,14 +211,70 @@ export class AuthService {
     return {};
   }
 
-  resendEmailVerification(): never {
-    return this.authUnavailable();
+  async resendEmailVerification(
+    refreshToken: string | null | undefined,
+  ): Promise<AuthActionResult> {
+    const { session, now } = await this.findActiveRefreshSessionForToken(refreshToken);
+
+    const loginContext = await this.authUserStore.findActiveLoginContextByUserId({
+      userId: session.userId,
+    });
+
+    if (loginContext === null) {
+      await this.authSessionService.revokeCurrentRefreshSession({
+        sessionId: session.id,
+        revokedAt: now,
+      });
+
+      throw this.invalidRefreshSession();
+    }
+
+    if (loginContext.user.emailVerifiedAt !== null) {
+      return {};
+    }
+
+    const normalizedEmail = normalizeAuthRateLimitEmailKey(loginContext.user.email);
+
+    await this.assertEmailVerificationResendRateLimitAllowed(normalizedEmail);
+
+    await this.recordEmailVerificationResendAttempt({
+      normalizedEmail,
+      tenantId: loginContext.user.tenantId,
+      userId: loginContext.user.id,
+    });
+
+    await this.createEmailVerificationTokenForUser({
+      userId: loginContext.user.id,
+      email: loginContext.user.email,
+      now,
+    });
+
+    return {};
   }
 
-  confirmEmailVerification(request: EmailVerificationConfirmRequest): never {
-    void request;
+  async confirmEmailVerification(
+    request: EmailVerificationConfirmRequest,
+  ): Promise<AuthActionResult> {
+    const now = new Date();
+    const tokenHash = this.tokenHashingService.hashToken(request.token);
 
-    return this.authUnavailable();
+    const token = await this.emailVerificationTokenStore.consumeActiveByTokenHash(tokenHash, now);
+
+    if (token === null) {
+      throw this.invalidEmailVerificationToken();
+    }
+
+    const verified = await this.authUserStore.markEmailVerified({
+      userId: token.userId,
+      email: token.email,
+      emailVerifiedAt: now,
+    });
+
+    if (!verified) {
+      throw this.invalidEmailVerificationToken();
+    }
+
+    return {};
   }
 
   async forgotPassword(request: ForgotPasswordRequest): Promise<AuthActionResult> {
@@ -299,6 +358,51 @@ export class AuthService {
     });
 
     return {};
+  }
+
+  private async assertEmailVerificationResendRateLimitAllowed(
+    normalizedEmail: string,
+  ): Promise<void> {
+    await this.authRateLimitService.assertAllowed({
+      rule: AUTH_RATE_LIMIT_RULES.EMAIL_VERIFICATION_RESEND,
+      keyParts: ['account', normalizedEmail],
+    });
+  }
+
+  private async recordEmailVerificationResendAttempt(input: {
+    readonly normalizedEmail: string;
+    readonly tenantId: string | null;
+    readonly userId: string | null;
+  }): Promise<void> {
+    await this.authRateLimitService.recordAttempt({
+      rule: AUTH_RATE_LIMIT_RULES.EMAIL_VERIFICATION_RESEND,
+      keyParts: ['account', input.normalizedEmail],
+      tenantId: input.tenantId,
+      userId: input.userId,
+      ipAddress: null,
+    });
+  }
+
+  private async createEmailVerificationTokenForUser(input: {
+    readonly userId: string;
+    readonly email: string;
+    readonly now: Date;
+  }): Promise<void> {
+    const verificationToken = this.secureTokenService.generateOpaqueToken();
+
+    await this.emailVerificationTokenStore.create({
+      id: randomUUID(),
+      userId: input.userId,
+      email: input.email,
+      tokenHash: this.tokenHashingService.hashToken(verificationToken),
+      expiresAt: this.buildEmailVerificationTokenExpiresAt(input.now),
+    });
+  }
+
+  private buildEmailVerificationTokenExpiresAt(now: Date): Date {
+    return new Date(
+      now.getTime() + AUTH_SECURITY.EMAIL_VERIFICATION_TOKEN_EXPIRES_IN_HOURS * 60 * 60 * 1000,
+    );
   }
 
   private async assertPasswordResetRateLimitAllowed(normalizedEmail: string): Promise<void> {
@@ -509,6 +613,10 @@ export class AuthService {
 
   private invalidPasswordResetToken(): GarageOsApiException {
     return GarageOsApiException.unauthenticated('Password reset token is invalid or expired.');
+  }
+
+  private invalidEmailVerificationToken(): GarageOsApiException {
+    return GarageOsApiException.unauthenticated('Email verification token is invalid or expired.');
   }
 
   private authUnavailable(): never {

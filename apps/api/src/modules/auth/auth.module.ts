@@ -4,7 +4,6 @@ import { DatabaseModule } from '../../shared/database/database.module';
 import { AuthController } from './api/auth.controller';
 import { AUTH_RATE_LIMIT_EXPORTS, AUTH_RATE_LIMIT_PROVIDERS } from './auth-rate-limit.providers';
 import { AUTH_USER_PROVIDERS } from './auth-user.providers';
-import { AuthRateLimitService } from './application/auth-rate-limit.service';
 import {
   AUTH_PASSWORD_RESET_EXPORTS,
   AUTH_PASSWORD_RESET_PROVIDERS,
@@ -20,6 +19,10 @@ import {
   AccessTokenService,
   AccessTokenSigningOptions,
 } from './security/access-token.service';
+import {
+  AUTH_EMAIL_VERIFICATION_EXPORTS,
+  AUTH_EMAIL_VERIFICATION_PROVIDERS,
+} from './auth-email-verification.providers';
 
 @Module({
   imports: [DatabaseModule],
@@ -43,6 +46,7 @@ import {
     ...AUTH_SESSION_PROVIDERS,
     ...AUTH_USER_PROVIDERS,
     ...AUTH_PASSWORD_RESET_PROVIDERS,
+    ...AUTH_EMAIL_VERIFICATION_PROVIDERS,
   ],
   exports: [
     AuthService,
@@ -54,6 +58,7 @@ import {
     ...AUTH_RATE_LIMIT_EXPORTS,
     ...AUTH_SESSION_EXPORTS,
     ...AUTH_PASSWORD_RESET_EXPORTS,
+    ...AUTH_EMAIL_VERIFICATION_EXPORTS,
   ],
 })
 export class AuthModule {}

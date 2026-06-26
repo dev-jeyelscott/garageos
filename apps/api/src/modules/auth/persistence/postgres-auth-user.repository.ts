@@ -4,6 +4,7 @@ import type { AuthBranchSummary, AuthTenantSummary } from '../contracts';
 import {
   AuthLoginContext,
   AuthUserStore,
+  MarkAuthUserEmailVerifiedInput,
   toAuthTenantStatus,
   toAuthUserStatus,
   toAuthUserType,
@@ -275,6 +276,33 @@ export class PostgresAuthUserRepository extends AuthUserStore {
     `,
       [input.userId, input.passwordHash, input.passwordChangedAt],
     );
+  }
+
+  async markEmailVerified(input: MarkAuthUserEmailVerifiedInput): Promise<boolean> {
+    const normalizedEmail = input.email.trim().toLowerCase();
+
+    const result = await this.database.query<{ readonly id: string }>(
+      `
+        update users
+        set
+          email_verified_at = coalesce(email_verified_at, $3),
+          updated_at = case
+            when email_verified_at is null then $3
+            else updated_at
+          end,
+          lock_version = case
+            when email_verified_at is null then lock_version + 1
+            else lock_version
+          end
+        where id = $1
+          and normalized_email = $2
+          and status = 'active'
+        returning id
+      `,
+      [input.userId, normalizedEmail, input.emailVerifiedAt],
+    );
+
+    return result.rows[0] !== undefined;
   }
 }
 

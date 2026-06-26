@@ -113,15 +113,21 @@ export class AuthController {
   }
 
   @Post('email-verification/resend')
-  resendEmailVerification(): never {
-    return this.authService.resendEmailVerification();
+  async resendEmailVerification(
+    @Headers('cookie') cookieHeader: string | undefined,
+  ): Promise<AuthActionResult> {
+    const refreshToken = this.authTokenTransportService.getRefreshTokenFromCookieHeader(
+      cookieHeader ?? null,
+    );
+
+    return this.authService.resendEmailVerification(refreshToken);
   }
 
   @Post('email-verification/confirm')
-  confirmEmailVerification(
+  async confirmEmailVerification(
     @Body(new ZodValidationPipe(emailVerificationConfirmRequestSchema))
     request: EmailVerificationConfirmRequest,
-  ): never {
+  ): Promise<AuthActionResult> {
     return this.authService.confirmEmailVerification(request);
   }
 

@@ -26,6 +26,12 @@ import type {
   ReplaceRefreshSessionInput,
   RotateRefreshSessionInput,
 } from './refresh-session.store';
+import { EmailVerificationTokenStore } from './email-verification-token.store';
+import type {
+  CreateEmailVerificationTokenInput,
+  EmailVerificationTokenRecord,
+} from './email-verification-token.store';
+import type { MarkAuthUserEmailVerifiedInput } from './auth-user.store';
 
 const signingOptions = {
   issuer: 'garageos-api',
@@ -36,6 +42,7 @@ const signingOptions = {
 class FakeAuthUserStore extends AuthUserStore {
   readonly lookups: string[] = [];
   readonly userIdLookups: string[] = [];
+  readonly emailVerificationInputs: MarkAuthUserEmailVerifiedInput[] = [];
   readonly updatedPasswordInputs: {
     readonly userId: string;
     readonly passwordHash: string;
@@ -74,6 +81,28 @@ class FakeAuthUserStore extends AuthUserStore {
     readonly passwordChangedAt: Date;
   }): Promise<void> {
     this.updatedPasswordInputs.push(input);
+  }
+
+  async markEmailVerified(input: MarkAuthUserEmailVerifiedInput): Promise<boolean> {
+    this.emailVerificationInputs.push(input);
+
+    if (
+      this.context === null ||
+      this.context.user.id !== input.userId ||
+      this.context.user.email.trim().toLowerCase() !== input.email.trim().toLowerCase()
+    ) {
+      return false;
+    }
+
+    this.context = {
+      ...this.context,
+      user: {
+        ...this.context.user,
+        emailVerifiedAt: input.emailVerifiedAt,
+      },
+    };
+
+    return true;
   }
 }
 
@@ -240,7 +269,60 @@ class FakePasswordResetTokenStore extends PasswordResetTokenStore {
   }
 }
 
-function createLoginContext(): AuthLoginContext {
+class FakeEmailVerificationTokenStore extends EmailVerificationTokenStore {
+  readonly createInputs: CreateEmailVerificationTokenInput[] = [];
+  readonly consumeInputs: { readonly tokenHash: string; readonly consumedAt: Date }[] = [];
+
+  private readonly tokensByHash = new Map<string, EmailVerificationTokenRecord>();
+
+  setActiveToken(record: EmailVerificationTokenRecord): void {
+    this.tokensByHash.set(record.tokenHash, record);
+  }
+
+  async create(input: CreateEmailVerificationTokenInput): Promise<EmailVerificationTokenRecord> {
+    this.createInputs.push(input);
+
+    const record: EmailVerificationTokenRecord = {
+      id: input.id,
+      userId: input.userId,
+      tokenHash: input.tokenHash,
+      email: input.email,
+      expiresAt: input.expiresAt,
+      usedAt: null,
+      createdAt: new Date('2026-06-26T00:00:00.000Z'),
+    };
+
+    this.tokensByHash.set(record.tokenHash, record);
+
+    return record;
+  }
+
+  async consumeActiveByTokenHash(
+    tokenHash: string,
+    consumedAt: Date,
+  ): Promise<EmailVerificationTokenRecord | null> {
+    this.consumeInputs.push({ tokenHash, consumedAt });
+
+    const token = this.tokensByHash.get(tokenHash);
+
+    if (token === undefined || token.usedAt !== null || token.expiresAt <= consumedAt) {
+      return null;
+    }
+
+    const consumedToken: EmailVerificationTokenRecord = {
+      ...token,
+      usedAt: consumedAt,
+    };
+
+    this.tokensByHash.set(tokenHash, consumedToken);
+
+    return consumedToken;
+  }
+}
+
+function createLoginContext(
+  userOverrides: Partial<AuthLoginContext['user']> = {},
+): AuthLoginContext {
   return {
     user: {
       id: '11111111-1111-4111-8111-111111111111',
@@ -251,6 +333,7 @@ function createLoginContext(): AuthLoginContext {
       emailVerifiedAt: new Date('2026-06-26T00:00:00.000Z'),
       status: 'active',
       fullName: 'Juan Dela Cruz',
+      ...userOverrides,
     },
     tenant: {
       id: '22222222-2222-4222-8222-222222222222',
@@ -288,6 +371,7 @@ function createService(
   readonly hashPassword: ReturnType<typeof vi.fn>;
   readonly accessTokenService: AccessTokenService;
   readonly tokenHashingService: TokenHashingService;
+  readonly emailVerificationTokenStore: FakeEmailVerificationTokenStore;
 } {
   const userStore = new FakeAuthUserStore();
   userStore.setContext('loginContext' in options ? options.loginContext : createLoginContext());
@@ -312,6 +396,7 @@ function createService(
   const authSessionService = new AuthSessionService(refreshSessionStore);
   const secureTokenService = new SecureTokenService();
   const tokenHashingService = new TokenHashingService();
+  const emailVerificationTokenStore = new FakeEmailVerificationTokenStore();
 
   return {
     service: new AuthService(
@@ -321,6 +406,7 @@ function createService(
       rateLimitService,
       authSessionService,
       passwordResetTokenStore,
+      emailVerificationTokenStore,
       secureTokenService,
       tokenHashingService,
     ),
@@ -330,8 +416,24 @@ function createService(
     passwordResetTokenStore,
     verifyPassword,
     hashPassword,
+    emailVerificationTokenStore,
     accessTokenService,
     tokenHashingService,
+  };
+}
+
+function createEmailVerificationTokenRecord(
+  overrides: Partial<EmailVerificationTokenRecord> = {},
+): EmailVerificationTokenRecord {
+  return {
+    id: '77777777-7777-4777-8777-777777777777',
+    userId: '11111111-1111-4111-8111-111111111111',
+    tokenHash: 'email-verification-token-hash',
+    email: 'owner@example.com',
+    expiresAt: new Date('2099-01-01T00:00:00.000Z'),
+    usedAt: null,
+    createdAt: new Date('2026-06-26T00:00:00.000Z'),
+    ...overrides,
   };
 }
 
@@ -977,5 +1079,201 @@ describe('AuthService changePassword', () => {
 
     expect(userStore.updatedPasswordInputs).toEqual([]);
     expect(refreshSessionStore.revokedAllForUserInputs).toEqual([]);
+  });
+});
+
+describe('AuthService resendEmailVerification', () => {
+  it('rate-limits and creates a hashed email verification token for an unverified active session user', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-26T10:00:00.000Z'));
+
+    try {
+      const {
+        service,
+        rateLimitStore,
+        refreshSessionStore,
+        emailVerificationTokenStore,
+        tokenHashingService,
+      } = createService({
+        loginContext: createLoginContext({
+          emailVerifiedAt: null,
+        }),
+      });
+
+      const currentRefreshToken = 'current-refresh-token';
+      const currentRefreshTokenHash = tokenHashingService.hashToken(currentRefreshToken);
+
+      refreshSessionStore.setActiveSession(
+        createRefreshSessionRecord({
+          refreshTokenHash: currentRefreshTokenHash,
+        }),
+      );
+
+      await expect(service.resendEmailVerification(currentRefreshToken)).resolves.toEqual({});
+
+      expect(rateLimitStore.countInputs).toEqual([
+        expect.objectContaining({
+          bucket: 'auth.email_verification_resend',
+          key: 'account:owner@example.com',
+        }),
+      ]);
+
+      expect(rateLimitStore.recordInputs).toEqual([
+        expect.objectContaining({
+          bucket: 'auth.email_verification_resend',
+          key: 'account:owner@example.com',
+          tenantId: '22222222-2222-4222-8222-222222222222',
+          userId: '11111111-1111-4111-8111-111111111111',
+          ipAddress: null,
+        }),
+      ]);
+
+      const createdToken = getOnlyItem(
+        emailVerificationTokenStore.createInputs,
+        'email verification token create input',
+      );
+
+      expect(createdToken).toEqual(
+        expect.objectContaining({
+          userId: '11111111-1111-4111-8111-111111111111',
+          email: 'owner@example.com',
+          expiresAt: new Date('2026-06-27T10:00:00.000Z'),
+        }),
+      );
+      expect(createdToken.tokenHash).toMatch(/^[a-f0-9]{64}$/);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not create a new token when the session user is already verified', async () => {
+    const { service, refreshSessionStore, emailVerificationTokenStore, tokenHashingService } =
+      createService();
+
+    const currentRefreshToken = 'current-refresh-token';
+    const currentRefreshTokenHash = tokenHashingService.hashToken(currentRefreshToken);
+
+    refreshSessionStore.setActiveSession(
+      createRefreshSessionRecord({
+        refreshTokenHash: currentRefreshTokenHash,
+      }),
+    );
+
+    await expect(service.resendEmailVerification(currentRefreshToken)).resolves.toEqual({});
+
+    expect(emailVerificationTokenStore.createInputs).toEqual([]);
+  });
+
+  it('blocks resend when the email verification resend rate limit is exceeded', async () => {
+    const {
+      service,
+      rateLimitStore,
+      refreshSessionStore,
+      emailVerificationTokenStore,
+      tokenHashingService,
+    } = createService({
+      loginContext: createLoginContext({
+        emailVerifiedAt: null,
+      }),
+    });
+
+    rateLimitStore.setCount('account:owner@example.com', 5);
+
+    const currentRefreshToken = 'current-refresh-token';
+    const currentRefreshTokenHash = tokenHashingService.hashToken(currentRefreshToken);
+
+    refreshSessionStore.setActiveSession(
+      createRefreshSessionRecord({
+        refreshTokenHash: currentRefreshTokenHash,
+      }),
+    );
+
+    await expect(service.resendEmailVerification(currentRefreshToken)).rejects.toMatchObject({
+      code: 'rate_limited',
+    });
+
+    expect(emailVerificationTokenStore.createInputs).toEqual([]);
+  });
+});
+
+describe('AuthService confirmEmailVerification', () => {
+  it('consumes a verification token and marks the matching active user email as verified', async () => {
+    const { service, userStore, emailVerificationTokenStore, tokenHashingService } = createService({
+      loginContext: createLoginContext({
+        emailVerifiedAt: null,
+      }),
+    });
+
+    const rawVerificationToken = 'raw-email-verification-token';
+    const tokenHash = tokenHashingService.hashToken(rawVerificationToken);
+
+    emailVerificationTokenStore.setActiveToken(
+      createEmailVerificationTokenRecord({
+        tokenHash,
+      }),
+    );
+
+    await expect(
+      service.confirmEmailVerification({
+        token: rawVerificationToken,
+      }),
+    ).resolves.toEqual({});
+
+    expect(emailVerificationTokenStore.consumeInputs).toEqual([
+      expect.objectContaining({
+        tokenHash,
+      }),
+    ]);
+
+    expect(userStore.emailVerificationInputs).toEqual([
+      expect.objectContaining({
+        userId: '11111111-1111-4111-8111-111111111111',
+        email: 'owner@example.com',
+      }),
+    ]);
+  });
+
+  it('rejects missing, used, expired, or unknown verification tokens', async () => {
+    const { service, userStore } = createService();
+
+    await expect(
+      service.confirmEmailVerification({
+        token: 'unknown-email-verification-token',
+      }),
+    ).rejects.toMatchObject({
+      code: 'unauthenticated',
+    });
+
+    expect(userStore.emailVerificationInputs).toEqual([]);
+  });
+
+  it('rejects a valid token when the token email no longer matches an active user email', async () => {
+    const { service, userStore, emailVerificationTokenStore, tokenHashingService } =
+      createService();
+
+    const rawVerificationToken = 'raw-email-verification-token';
+    const tokenHash = tokenHashingService.hashToken(rawVerificationToken);
+
+    emailVerificationTokenStore.setActiveToken(
+      createEmailVerificationTokenRecord({
+        tokenHash,
+        email: 'old-owner@example.com',
+      }),
+    );
+
+    await expect(
+      service.confirmEmailVerification({
+        token: rawVerificationToken,
+      }),
+    ).rejects.toMatchObject({
+      code: 'unauthenticated',
+    });
+
+    expect(userStore.emailVerificationInputs).toEqual([
+      expect.objectContaining({
+        userId: '11111111-1111-4111-8111-111111111111',
+        email: 'old-owner@example.com',
+      }),
+    ]);
   });
 });
