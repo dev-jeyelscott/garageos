@@ -10,13 +10,17 @@ import type {
 
 export const DATABASE_URL_ENV_VAR = 'DATABASE_URL';
 
+type DatabaseEnvironment = Readonly<Record<string, string | undefined>>;
+
+const POSTGRES_PROTOCOLS = new Set(['postgres:', 'postgresql:']);
+
 @Injectable()
 export class PostgresDatabaseClient implements DatabaseConnectionProvider, OnModuleDestroy {
   private readonly pool: Pool;
 
   constructor() {
     this.pool = new Pool({
-      connectionString: process.env[DATABASE_URL_ENV_VAR],
+      connectionString: resolveRequiredDatabaseUrl(),
     });
   }
 
@@ -56,6 +60,30 @@ export class PostgresDatabaseClient implements DatabaseConnectionProvider, OnMod
   async onModuleDestroy(): Promise<void> {
     await this.pool.end();
   }
+}
+
+export function resolveRequiredDatabaseUrl(env: DatabaseEnvironment = process.env): string {
+  const databaseUrl = env[DATABASE_URL_ENV_VAR]?.trim();
+
+  if (!databaseUrl) {
+    throw new Error(
+      `${DATABASE_URL_ENV_VAR} is required. Set it to a PostgreSQL connection URL before starting the API.`,
+    );
+  }
+
+  let parsedDatabaseUrl: URL;
+
+  try {
+    parsedDatabaseUrl = new URL(databaseUrl);
+  } catch {
+    throw new Error(`${DATABASE_URL_ENV_VAR} must be a valid PostgreSQL connection URL.`);
+  }
+
+  if (!POSTGRES_PROTOCOLS.has(parsedDatabaseUrl.protocol)) {
+    throw new Error(`${DATABASE_URL_ENV_VAR} must use the postgres:// or postgresql:// protocol.`);
+  }
+
+  return databaseUrl;
 }
 
 function toPgQueryValues(values: readonly unknown[] | undefined): unknown[] | undefined {
