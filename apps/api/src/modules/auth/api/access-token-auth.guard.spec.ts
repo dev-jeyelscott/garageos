@@ -1,6 +1,8 @@
 import type { ExecutionContext } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
 
+import { API_ERROR_CODES } from '../../../shared/api/api-error-code';
+import { GarageOsApiException } from '../../../shared/api/api-exception';
 import type { AuditService } from '../../../shared/audit/audit.service';
 import type { TenantContextAuthenticatedSession } from '../../../shared/tenant-context/tenant-context';
 import {
@@ -40,6 +42,50 @@ describe('AccessTokenAuthGuard', () => {
     expect(request.garageOsAuthenticatedSession?.actor.session_id).toBe(
       '33333333-3333-4333-8333-333333333333',
     );
+  });
+
+  it('audits denied bearer access tokens without storing sensitive authorization data', async () => {
+    const request: GarageOsAuthenticatedRequest = {
+      headers: {
+        authorization: 'Bearer access-token',
+        'x-forwarded-for': '203.0.113.10, 198.51.100.20',
+        'user-agent': 'GarageOS Test Browser',
+      },
+    };
+
+    const authService = {
+      getAuthenticatedRouteSession: vi.fn(async () => {
+        throw GarageOsApiException.unauthenticated('Access token is invalid.');
+      }),
+    } as unknown as AuthService;
+    const auditService = createAuditService();
+
+    const guard = new AccessTokenAuthGuard(authService, auditService);
+
+    await expect(guard.canActivate(createExecutionContext(request))).rejects.toMatchObject({
+      code: API_ERROR_CODES.UNAUTHENTICATED,
+    });
+
+    expect(authService.getAuthenticatedRouteSession).toHaveBeenCalledWith('Bearer access-token');
+    expect(auditService.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorType: 'system',
+        action: 'auth.access_token_denied',
+        entityType: 'auth_session',
+        metadataJson: {
+          error_code: API_ERROR_CODES.UNAUTHENTICATED,
+        },
+        reason: 'access_token_invalid_or_expired',
+        ipAddress: '203.0.113.10',
+        userAgent: 'GarageOS Test Browser',
+      }),
+    );
+
+    const auditCalls = vi.mocked(auditService.record).mock.calls;
+    const [auditInput] = auditCalls[0] ?? [];
+
+    expect(JSON.stringify(auditInput)).not.toContain('Bearer access-token');
+    expect(JSON.stringify(auditInput)).not.toContain('access-token');
   });
 });
 
