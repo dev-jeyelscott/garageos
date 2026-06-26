@@ -87,7 +87,7 @@ export class AuthService {
   ) {}
 
   signupOwner(): never {
-    return this.authUnavailable();
+    return this.ownerSignupUnavailable();
   }
 
   async login(
@@ -815,9 +815,9 @@ export class AuthService {
     return GarageOsApiException.unauthenticated('Email verification token is invalid or expired.');
   }
 
-  private authUnavailable(): never {
+  private ownerSignupUnavailable(): never {
     throw GarageOsApiException.serviceUnavailable(
-      'Authentication routes are available, but authentication is not implemented yet.',
+      'Owner signup is intentionally unavailable until Milestone 3 tenant lifecycle and onboarding implementation is completed.',
     );
   }
 }

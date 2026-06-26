@@ -533,6 +533,20 @@ function createRefreshSessionRecord(
   };
 }
 
+describe('AuthService signupOwner', () => {
+  it('keeps owner signup intentionally blocked until Milestone 3 tenant lifecycle and onboarding are implemented', () => {
+    const { service } = createService();
+
+    expect(() => service.signupOwner()).toThrow(
+      expect.objectContaining({
+        code: 'service_unavailable',
+        message:
+          'Owner signup is intentionally unavailable until Milestone 3 tenant lifecycle and onboarding implementation is completed.',
+      }),
+    );
+  });
+});
+
 describe('AuthService login', () => {
   it('returns login response data, a signed access token, and creates a refresh session for valid credentials', async () => {
     const {
