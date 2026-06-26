@@ -1,8 +1,5 @@
+import { HomeSessionScreen } from '../src/features/auth/auth-screens';
+
 export default function HomePage() {
-  return (
-    <main>
-      <h1>GarageOS</h1>
-      <p>Web app shell is running.</p>
-    </main>
-  );
+  return <HomeSessionScreen />;
 }
