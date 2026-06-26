@@ -1,7 +1,12 @@
 import { Body, Controller, Get, Headers, Inject, Ip, Post, Res } from '@nestjs/common';
 
 import { ZodValidationPipe } from '../../../shared/api/zod-validation.pipe';
-import { AuthLoginResult, AuthRefreshResult, AuthService } from '../application/auth.service';
+import {
+  type AuthActionResult,
+  type AuthLoginResult,
+  type AuthRefreshResult,
+  AuthService,
+} from '../application/auth.service';
 import {
   AuthTokenTransportService,
   type RefreshTokenCookieOptions,
@@ -26,6 +31,7 @@ import {
 
 interface RefreshCookieResponse {
   cookie(name: string, value: string, options: RefreshTokenCookieOptions): void;
+  clearCookie(name: string, options: RefreshTokenCookieOptions): void;
 }
 
 @Controller('auth')
@@ -77,13 +83,33 @@ export class AuthController {
   }
 
   @Post('logout')
-  logout(): never {
-    return this.authService.logout();
+  async logout(
+    @Headers('cookie') cookieHeader: string | undefined,
+    @Res({ passthrough: true }) response: RefreshCookieResponse,
+  ): Promise<AuthActionResult> {
+    const refreshToken = this.authTokenTransportService.getRefreshTokenFromCookieHeader(
+      cookieHeader ?? null,
+    );
+
+    const result = await this.authService.logout(refreshToken);
+    this.clearRefreshTokenCookie(response);
+
+    return result;
   }
 
   @Post('logout-all')
-  logoutAll(): never {
-    return this.authService.logoutAll();
+  async logoutAll(
+    @Headers('cookie') cookieHeader: string | undefined,
+    @Res({ passthrough: true }) response: RefreshCookieResponse,
+  ): Promise<AuthActionResult> {
+    const refreshToken = this.authTokenTransportService.getRefreshTokenFromCookieHeader(
+      cookieHeader ?? null,
+    );
+
+    const result = await this.authService.logoutAll(refreshToken);
+    this.clearRefreshTokenCookie(response);
+
+    return result;
   }
 
   @Post('email-verification/resend')
@@ -138,6 +164,15 @@ export class AuthController {
       refreshToken,
       this.authTokenTransportService.buildRefreshTokenCookieOptions({
         rememberMe,
+        secureCookies: process.env.AUTH_REFRESH_COOKIE_SECURE !== 'false',
+      }),
+    );
+  }
+
+  private clearRefreshTokenCookie(response: RefreshCookieResponse): void {
+    response.clearCookie(
+      this.authTokenTransportService.getRefreshTokenCookieName(),
+      this.authTokenTransportService.buildClearRefreshTokenCookieOptions({
         secureCookies: process.env.AUTH_REFRESH_COOKIE_SECURE !== 'false',
       }),
     );

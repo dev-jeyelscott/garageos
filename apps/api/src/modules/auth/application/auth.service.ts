@@ -25,6 +25,7 @@ import { AuthSessionService } from './auth-session.service';
 import { SecureTokenService } from './secure-token.service';
 import { TokenHashingService } from './token-hashing.service';
 import { AUTH_SESSION_POLICY } from './auth-session.policy';
+import type { RefreshSessionRecord } from './refresh-session.store';
 
 export interface AuthLoginRequestContext {
   readonly ipAddress?: string | null;
@@ -41,6 +42,8 @@ export interface AuthRefreshResult extends AuthRefreshResponseData {
   readonly refreshSessionId: string;
   readonly rememberMe: boolean;
 }
+
+export type AuthActionResult = Record<string, never>;
 
 @Injectable()
 export class AuthService {
@@ -132,23 +135,11 @@ export class AuthService {
   }
 
   async refresh(refreshToken: string | null | undefined): Promise<AuthRefreshResult> {
-    const normalizedRefreshToken = refreshToken?.trim();
-
-    if (normalizedRefreshToken === undefined || normalizedRefreshToken.length === 0) {
-      throw this.invalidRefreshSession();
-    }
-
-    const now = new Date();
-    const currentRefreshTokenHash = this.tokenHashingService.hashToken(normalizedRefreshToken);
-
-    const currentSession = await this.authSessionService.findActiveRefreshSession({
+    const {
+      session: currentSession,
       refreshTokenHash: currentRefreshTokenHash,
       now,
-    });
-
-    if (currentSession === null) {
-      throw this.invalidRefreshSession();
-    }
+    } = await this.findActiveRefreshSessionForToken(refreshToken);
 
     const loginContext = await this.authUserStore.findActiveLoginContextByUserId({
       userId: currentSession.userId,
@@ -192,12 +183,26 @@ export class AuthService {
     };
   }
 
-  logout(): never {
-    return this.authUnavailable();
+  async logout(refreshToken: string | null | undefined): Promise<AuthActionResult> {
+    const { session, now } = await this.findActiveRefreshSessionForToken(refreshToken);
+
+    await this.authSessionService.revokeCurrentRefreshSession({
+      sessionId: session.id,
+      revokedAt: now,
+    });
+
+    return {};
   }
 
-  logoutAll(): never {
-    return this.authUnavailable();
+  async logoutAll(refreshToken: string | null | undefined): Promise<AuthActionResult> {
+    const { session, now } = await this.findActiveRefreshSessionForToken(refreshToken);
+
+    await this.authSessionService.revokeAllRefreshSessionsForUser({
+      userId: session.userId,
+      revokedAt: now,
+    });
+
+    return {};
   }
 
   resendEmailVerification(): never {
@@ -314,6 +319,32 @@ export class AuthService {
       : AUTH_SECURITY.STANDARD_REFRESH_SESSION_EXPIRES_IN_DAYS * 24 * 60 * 60;
 
     return new Date(now.getTime() + ttlSeconds * 1000);
+  }
+
+  private async findActiveRefreshSessionForToken(refreshToken: string | null | undefined): Promise<{
+    readonly session: RefreshSessionRecord;
+    readonly refreshTokenHash: string;
+    readonly now: Date;
+  }> {
+    const normalizedRefreshToken = refreshToken?.trim();
+
+    if (normalizedRefreshToken === undefined || normalizedRefreshToken.length === 0) {
+      throw this.invalidRefreshSession();
+    }
+
+    const now = new Date();
+    const refreshTokenHash = this.tokenHashingService.hashToken(normalizedRefreshToken);
+
+    const session = await this.authSessionService.findActiveRefreshSession({
+      refreshTokenHash,
+      now,
+    });
+
+    if (session === null) {
+      throw this.invalidRefreshSession();
+    }
+
+    return { session, refreshTokenHash, now };
   }
 
   private async signAccessTokenForLoginContext(input: {

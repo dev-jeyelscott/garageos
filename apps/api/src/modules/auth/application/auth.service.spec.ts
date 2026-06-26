@@ -64,6 +64,7 @@ class FakeRefreshSessionStore extends RefreshSessionStore {
   readonly rotateInputs: RotateRefreshSessionInput[] = [];
   readonly revokedCurrentDeviceInputs: { readonly sessionId: string; readonly revokedAt: Date }[] =
     [];
+  readonly revokedAllForUserInputs: { readonly userId: string; readonly revokedAt: Date }[] = [];
 
   private readonly sessionsByHash = new Map<string, RefreshSessionRecord>();
 
@@ -145,7 +146,9 @@ class FakeRefreshSessionStore extends RefreshSessionStore {
     this.revokedCurrentDeviceInputs.push({ sessionId, revokedAt });
   }
 
-  async revokeAllForUser(_userId: string, _revokedAt: Date): Promise<void> {}
+  async revokeAllForUser(userId: string, revokedAt: Date): Promise<void> {
+    this.revokedAllForUserInputs.push({ userId, revokedAt });
+  }
 }
 
 class FakeAuthRateLimitStore extends AuthRateLimitStore {
@@ -265,6 +268,24 @@ function getOnlyItem<T>(items: readonly T[], label: string): T {
   }
 
   return item;
+}
+
+function createRefreshSessionRecord(
+  overrides: Partial<RefreshSessionRecord> = {},
+): RefreshSessionRecord {
+  return {
+    id: '44444444-4444-4444-8444-444444444444',
+    userId: '11111111-1111-4111-8111-111111111111',
+    tenantId: '22222222-2222-4222-8222-222222222222',
+    tokenFamilyId: '55555555-5555-4555-8555-555555555555',
+    refreshTokenHash: 'refresh-token-hash',
+    rememberMe: true,
+    expiresAt: new Date('2099-01-01T00:00:00.000Z'),
+    revokedAt: null,
+    replacedBySessionId: null,
+    createdAt: new Date('2026-06-26T00:00:00.000Z'),
+    ...overrides,
+  };
 }
 
 describe('AuthService login', () => {
@@ -548,5 +569,97 @@ describe('AuthService refresh', () => {
         sessionId: '44444444-4444-4444-8444-444444444444',
       }),
     ]);
+  });
+});
+
+describe('AuthService logout', () => {
+  it('revokes the current device refresh session matched by hashed refresh token', async () => {
+    const { service, refreshSessionStore, tokenHashingService } = createService();
+
+    const currentRefreshToken = 'current-refresh-token';
+    const currentRefreshTokenHash = tokenHashingService.hashToken(currentRefreshToken);
+
+    refreshSessionStore.setActiveSession(
+      createRefreshSessionRecord({
+        refreshTokenHash: currentRefreshTokenHash,
+      }),
+    );
+
+    await expect(service.logout(` ${currentRefreshToken} `)).resolves.toEqual({});
+
+    expect(refreshSessionStore.revokedCurrentDeviceInputs).toEqual([
+      expect.objectContaining({
+        sessionId: '44444444-4444-4444-8444-444444444444',
+      }),
+    ]);
+    expect(refreshSessionStore.revokedAllForUserInputs).toEqual([]);
+  });
+
+  it('rejects missing refresh tokens for current-device logout', async () => {
+    const { service, refreshSessionStore } = createService();
+
+    await expect(service.logout(null)).rejects.toMatchObject({
+      code: 'unauthenticated',
+    });
+
+    expect(refreshSessionStore.revokedCurrentDeviceInputs).toEqual([]);
+    expect(refreshSessionStore.revokedAllForUserInputs).toEqual([]);
+  });
+
+  it('rejects unknown refresh tokens for current-device logout', async () => {
+    const { service, refreshSessionStore } = createService();
+
+    await expect(service.logout('unknown-refresh-token')).rejects.toMatchObject({
+      code: 'unauthenticated',
+    });
+
+    expect(refreshSessionStore.revokedCurrentDeviceInputs).toEqual([]);
+    expect(refreshSessionStore.revokedAllForUserInputs).toEqual([]);
+  });
+});
+
+describe('AuthService logoutAll', () => {
+  it('revokes all active refresh sessions for the user matched by hashed refresh token', async () => {
+    const { service, refreshSessionStore, tokenHashingService } = createService();
+
+    const currentRefreshToken = 'current-refresh-token';
+    const currentRefreshTokenHash = tokenHashingService.hashToken(currentRefreshToken);
+
+    refreshSessionStore.setActiveSession(
+      createRefreshSessionRecord({
+        refreshTokenHash: currentRefreshTokenHash,
+      }),
+    );
+
+    await expect(service.logoutAll(currentRefreshToken)).resolves.toEqual({});
+
+    expect(refreshSessionStore.revokedCurrentDeviceInputs).toEqual([]);
+    expect(refreshSessionStore.revokedAllForUserInputs).toEqual([
+      expect.objectContaining({
+        userId: '11111111-1111-4111-8111-111111111111',
+      }),
+    ]);
+  });
+
+  it('rejects missing refresh tokens for logout-all', async () => {
+    const { service, refreshSessionStore } = createService();
+
+    await expect(service.logoutAll(null)).rejects.toMatchObject({
+      code: 'unauthenticated',
+    });
+
+    expect(refreshSessionStore.revokedCurrentDeviceInputs).toEqual([]);
+    expect(refreshSessionStore.revokedAllForUserInputs).toEqual([]);
+  });
+
+  it('rejects unknown refresh tokens for logout-all', async () => {
+    const { service, refreshSessionStore } = createService();
+
+    await expect(service.logoutAll('unknown-refresh-token')).rejects.toMatchObject({
+      code: 'unauthenticated',
+    });
+
+    expect(refreshSessionStore.revokedCurrentDeviceInputs).toEqual([]);
+    expect(refreshSessionStore.revokedAllForUserInputs).toEqual([]);
   });
 });

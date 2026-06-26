@@ -51,4 +51,12 @@ describe('AuthTokenTransportService', () => {
       path: '/api/v1/auth',
     });
   });
+
+  it('allows clear-cookie secure behavior to match controlled local tests', () => {
+    const options = service.buildClearRefreshTokenCookieOptions({
+      secureCookies: false,
+    });
+
+    expect(options.secure).toBe(false);
+  });
 });

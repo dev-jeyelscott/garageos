@@ -14,6 +14,10 @@ export interface BuildRefreshTokenCookieOptionsInput {
   secureCookies?: boolean;
 }
 
+export interface BuildClearRefreshTokenCookieOptionsInput {
+  secureCookies?: boolean;
+}
+
 @Injectable()
 export class AuthTokenTransportService {
   getRefreshTokenCookieName(): string {
@@ -40,10 +44,12 @@ export class AuthTokenTransportService {
     };
   }
 
-  buildClearRefreshTokenCookieOptions(): RefreshTokenCookieOptions {
+  buildClearRefreshTokenCookieOptions(
+    input: BuildClearRefreshTokenCookieOptionsInput = {},
+  ): RefreshTokenCookieOptions {
     return {
       httpOnly: true,
-      secure: true,
+      secure: input.secureCookies ?? true,
       sameSite: AUTH_SESSION_POLICY.refreshTokenCookieSameSite,
       path: AUTH_SESSION_POLICY.refreshTokenCookiePath,
     };
