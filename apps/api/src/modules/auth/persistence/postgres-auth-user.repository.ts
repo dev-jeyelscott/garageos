@@ -7,6 +7,7 @@ import {
   toAuthTenantStatus,
   toAuthUserStatus,
   toAuthUserType,
+  UpdateAuthUserPasswordHashInput,
 } from '../application/auth-user.store';
 import { AUTH_DATABASE_CLIENT, type DatabaseQueryClient } from './database-client';
 
@@ -259,6 +260,21 @@ export class PostgresAuthUserRepository extends AuthUserStore {
     );
 
     return result.rows.map(mapBranchSummary);
+  }
+
+  async updatePasswordHash(input: UpdateAuthUserPasswordHashInput): Promise<void> {
+    await this.database.query(
+      `
+      update users
+      set
+        password_hash = $2,
+        password_changed_at = $3,
+        updated_at = $3,
+        lock_version = lock_version + 1
+      where id = $1
+    `,
+      [input.userId, input.passwordHash, input.passwordChangedAt],
+    );
   }
 }
 

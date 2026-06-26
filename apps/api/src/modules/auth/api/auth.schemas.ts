@@ -29,10 +29,12 @@ export const forgotPasswordRequestSchema = z
   })
   .strict();
 
-export const resetPasswordRequestSchema = z.object({
-  token: authTokenSchema,
-  new_password: garageOsPasswordSchema,
-});
+export const resetPasswordRequestSchema = z
+  .object({
+    token: authTokenSchema,
+    new_password: garageOsPasswordSchema,
+  })
+  .strict();
 
 export const changePasswordRequestSchema = z
   .object({

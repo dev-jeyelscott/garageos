@@ -5,6 +5,10 @@ import { AuthController } from './api/auth.controller';
 import { AUTH_RATE_LIMIT_EXPORTS, AUTH_RATE_LIMIT_PROVIDERS } from './auth-rate-limit.providers';
 import { AUTH_USER_PROVIDERS } from './auth-user.providers';
 import { AuthRateLimitService } from './application/auth-rate-limit.service';
+import {
+  AUTH_PASSWORD_RESET_EXPORTS,
+  AUTH_PASSWORD_RESET_PROVIDERS,
+} from './auth-password-reset.providers';
 import { AuthService } from './application/auth.service';
 import { AuthTokenTransportService } from './application/auth-token-transport.service';
 import { PasswordHashingService } from './application/password-hashing.service';
@@ -38,6 +42,7 @@ import {
     ...AUTH_RATE_LIMIT_PROVIDERS,
     ...AUTH_SESSION_PROVIDERS,
     ...AUTH_USER_PROVIDERS,
+    ...AUTH_PASSWORD_RESET_PROVIDERS,
   ],
   exports: [
     AuthService,
@@ -48,6 +53,7 @@ import {
     AccessTokenService,
     ...AUTH_RATE_LIMIT_EXPORTS,
     ...AUTH_SESSION_EXPORTS,
+    ...AUTH_PASSWORD_RESET_EXPORTS,
   ],
 })
 export class AuthModule {}

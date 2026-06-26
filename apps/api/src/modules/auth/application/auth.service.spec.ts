@@ -11,6 +11,11 @@ import { SecureTokenService } from './secure-token.service';
 import { TokenHashingService } from './token-hashing.service';
 import { AccessTokenService } from '../security/access-token.service';
 import { AuthService } from './auth.service';
+import { PasswordResetTokenStore } from './password-reset-token.store';
+import type {
+  CreatePasswordResetTokenInput,
+  PasswordResetTokenRecord,
+} from './password-reset-token.store';
 import type {
   CountAuthRateLimitEventsInput,
   RecordAuthRateLimitEventInput,
@@ -31,6 +36,11 @@ const signingOptions = {
 class FakeAuthUserStore extends AuthUserStore {
   readonly lookups: string[] = [];
   readonly userIdLookups: string[] = [];
+  readonly updatedPasswordInputs: {
+    readonly userId: string;
+    readonly passwordHash: string;
+    readonly passwordChangedAt: Date;
+  }[] = [];
 
   private context: AuthLoginContext | null = null;
 
@@ -56,6 +66,14 @@ class FakeAuthUserStore extends AuthUserStore {
     }
 
     return this.context;
+  }
+
+  async updatePasswordHash(input: {
+    readonly userId: string;
+    readonly passwordHash: string;
+    readonly passwordChangedAt: Date;
+  }): Promise<void> {
+    this.updatedPasswordInputs.push(input);
   }
 }
 
@@ -172,6 +190,56 @@ class FakeAuthRateLimitStore extends AuthRateLimitStore {
   }
 }
 
+class FakePasswordResetTokenStore extends PasswordResetTokenStore {
+  readonly createInputs: CreatePasswordResetTokenInput[] = [];
+  readonly consumeInputs: { readonly tokenHash: string; readonly consumedAt: Date }[] = [];
+
+  private readonly tokensByHash = new Map<string, PasswordResetTokenRecord>();
+
+  setActiveToken(record: PasswordResetTokenRecord): void {
+    this.tokensByHash.set(record.tokenHash, record);
+  }
+
+  async create(input: CreatePasswordResetTokenInput): Promise<PasswordResetTokenRecord> {
+    this.createInputs.push(input);
+
+    const record: PasswordResetTokenRecord = {
+      id: input.id,
+      userId: input.userId,
+      tokenHash: input.tokenHash,
+      expiresAt: input.expiresAt,
+      usedAt: null,
+      createdAt: new Date('2026-06-26T00:00:00.000Z'),
+    };
+
+    this.tokensByHash.set(record.tokenHash, record);
+
+    return record;
+  }
+
+  async consumeActiveByTokenHash(
+    tokenHash: string,
+    consumedAt: Date,
+  ): Promise<PasswordResetTokenRecord | null> {
+    this.consumeInputs.push({ tokenHash, consumedAt });
+
+    const token = this.tokensByHash.get(tokenHash);
+
+    if (token === undefined || token.usedAt !== null || token.expiresAt <= consumedAt) {
+      return null;
+    }
+
+    const consumedToken: PasswordResetTokenRecord = {
+      ...token,
+      usedAt: consumedAt,
+    };
+
+    this.tokensByHash.set(tokenHash, consumedToken);
+
+    return consumedToken;
+  }
+}
+
 function createLoginContext(): AuthLoginContext {
   return {
     user: {
@@ -215,7 +283,9 @@ function createService(
   readonly userStore: FakeAuthUserStore;
   readonly rateLimitStore: FakeAuthRateLimitStore;
   readonly refreshSessionStore: FakeRefreshSessionStore;
+  readonly passwordResetTokenStore: FakePasswordResetTokenStore;
   readonly verifyPassword: ReturnType<typeof vi.fn>;
+  readonly hashPassword: ReturnType<typeof vi.fn>;
   readonly accessTokenService: AccessTokenService;
   readonly tokenHashingService: TokenHashingService;
 } {
@@ -227,12 +297,14 @@ function createService(
   rateLimitStore.setCount('ip:203.0.113.10', options.ipAttemptCount ?? 0);
 
   const refreshSessionStore = new FakeRefreshSessionStore();
+  const passwordResetTokenStore = new FakePasswordResetTokenStore();
 
   const verifyPassword = vi.fn(async () => options.passwordMatches ?? true);
+  const hashPassword = vi.fn(async (password: string) => `hashed:${password}`);
 
   const passwordHashingService = {
     verifyPassword,
-    hashPassword: vi.fn(),
+    hashPassword,
   } as unknown as PasswordHashingService;
 
   const accessTokenService = new AccessTokenService(signingOptions);
@@ -248,15 +320,32 @@ function createService(
       accessTokenService,
       rateLimitService,
       authSessionService,
+      passwordResetTokenStore,
       secureTokenService,
       tokenHashingService,
     ),
     userStore,
     rateLimitStore,
     refreshSessionStore,
+    passwordResetTokenStore,
     verifyPassword,
+    hashPassword,
     accessTokenService,
     tokenHashingService,
+  };
+}
+
+function createPasswordResetTokenRecord(
+  overrides: Partial<PasswordResetTokenRecord> = {},
+): PasswordResetTokenRecord {
+  return {
+    id: '66666666-6666-4666-8666-666666666666',
+    userId: '11111111-1111-4111-8111-111111111111',
+    tokenHash: 'password-reset-token-hash',
+    expiresAt: new Date('2099-01-01T00:00:00.000Z'),
+    usedAt: null,
+    createdAt: new Date('2026-06-26T00:00:00.000Z'),
+    ...overrides,
   };
 }
 
@@ -660,6 +749,233 @@ describe('AuthService logoutAll', () => {
     });
 
     expect(refreshSessionStore.revokedCurrentDeviceInputs).toEqual([]);
+    expect(refreshSessionStore.revokedAllForUserInputs).toEqual([]);
+  });
+});
+
+describe('AuthService forgotPassword', () => {
+  it('rate-limits and creates a hashed password reset token for an active account', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-26T10:00:00.000Z'));
+
+    try {
+      const { service, rateLimitStore, passwordResetTokenStore } = createService();
+
+      await expect(
+        service.forgotPassword({
+          email: ' Owner@Example.com ',
+        }),
+      ).resolves.toEqual({});
+
+      expect(rateLimitStore.countInputs).toEqual([
+        expect.objectContaining({
+          bucket: 'auth.password_reset',
+          key: 'account:owner@example.com',
+        }),
+      ]);
+
+      expect(rateLimitStore.recordInputs).toEqual([
+        expect.objectContaining({
+          bucket: 'auth.password_reset',
+          key: 'account:owner@example.com',
+          tenantId: '22222222-2222-4222-8222-222222222222',
+          userId: '11111111-1111-4111-8111-111111111111',
+          ipAddress: null,
+        }),
+      ]);
+
+      const createdToken = getOnlyItem(
+        passwordResetTokenStore.createInputs,
+        'password reset token create input',
+      );
+
+      expect(createdToken).toEqual(
+        expect.objectContaining({
+          userId: '11111111-1111-4111-8111-111111111111',
+          expiresAt: new Date('2026-06-26T10:30:00.000Z'),
+        }),
+      );
+      expect(createdToken.tokenHash).toMatch(/^[a-f0-9]{64}$/);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not reveal whether an account exists', async () => {
+    const { service, rateLimitStore, passwordResetTokenStore } = createService({
+      loginContext: null,
+    });
+
+    await expect(
+      service.forgotPassword({
+        email: 'missing@example.com',
+      }),
+    ).resolves.toEqual({});
+
+    expect(rateLimitStore.recordInputs).toEqual([
+      expect.objectContaining({
+        bucket: 'auth.password_reset',
+        key: 'account:missing@example.com',
+        tenantId: null,
+        userId: null,
+      }),
+    ]);
+    expect(passwordResetTokenStore.createInputs).toEqual([]);
+  });
+
+  it('blocks reset requests when the password reset rate limit is exceeded', async () => {
+    const { service, userStore, passwordResetTokenStore, rateLimitStore } = createService();
+
+    rateLimitStore.setCount('account:owner@example.com', 3);
+
+    await expect(
+      service.forgotPassword({
+        email: 'owner@example.com',
+      }),
+    ).rejects.toMatchObject({
+      code: 'rate_limited',
+    });
+
+    expect(userStore.lookups).toEqual([]);
+    expect(passwordResetTokenStore.createInputs).toEqual([]);
+  });
+});
+
+describe('AuthService resetPassword', () => {
+  it('consumes a reset token, updates the password hash, and revokes all sessions', async () => {
+    const {
+      service,
+      userStore,
+      refreshSessionStore,
+      passwordResetTokenStore,
+      tokenHashingService,
+      hashPassword,
+    } = createService();
+
+    const rawResetToken = 'raw-reset-token';
+    const tokenHash = tokenHashingService.hashToken(rawResetToken);
+
+    passwordResetTokenStore.setActiveToken(
+      createPasswordResetTokenRecord({
+        tokenHash,
+      }),
+    );
+
+    await expect(
+      service.resetPassword({
+        token: rawResetToken,
+        new_password: 'NewSecret123',
+      }),
+    ).resolves.toEqual({});
+
+    expect(passwordResetTokenStore.consumeInputs).toEqual([
+      expect.objectContaining({
+        tokenHash,
+      }),
+    ]);
+    expect(hashPassword).toHaveBeenCalledWith('NewSecret123');
+    expect(userStore.updatedPasswordInputs).toEqual([
+      expect.objectContaining({
+        userId: '11111111-1111-4111-8111-111111111111',
+        passwordHash: 'hashed:NewSecret123',
+      }),
+    ]);
+    expect(refreshSessionStore.revokedAllForUserInputs).toEqual([
+      expect.objectContaining({
+        userId: '11111111-1111-4111-8111-111111111111',
+      }),
+    ]);
+  });
+
+  it('rejects missing, used, expired, or unknown reset tokens', async () => {
+    const { service, userStore, refreshSessionStore } = createService();
+
+    await expect(
+      service.resetPassword({
+        token: 'unknown-reset-token',
+        new_password: 'NewSecret123',
+      }),
+    ).rejects.toMatchObject({
+      code: 'unauthenticated',
+    });
+
+    expect(userStore.updatedPasswordInputs).toEqual([]);
+    expect(refreshSessionStore.revokedAllForUserInputs).toEqual([]);
+  });
+});
+
+describe('AuthService changePassword', () => {
+  it('verifies the current password, updates the password hash, and revokes all sessions', async () => {
+    const {
+      service,
+      userStore,
+      refreshSessionStore,
+      tokenHashingService,
+      verifyPassword,
+      hashPassword,
+    } = createService();
+
+    const currentRefreshToken = 'current-refresh-token';
+    const currentRefreshTokenHash = tokenHashingService.hashToken(currentRefreshToken);
+
+    refreshSessionStore.setActiveSession(
+      createRefreshSessionRecord({
+        refreshTokenHash: currentRefreshTokenHash,
+      }),
+    );
+
+    await expect(
+      service.changePassword(
+        {
+          current_password: 'Secret123',
+          new_password: 'NewSecret123',
+        },
+        currentRefreshToken,
+      ),
+    ).resolves.toEqual({});
+
+    expect(verifyPassword).toHaveBeenCalledWith('Secret123', 'hashed-password');
+    expect(hashPassword).toHaveBeenCalledWith('NewSecret123');
+    expect(userStore.updatedPasswordInputs).toEqual([
+      expect.objectContaining({
+        userId: '11111111-1111-4111-8111-111111111111',
+        passwordHash: 'hashed:NewSecret123',
+      }),
+    ]);
+    expect(refreshSessionStore.revokedAllForUserInputs).toEqual([
+      expect.objectContaining({
+        userId: '11111111-1111-4111-8111-111111111111',
+      }),
+    ]);
+  });
+
+  it('rejects an invalid current password without changing credentials', async () => {
+    const { service, userStore, refreshSessionStore, tokenHashingService } = createService({
+      passwordMatches: false,
+    });
+
+    const currentRefreshToken = 'current-refresh-token';
+    const currentRefreshTokenHash = tokenHashingService.hashToken(currentRefreshToken);
+
+    refreshSessionStore.setActiveSession(
+      createRefreshSessionRecord({
+        refreshTokenHash: currentRefreshTokenHash,
+      }),
+    );
+
+    await expect(
+      service.changePassword(
+        {
+          current_password: 'WrongSecret123',
+          new_password: 'NewSecret123',
+        },
+        currentRefreshToken,
+      ),
+    ).rejects.toMatchObject({
+      code: 'unauthenticated',
+    });
+
+    expect(userStore.updatedPasswordInputs).toEqual([]);
     expect(refreshSessionStore.revokedAllForUserInputs).toEqual([]);
   });
 });

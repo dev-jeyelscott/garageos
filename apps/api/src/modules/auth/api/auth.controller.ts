@@ -126,27 +126,36 @@ export class AuthController {
   }
 
   @Post('password/forgot')
-  forgotPassword(
+  async forgotPassword(
     @Body(new ZodValidationPipe(forgotPasswordRequestSchema))
     request: ForgotPasswordRequest,
-  ): never {
+  ): Promise<AuthActionResult> {
     return this.authService.forgotPassword(request);
   }
 
   @Post('password/reset')
-  resetPassword(
+  async resetPassword(
     @Body(new ZodValidationPipe(resetPasswordRequestSchema))
     request: ResetPasswordRequest,
-  ): never {
+  ): Promise<AuthActionResult> {
     return this.authService.resetPassword(request);
   }
 
   @Post('password/change')
-  changePassword(
+  async changePassword(
+    @Headers('cookie') cookieHeader: string | undefined,
     @Body(new ZodValidationPipe(changePasswordRequestSchema))
     request: ChangePasswordRequest,
-  ): never {
-    return this.authService.changePassword(request);
+    @Res({ passthrough: true }) response: RefreshCookieResponse,
+  ): Promise<AuthActionResult> {
+    const refreshToken = this.authTokenTransportService.getRefreshTokenFromCookieHeader(
+      cookieHeader ?? null,
+    );
+
+    const result = await this.authService.changePassword(request, refreshToken);
+    this.clearRefreshTokenCookie(response);
+
+    return result;
   }
 
   @Get('session')

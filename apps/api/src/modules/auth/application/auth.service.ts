@@ -26,6 +26,7 @@ import { SecureTokenService } from './secure-token.service';
 import { TokenHashingService } from './token-hashing.service';
 import { AUTH_SESSION_POLICY } from './auth-session.policy';
 import type { RefreshSessionRecord } from './refresh-session.store';
+import { PasswordResetTokenStore } from './password-reset-token.store';
 
 export interface AuthLoginRequestContext {
   readonly ipAddress?: string | null;
@@ -58,6 +59,8 @@ export class AuthService {
     private readonly authRateLimitService: AuthRateLimitService,
     @Inject(AuthSessionService)
     private readonly authSessionService: AuthSessionService,
+    @Inject(PasswordResetTokenStore)
+    private readonly passwordResetTokenStore: PasswordResetTokenStore,
     @Inject(SecureTokenService)
     private readonly secureTokenService: SecureTokenService,
     @Inject(TokenHashingService)
@@ -215,22 +218,147 @@ export class AuthService {
     return this.authUnavailable();
   }
 
-  forgotPassword(request: ForgotPasswordRequest): never {
-    void request;
+  async forgotPassword(request: ForgotPasswordRequest): Promise<AuthActionResult> {
+    const normalizedEmail = normalizeAuthRateLimitEmailKey(request.email);
 
-    return this.authUnavailable();
+    await this.assertPasswordResetRateLimitAllowed(normalizedEmail);
+
+    const loginContext = await this.authUserStore.findActiveLoginContextByNormalizedEmail({
+      normalizedEmail,
+    });
+
+    await this.recordPasswordResetAttempt({
+      normalizedEmail,
+      tenantId: loginContext?.user.tenantId ?? null,
+      userId: loginContext?.user.id ?? null,
+    });
+
+    if (loginContext === null) {
+      return {};
+    }
+
+    await this.createPasswordResetTokenForUser({
+      userId: loginContext.user.id,
+      now: new Date(),
+    });
+
+    return {};
   }
 
-  resetPassword(request: ResetPasswordRequest): never {
-    void request;
+  async resetPassword(request: ResetPasswordRequest): Promise<AuthActionResult> {
+    const now = new Date();
+    const tokenHash = this.tokenHashingService.hashToken(request.token);
 
-    return this.authUnavailable();
+    const token = await this.passwordResetTokenStore.consumeActiveByTokenHash(tokenHash, now);
+
+    if (token === null) {
+      throw this.invalidPasswordResetToken();
+    }
+
+    await this.updatePasswordAndRevokeSessions({
+      userId: token.userId,
+      newPassword: request.new_password,
+      changedAt: now,
+    });
+
+    return {};
   }
 
-  changePassword(request: ChangePasswordRequest): never {
-    void request;
+  async changePassword(
+    request: ChangePasswordRequest,
+    refreshToken: string | null | undefined,
+  ): Promise<AuthActionResult> {
+    const { session, now } = await this.findActiveRefreshSessionForToken(refreshToken);
 
-    return this.authUnavailable();
+    const loginContext = await this.authUserStore.findActiveLoginContextByUserId({
+      userId: session.userId,
+    });
+
+    if (loginContext === null) {
+      await this.authSessionService.revokeCurrentRefreshSession({
+        sessionId: session.id,
+        revokedAt: now,
+      });
+
+      throw this.invalidRefreshSession();
+    }
+
+    const currentPasswordMatches = await this.verifyPasswordSafely(
+      request.current_password,
+      loginContext.user.passwordHash,
+    );
+
+    if (!currentPasswordMatches) {
+      throw GarageOsApiException.unauthenticated('Current password is invalid.');
+    }
+
+    await this.updatePasswordAndRevokeSessions({
+      userId: session.userId,
+      newPassword: request.new_password,
+      changedAt: now,
+    });
+
+    return {};
+  }
+
+  private async assertPasswordResetRateLimitAllowed(normalizedEmail: string): Promise<void> {
+    await this.authRateLimitService.assertAllowed({
+      rule: AUTH_RATE_LIMIT_RULES.PASSWORD_RESET,
+      keyParts: ['account', normalizedEmail],
+    });
+  }
+
+  private async recordPasswordResetAttempt(input: {
+    readonly normalizedEmail: string;
+    readonly tenantId: string | null;
+    readonly userId: string | null;
+  }): Promise<void> {
+    await this.authRateLimitService.recordAttempt({
+      rule: AUTH_RATE_LIMIT_RULES.PASSWORD_RESET,
+      keyParts: ['account', input.normalizedEmail],
+      tenantId: input.tenantId,
+      userId: input.userId,
+      ipAddress: null,
+    });
+  }
+
+  private async createPasswordResetTokenForUser(input: {
+    readonly userId: string;
+    readonly now: Date;
+  }): Promise<void> {
+    const resetToken = this.secureTokenService.generateOpaqueToken();
+
+    await this.passwordResetTokenStore.create({
+      id: randomUUID(),
+      userId: input.userId,
+      tokenHash: this.tokenHashingService.hashToken(resetToken),
+      expiresAt: this.buildPasswordResetTokenExpiresAt(input.now),
+    });
+  }
+
+  private buildPasswordResetTokenExpiresAt(now: Date): Date {
+    return new Date(
+      now.getTime() + AUTH_SECURITY.PASSWORD_RESET_TOKEN_EXPIRES_IN_MINUTES * 60 * 1000,
+    );
+  }
+
+  private async updatePasswordAndRevokeSessions(input: {
+    readonly userId: string;
+    readonly newPassword: string;
+    readonly changedAt: Date;
+  }): Promise<void> {
+    const passwordHash = await this.passwordHashingService.hashPassword(input.newPassword);
+
+    await this.authUserStore.updatePasswordHash({
+      userId: input.userId,
+      passwordHash,
+      passwordChangedAt: input.changedAt,
+    });
+
+    await this.authSessionService.revokeAllRefreshSessionsForUser({
+      userId: input.userId,
+      revokedAt: input.changedAt,
+    });
   }
 
   getSession(): AuthSessionResponseData {
@@ -377,6 +505,10 @@ export class AuthService {
 
   private invalidRefreshSession(): GarageOsApiException {
     return GarageOsApiException.unauthenticated('Refresh session is invalid or expired.');
+  }
+
+  private invalidPasswordResetToken(): GarageOsApiException {
+    return GarageOsApiException.unauthenticated('Password reset token is invalid or expired.');
   }
 
   private authUnavailable(): never {

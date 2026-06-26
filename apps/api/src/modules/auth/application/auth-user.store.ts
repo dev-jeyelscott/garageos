@@ -29,6 +29,12 @@ export interface FindLoginContextByEmailInput {
   readonly normalizedEmail: string;
 }
 
+export interface UpdateAuthUserPasswordHashInput {
+  readonly userId: string;
+  readonly passwordHash: string;
+  readonly passwordChangedAt: Date;
+}
+
 export abstract class AuthUserStore {
   abstract findActiveLoginContextByNormalizedEmail(
     input: FindLoginContextByEmailInput,
@@ -37,6 +43,8 @@ export abstract class AuthUserStore {
   abstract findActiveLoginContextByUserId(
     input: FindLoginContextByUserIdInput,
   ): Promise<AuthLoginContext | null>;
+
+  abstract updatePasswordHash(input: UpdateAuthUserPasswordHashInput): Promise<void>;
 }
 
 export function toAuthTenantStatus(value: string): AuthTenantStatus {
