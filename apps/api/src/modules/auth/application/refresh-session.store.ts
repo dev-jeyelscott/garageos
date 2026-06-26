@@ -1,29 +1,38 @@
 export interface RefreshSessionRecord {
-  id: string;
-  userId: string;
-  tenantId: string | null;
-  tokenFamilyId: string;
-  refreshTokenHash: string;
-  rememberMe: boolean;
-  expiresAt: Date;
-  revokedAt: Date | null;
-  replacedBySessionId: string | null;
-  createdAt: Date;
+  readonly id: string;
+  readonly userId: string;
+  readonly tenantId: string | null;
+  readonly tokenFamilyId: string;
+  readonly refreshTokenHash: string;
+  readonly rememberMe: boolean;
+  readonly expiresAt: Date;
+  readonly revokedAt: Date | null;
+  readonly replacedBySessionId: string | null;
+  readonly createdAt: Date;
 }
 
 export interface CreateRefreshSessionInput {
-  userId: string;
-  tenantId: string | null;
-  tokenFamilyId: string;
-  refreshTokenHash: string;
-  rememberMe: boolean;
-  expiresAt: Date;
+  readonly id: string;
+  readonly userId: string;
+  readonly tenantId: string | null;
+  readonly tokenFamilyId: string;
+  readonly refreshTokenHash: string;
+  readonly rememberMe: boolean;
+  readonly expiresAt: Date;
 }
 
 export interface ReplaceRefreshSessionInput {
-  currentSessionId: string;
-  replacementSessionId: string;
-  revokedAt: Date;
+  readonly currentSessionId: string;
+  readonly replacementSessionId: string;
+  readonly revokedAt: Date;
+}
+
+export interface RotateRefreshSessionInput {
+  readonly currentSessionId: string;
+  readonly currentRefreshTokenHash: string;
+  readonly replacementSessionId: string;
+  readonly replacementRefreshTokenHash: string;
+  readonly rotatedAt: Date;
 }
 
 export abstract class RefreshSessionStore {
@@ -33,6 +42,8 @@ export abstract class RefreshSessionStore {
     refreshTokenHash: string,
     now: Date,
   ): Promise<RefreshSessionRecord | null>;
+
+  abstract rotate(input: RotateRefreshSessionInput): Promise<RefreshSessionRecord | null>;
 
   abstract markReplaced(input: ReplaceRefreshSessionInput): Promise<void>;
 

@@ -20,9 +20,26 @@ import { AuthRateLimitService } from './auth-rate-limit.service';
 import { AuthLoginContext, AuthUserStore } from './auth-user.store';
 import { PasswordHashingService } from './password-hashing.service';
 import { AccessTokenService } from '../security/access-token.service';
+import { AUTH_SECURITY } from './auth-security.constants';
+import { AuthSessionService } from './auth-session.service';
+import { SecureTokenService } from './secure-token.service';
+import { TokenHashingService } from './token-hashing.service';
+import { AUTH_SESSION_POLICY } from './auth-session.policy';
 
 export interface AuthLoginRequestContext {
   readonly ipAddress?: string | null;
+}
+
+export interface AuthLoginResult extends AuthLoginResponseData {
+  readonly refreshToken: string;
+  readonly refreshSessionId: string;
+  readonly rememberMe: boolean;
+}
+
+export interface AuthRefreshResult extends AuthRefreshResponseData {
+  readonly refreshToken: string;
+  readonly refreshSessionId: string;
+  readonly rememberMe: boolean;
 }
 
 @Injectable()
@@ -36,6 +53,12 @@ export class AuthService {
     private readonly accessTokenService: AccessTokenService,
     @Inject(AuthRateLimitService)
     private readonly authRateLimitService: AuthRateLimitService,
+    @Inject(AuthSessionService)
+    private readonly authSessionService: AuthSessionService,
+    @Inject(SecureTokenService)
+    private readonly secureTokenService: SecureTokenService,
+    @Inject(TokenHashingService)
+    private readonly tokenHashingService: TokenHashingService,
   ) {}
 
   signupOwner(): never {
@@ -45,7 +68,7 @@ export class AuthService {
   async login(
     request: LoginRequest,
     context: AuthLoginRequestContext = {},
-  ): Promise<AuthLoginResponseData> {
+  ): Promise<AuthLoginResult> {
     const normalizedEmail = normalizeAuthRateLimitEmailKey(request.email);
     const ipAddress = context.ipAddress ?? null;
 
@@ -82,12 +105,16 @@ export class AuthService {
       throw this.invalidCredentials();
     }
 
-    const signedAccessToken = await this.accessTokenService.sign({
-      user_id: loginContext.user.id,
-      user_type: loginContext.user.userType,
-      tenant_id: loginContext.user.tenantId,
-      session_id: randomUUID(),
-      email_verified: loginContext.user.emailVerifiedAt !== null,
+    const rememberMe = request.remember_me === true;
+    const refreshSession = await this.createRefreshSessionForLogin({
+      loginContext,
+      rememberMe,
+      now: new Date(),
+    });
+
+    const signedAccessToken = await this.signAccessTokenForLoginContext({
+      loginContext,
+      sessionId: refreshSession.record.id,
     });
 
     return {
@@ -98,11 +125,71 @@ export class AuthService {
       permissions: loginContext.permissions,
       branches: loginContext.branches,
       tenant_wide_branch_access: loginContext.tenantWideBranchAccess,
+      refreshToken: refreshSession.refreshToken,
+      refreshSessionId: refreshSession.record.id,
+      rememberMe,
     };
   }
 
-  refresh(): AuthRefreshResponseData {
-    throw GarageOsApiException.serviceUnavailable('Authentication is not available yet.');
+  async refresh(refreshToken: string | null | undefined): Promise<AuthRefreshResult> {
+    const normalizedRefreshToken = refreshToken?.trim();
+
+    if (normalizedRefreshToken === undefined || normalizedRefreshToken.length === 0) {
+      throw this.invalidRefreshSession();
+    }
+
+    const now = new Date();
+    const currentRefreshTokenHash = this.tokenHashingService.hashToken(normalizedRefreshToken);
+
+    const currentSession = await this.authSessionService.findActiveRefreshSession({
+      refreshTokenHash: currentRefreshTokenHash,
+      now,
+    });
+
+    if (currentSession === null) {
+      throw this.invalidRefreshSession();
+    }
+
+    const loginContext = await this.authUserStore.findActiveLoginContextByUserId({
+      userId: currentSession.userId,
+    });
+
+    if (loginContext === null) {
+      await this.authSessionService.revokeCurrentRefreshSession({
+        sessionId: currentSession.id,
+        revokedAt: now,
+      });
+
+      throw this.invalidRefreshSession();
+    }
+
+    const replacementRefreshToken = this.secureTokenService.generateOpaqueToken();
+    const replacementSessionId = randomUUID();
+
+    const replacementSession = await this.authSessionService.rotateRefreshSession({
+      currentSessionId: currentSession.id,
+      currentRefreshTokenHash,
+      replacementSessionId,
+      replacementRefreshTokenHash: this.tokenHashingService.hashToken(replacementRefreshToken),
+      rotatedAt: now,
+    });
+
+    if (replacementSession === null) {
+      throw this.invalidRefreshSession();
+    }
+
+    const signedAccessToken = await this.signAccessTokenForLoginContext({
+      loginContext,
+      sessionId: replacementSession.id,
+    });
+
+    return {
+      access_token: signedAccessToken.access_token,
+      expires_in_seconds: signedAccessToken.expires_in_seconds,
+      refreshToken: replacementRefreshToken,
+      refreshSessionId: replacementSession.id,
+      rememberMe: replacementSession.rememberMe,
+    };
   }
 
   logout(): never {
@@ -195,6 +282,53 @@ export class AuthService {
     }
   }
 
+  private async createRefreshSessionForLogin(input: {
+    readonly loginContext: AuthLoginContext;
+    readonly rememberMe: boolean;
+    readonly now: Date;
+  }): Promise<{
+    readonly record: Awaited<ReturnType<AuthSessionService['createRefreshSession']>>;
+    readonly refreshToken: string;
+  }> {
+    const refreshToken = this.secureTokenService.generateOpaqueToken();
+
+    const record = await this.authSessionService.createRefreshSession({
+      id: randomUUID(),
+      userId: input.loginContext.user.id,
+      tenantId: input.loginContext.user.tenantId,
+      tokenFamilyId: randomUUID(),
+      refreshTokenHash: this.tokenHashingService.hashToken(refreshToken),
+      rememberMe: input.rememberMe,
+      expiresAt: this.buildRefreshSessionExpiresAt(input.rememberMe, input.now),
+    });
+
+    return {
+      record,
+      refreshToken,
+    };
+  }
+
+  private buildRefreshSessionExpiresAt(rememberMe: boolean, now: Date): Date {
+    const ttlSeconds = rememberMe
+      ? AUTH_SESSION_POLICY.rememberMeRefreshSessionMaxAgeSeconds
+      : AUTH_SECURITY.STANDARD_REFRESH_SESSION_EXPIRES_IN_DAYS * 24 * 60 * 60;
+
+    return new Date(now.getTime() + ttlSeconds * 1000);
+  }
+
+  private async signAccessTokenForLoginContext(input: {
+    readonly loginContext: AuthLoginContext;
+    readonly sessionId: string;
+  }): Promise<Awaited<ReturnType<AccessTokenService['sign']>>> {
+    return this.accessTokenService.sign({
+      user_id: input.loginContext.user.id,
+      user_type: input.loginContext.user.userType,
+      tenant_id: input.loginContext.user.tenantId,
+      session_id: input.sessionId,
+      email_verified: input.loginContext.user.emailVerifiedAt !== null,
+    });
+  }
+
   private toUserSummary(loginContext: AuthLoginContext): AuthUserSummary {
     return {
       id: loginContext.user.id,
@@ -208,6 +342,10 @@ export class AuthService {
 
   private invalidCredentials(): GarageOsApiException {
     return GarageOsApiException.unauthenticated('Invalid email or password.');
+  }
+
+  private invalidRefreshSession(): GarageOsApiException {
+    return GarageOsApiException.unauthenticated('Refresh session is invalid or expired.');
   }
 
   private authUnavailable(): never {

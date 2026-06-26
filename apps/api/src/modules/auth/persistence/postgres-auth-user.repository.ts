@@ -51,8 +51,51 @@ export class PostgresAuthUserRepository extends AuthUserStore {
   async findActiveLoginContextByNormalizedEmail(input: {
     readonly normalizedEmail: string;
   }): Promise<AuthLoginContext | null> {
-    const user = await this.findActiveUser(input.normalizedEmail);
+    const user = await this.findActiveUserByNormalizedEmail(input.normalizedEmail);
 
+    return this.buildLoginContext(user);
+  }
+
+  async findActiveLoginContextByUserId(input: {
+    readonly userId: string;
+  }): Promise<AuthLoginContext | null> {
+    const user = await this.findActiveUserById(input.userId);
+
+    return this.buildLoginContext(user);
+  }
+
+  private async findActiveUserByNormalizedEmail(
+    normalizedEmail: string,
+  ): Promise<UserLoginRow | null> {
+    const result = await this.database.query<UserLoginRow>(
+      `
+        select
+          u.id,
+          u.tenant_id,
+          u.user_type,
+          u.email,
+          u.password_hash,
+          u.email_verified_at,
+          u.status,
+          u.full_name,
+          t.business_name as tenant_business_name,
+          t.status as tenant_status,
+          t.timezone as tenant_timezone,
+          t.country as tenant_country,
+          t.currency as tenant_currency
+        from users u
+        left join tenants t on t.id = u.tenant_id
+        where u.normalized_email = $1
+          and u.status = 'active'
+        limit 1
+      `,
+      [normalizedEmail],
+    );
+
+    return result.rows[0] ?? null;
+  }
+
+  private async buildLoginContext(user: UserLoginRow | null): Promise<AuthLoginContext | null> {
     if (user === null) {
       return null;
     }
@@ -106,30 +149,30 @@ export class PostgresAuthUserRepository extends AuthUserStore {
     };
   }
 
-  private async findActiveUser(normalizedEmail: string): Promise<UserLoginRow | null> {
+  private async findActiveUserById(userId: string): Promise<UserLoginRow | null> {
     const result = await this.database.query<UserLoginRow>(
       `
-        select
-          u.id,
-          u.tenant_id,
-          u.user_type,
-          u.email,
-          u.password_hash,
-          u.email_verified_at,
-          u.status,
-          u.full_name,
-          t.business_name as tenant_business_name,
-          t.status as tenant_status,
-          t.timezone as tenant_timezone,
-          t.country as tenant_country,
-          t.currency as tenant_currency
-        from users u
-        left join tenants t on t.id = u.tenant_id
-        where u.normalized_email = $1
-          and u.status = 'active'
-        limit 1
-      `,
-      [normalizedEmail],
+      select
+        u.id,
+        u.tenant_id,
+        u.user_type,
+        u.email,
+        u.password_hash,
+        u.email_verified_at,
+        u.status,
+        u.full_name,
+        t.business_name as tenant_business_name,
+        t.status as tenant_status,
+        t.timezone as tenant_timezone,
+        t.country as tenant_country,
+        t.currency as tenant_currency
+      from users u
+      left join tenants t on t.id = u.tenant_id
+      where u.id = $1
+        and u.status = 'active'
+      limit 1
+    `,
+      [userId],
     );
 
     return result.rows[0] ?? null;

@@ -33,6 +33,10 @@ export abstract class AuthUserStore {
   abstract findActiveLoginContextByNormalizedEmail(
     input: FindLoginContextByEmailInput,
   ): Promise<AuthLoginContext | null>;
+
+  abstract findActiveLoginContextByUserId(
+    input: FindLoginContextByUserIdInput,
+  ): Promise<AuthLoginContext | null>;
 }
 
 export function toAuthTenantStatus(value: string): AuthTenantStatus {
@@ -68,4 +72,8 @@ export function toAuthUserStatus(value: string): AuthUserStatus {
     default:
       throw new Error(`Unsupported user status: ${value}`);
   }
+}
+
+export interface FindLoginContextByUserIdInput {
+  readonly userId: string;
 }

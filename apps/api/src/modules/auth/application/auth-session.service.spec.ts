@@ -5,6 +5,7 @@ import type {
   CreateRefreshSessionInput,
   RefreshSessionRecord,
   ReplaceRefreshSessionInput,
+  RotateRefreshSessionInput,
 } from './refresh-session.store';
 import { RefreshSessionStore } from './refresh-session.store';
 
@@ -23,8 +24,8 @@ class FakeRefreshSessionStore extends RefreshSessionStore {
   async create(input: CreateRefreshSessionInput): Promise<RefreshSessionRecord> {
     this.calls.push({ method: 'create', input });
 
-    return {
-      id: '11111111-1111-4111-8111-111111111111',
+    const session: RefreshSessionRecord = {
+      id: input.id,
       userId: input.userId,
       tenantId: input.tenantId,
       tokenFamilyId: input.tokenFamilyId,
@@ -35,6 +36,10 @@ class FakeRefreshSessionStore extends RefreshSessionStore {
       replacedBySessionId: null,
       createdAt: new Date('2026-06-26T00:00:00.000Z'),
     };
+
+    this.activeSession = session;
+
+    return session;
   }
 
   async findActiveByRefreshTokenHash(
@@ -46,7 +51,47 @@ class FakeRefreshSessionStore extends RefreshSessionStore {
       input: { refreshTokenHash, now },
     });
 
+    if (
+      this.activeSession === null ||
+      this.activeSession.refreshTokenHash !== refreshTokenHash ||
+      this.activeSession.revokedAt !== null ||
+      this.activeSession.expiresAt <= now
+    ) {
+      return null;
+    }
+
     return this.activeSession;
+  }
+
+  async rotate(input: RotateRefreshSessionInput): Promise<RefreshSessionRecord | null> {
+    this.calls.push({ method: 'rotate', input });
+
+    if (
+      this.activeSession === null ||
+      this.activeSession.id !== input.currentSessionId ||
+      this.activeSession.refreshTokenHash !== input.currentRefreshTokenHash ||
+      this.activeSession.revokedAt !== null ||
+      this.activeSession.expiresAt <= input.rotatedAt
+    ) {
+      return null;
+    }
+
+    const replacementSession: RefreshSessionRecord = {
+      id: input.replacementSessionId,
+      userId: this.activeSession.userId,
+      tenantId: this.activeSession.tenantId,
+      tokenFamilyId: this.activeSession.tokenFamilyId,
+      refreshTokenHash: input.replacementRefreshTokenHash,
+      rememberMe: this.activeSession.rememberMe,
+      expiresAt: this.activeSession.expiresAt,
+      revokedAt: null,
+      replacedBySessionId: null,
+      createdAt: input.rotatedAt,
+    };
+
+    this.activeSession = replacementSession;
+
+    return replacementSession;
   }
 
   async markReplaced(input: ReplaceRefreshSessionInput): Promise<void> {
@@ -58,6 +103,13 @@ class FakeRefreshSessionStore extends RefreshSessionStore {
       method: 'revokeCurrentDevice',
       input: { sessionId, revokedAt },
     });
+
+    if (this.activeSession?.id === sessionId) {
+      this.activeSession = {
+        ...this.activeSession,
+        revokedAt,
+      };
+    }
   }
 
   async revokeAllForUser(userId: string, revokedAt: Date): Promise<void> {
@@ -65,6 +117,13 @@ class FakeRefreshSessionStore extends RefreshSessionStore {
       method: 'revokeAllForUser',
       input: { userId, revokedAt },
     });
+
+    if (this.activeSession?.userId === userId) {
+      this.activeSession = {
+        ...this.activeSession,
+        revokedAt,
+      };
+    }
   }
 }
 
@@ -76,6 +135,7 @@ describe('AuthSessionService', () => {
     const expiresAt = new Date('2026-07-26T00:00:00.000Z');
 
     const session = await service.createRefreshSession({
+      id: '11111111-1111-4111-8111-111111111111',
       userId: '22222222-2222-4222-8222-222222222222',
       tenantId: '33333333-3333-4333-8333-333333333333',
       tokenFamilyId: '44444444-4444-4444-8444-444444444444',
@@ -88,6 +148,7 @@ describe('AuthSessionService', () => {
       {
         method: 'create',
         input: {
+          id: '11111111-1111-4111-8111-111111111111',
           userId: '22222222-2222-4222-8222-222222222222',
           tenantId: '33333333-3333-4333-8333-333333333333',
           tokenFamilyId: '44444444-4444-4444-8444-444444444444',
@@ -98,6 +159,7 @@ describe('AuthSessionService', () => {
       },
     ]);
 
+    expect(session.id).toBe('11111111-1111-4111-8111-111111111111');
     expect(session.refreshTokenHash).toBe('refresh-token-hash');
     expect(session.rememberMe).toBe(true);
   });
@@ -139,6 +201,60 @@ describe('AuthSessionService', () => {
         },
       },
     ]);
+  });
+
+  it('rotates refresh sessions through the configured store boundary', async () => {
+    const store = new FakeRefreshSessionStore();
+    const service = new AuthSessionService(store);
+
+    const rotatedAt = new Date('2026-06-26T00:00:00.000Z');
+
+    const activeSession: RefreshSessionRecord = {
+      id: '11111111-1111-4111-8111-111111111111',
+      userId: '22222222-2222-4222-8222-222222222222',
+      tenantId: '33333333-3333-4333-8333-333333333333',
+      tokenFamilyId: '44444444-4444-4444-8444-444444444444',
+      refreshTokenHash: 'current-refresh-token-hash',
+      rememberMe: true,
+      expiresAt: new Date('2026-07-26T00:00:00.000Z'),
+      revokedAt: null,
+      replacedBySessionId: null,
+      createdAt: new Date('2026-06-26T00:00:00.000Z'),
+    };
+
+    store.setActiveSession(activeSession);
+
+    const rotatedSession = await service.rotateRefreshSession({
+      currentSessionId: '11111111-1111-4111-8111-111111111111',
+      currentRefreshTokenHash: 'current-refresh-token-hash',
+      replacementSessionId: '55555555-5555-4555-8555-555555555555',
+      replacementRefreshTokenHash: 'replacement-refresh-token-hash',
+      rotatedAt,
+    });
+
+    expect(store.calls).toEqual([
+      {
+        method: 'rotate',
+        input: {
+          currentSessionId: '11111111-1111-4111-8111-111111111111',
+          currentRefreshTokenHash: 'current-refresh-token-hash',
+          replacementSessionId: '55555555-5555-4555-8555-555555555555',
+          replacementRefreshTokenHash: 'replacement-refresh-token-hash',
+          rotatedAt,
+        },
+      },
+    ]);
+
+    expect(rotatedSession).toEqual(
+      expect.objectContaining({
+        id: '55555555-5555-4555-8555-555555555555',
+        userId: '22222222-2222-4222-8222-222222222222',
+        tenantId: '33333333-3333-4333-8333-333333333333',
+        tokenFamilyId: '44444444-4444-4444-8444-444444444444',
+        refreshTokenHash: 'replacement-refresh-token-hash',
+        rememberMe: true,
+      }),
+    );
   });
 
   it('marks refresh sessions as replaced through the store boundary', async () => {

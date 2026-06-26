@@ -4,6 +4,7 @@ import type {
   CreateRefreshSessionInput,
   RefreshSessionRecord,
   ReplaceRefreshSessionInput,
+  RotateRefreshSessionInput,
 } from './refresh-session.store';
 import { RefreshSessionStore } from './refresh-session.store';
 
@@ -37,6 +38,12 @@ export class AuthSessionService {
     input: FindActiveRefreshSessionInput,
   ): Promise<RefreshSessionRecord | null> {
     return this.refreshSessionStore.findActiveByRefreshTokenHash(input.refreshTokenHash, input.now);
+  }
+
+  async rotateRefreshSession(
+    input: RotateRefreshSessionInput,
+  ): Promise<RefreshSessionRecord | null> {
+    return this.refreshSessionStore.rotate(input);
   }
 
   async markRefreshSessionReplaced(input: ReplaceRefreshSessionInput): Promise<void> {

@@ -48,4 +48,30 @@ export class AuthTokenTransportService {
       path: AUTH_SESSION_POLICY.refreshTokenCookiePath,
     };
   }
+
+  getRefreshTokenFromCookieHeader(cookieHeader: string | null | undefined): string | null {
+    if (cookieHeader === null || cookieHeader === undefined || cookieHeader.trim().length === 0) {
+      return null;
+    }
+
+    const cookieName = this.getRefreshTokenCookieName();
+    const cookies = cookieHeader.split(';');
+
+    for (const cookie of cookies) {
+      const separatorIndex = cookie.indexOf('=');
+
+      if (separatorIndex === -1) {
+        continue;
+      }
+
+      const name = cookie.slice(0, separatorIndex).trim();
+      const value = cookie.slice(separatorIndex + 1).trim();
+
+      if (name === cookieName && value.length > 0) {
+        return value;
+      }
+    }
+
+    return null;
+  }
 }

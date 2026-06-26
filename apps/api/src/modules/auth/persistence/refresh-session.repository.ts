@@ -4,6 +4,7 @@ import type {
   CreateRefreshSessionInput,
   RefreshSessionRecord,
   ReplaceRefreshSessionInput,
+  RotateRefreshSessionInput,
 } from '../application/refresh-session.store';
 import { RefreshSessionStore } from '../application/refresh-session.store';
 import {
@@ -38,28 +39,30 @@ export class PostgresRefreshSessionRepository extends RefreshSessionStore {
   async create(input: CreateRefreshSessionInput): Promise<RefreshSessionRecord> {
     const result = await this.database.query<RefreshSessionRow>(
       `
-        insert into refresh_sessions (
-          user_id,
-          tenant_id,
-          token_family_id,
-          refresh_token_hash,
-          remember_me,
-          expires_at
-        )
-        values ($1, $2, $3, $4, $5, $6)
-        returning
-          id,
-          user_id,
-          tenant_id,
-          token_family_id,
-          refresh_token_hash,
-          remember_me,
-          expires_at,
-          revoked_at,
-          replaced_by_session_id,
-          created_at
-      `,
+      insert into refresh_sessions (
+        id,
+        user_id,
+        tenant_id,
+        token_family_id,
+        refresh_token_hash,
+        remember_me,
+        expires_at
+      )
+      values ($1, $2, $3, $4, $5, $6, $7)
+      returning
+        id,
+        user_id,
+        tenant_id,
+        token_family_id,
+        refresh_token_hash,
+        remember_me,
+        expires_at,
+        revoked_at,
+        replaced_by_session_id,
+        created_at
+    `,
       [
+        input.id,
         input.userId,
         input.tenantId,
         input.tokenFamilyId,
@@ -96,6 +99,73 @@ export class PostgresRefreshSessionRepository extends RefreshSessionStore {
         limit 1
       `,
       [refreshTokenHash, now],
+    );
+
+    const row = result.rows[0];
+
+    if (row === undefined) {
+      return null;
+    }
+
+    return mapRefreshSessionRow(row);
+  }
+
+  async rotate(input: RotateRefreshSessionInput): Promise<RefreshSessionRecord | null> {
+    const result = await this.database.query<RefreshSessionRow>(
+      `
+      with current_session as (
+        update refresh_sessions
+        set
+          revoked_at = $5,
+          replaced_by_session_id = $2
+        where id = $1
+          and refresh_token_hash = $3
+          and revoked_at is null
+          and expires_at > $5::timestamptz
+        returning
+          user_id,
+          tenant_id,
+          token_family_id,
+          remember_me,
+          expires_at
+      )
+      insert into refresh_sessions (
+        id,
+        user_id,
+        tenant_id,
+        token_family_id,
+        refresh_token_hash,
+        remember_me,
+        expires_at
+      )
+      select
+        $2,
+        user_id,
+        tenant_id,
+        token_family_id,
+        $4,
+        remember_me,
+        expires_at
+      from current_session
+      returning
+        id,
+        user_id,
+        tenant_id,
+        token_family_id,
+        refresh_token_hash,
+        remember_me,
+        expires_at,
+        revoked_at,
+        replaced_by_session_id,
+        created_at
+    `,
+      [
+        input.currentSessionId,
+        input.replacementSessionId,
+        input.currentRefreshTokenHash,
+        input.replacementRefreshTokenHash,
+        input.rotatedAt,
+      ],
     );
 
     const row = result.rows[0];
