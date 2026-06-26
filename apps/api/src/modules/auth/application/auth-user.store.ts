@@ -7,6 +7,7 @@ import type {
   AuthUserStatus,
   AuthUserType,
 } from '../contracts';
+import type { SubscriptionStatusSource } from '../../../shared/tenant-context/tenant-context';
 
 export interface AuthLoginUserRecord {
   readonly id: string;
@@ -27,6 +28,7 @@ export interface AuthLoginContext {
   readonly tenantWideBranchAccess: boolean;
   readonly effectivePlan: AuthEffectivePlanSummary | null;
   readonly subscription: AuthSubscriptionSummary | null;
+  readonly subscriptionStatusSource?: SubscriptionStatusSource;
 }
 
 export interface FindLoginContextByEmailInput {

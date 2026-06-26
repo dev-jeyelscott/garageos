@@ -1,12 +1,22 @@
 import { Module } from '@nestjs/common';
 
-import {
-  AUTHORIZATION_POLICY_EXPORTS,
-  AUTHORIZATION_POLICY_PROVIDERS,
-} from './authorization.providers';
+import { TenantContextRouteGuard } from '../tenant-context/tenant-context-route.guard';
+import { TenantStatusAccessRouteGuard } from '../tenant-context/tenant-status-access-route.guard';
+import { BranchAccessRouteGuard } from './branch-access-route.guard';
+import { PermissionAccessRouteGuard } from './permission-access-route.guard';
 
 @Module({
-  providers: [...AUTHORIZATION_POLICY_PROVIDERS],
-  exports: [...AUTHORIZATION_POLICY_EXPORTS],
+  providers: [
+    TenantContextRouteGuard,
+    TenantStatusAccessRouteGuard,
+    PermissionAccessRouteGuard,
+    BranchAccessRouteGuard,
+  ],
+  exports: [
+    TenantContextRouteGuard,
+    TenantStatusAccessRouteGuard,
+    PermissionAccessRouteGuard,
+    BranchAccessRouteGuard,
+  ],
 })
 export class AuthorizationModule {}

@@ -30,6 +30,10 @@ import { AUTH_SESSION_POLICY } from './auth-session.policy';
 import type { RefreshSessionRecord } from './refresh-session.store';
 import { PasswordResetTokenStore } from './password-reset-token.store';
 import { EmailVerificationTokenStore } from './email-verification-token.store';
+import {
+  SUBSCRIPTION_STATUS_SOURCES,
+  type TenantContextAuthenticatedSession,
+} from '../../../shared/tenant-context/tenant-context';
 
 export interface AuthLoginRequestContext {
   readonly ipAddress?: string | null;
@@ -48,6 +52,16 @@ export interface AuthRefreshResult extends AuthRefreshResponseData {
 }
 
 export type AuthActionResult = Record<string, never>;
+
+export interface AuthenticatedRouteSessionResult {
+  readonly sessionResponse: AuthSessionResponseData;
+  readonly tenantContextSession: TenantContextAuthenticatedSession;
+}
+
+interface ResolvedAccessSession {
+  readonly loginContext: AuthLoginContext;
+  readonly accessTokenPayload: AuthAccessTokenPayload;
+}
 
 @Injectable()
 export class AuthService {
@@ -553,6 +567,25 @@ export class AuthService {
   async getSession(
     authorizationHeader: string | null | undefined,
   ): Promise<AuthSessionResponseData> {
+    const routeSession = await this.getAuthenticatedRouteSession(authorizationHeader);
+
+    return routeSession.sessionResponse;
+  }
+
+  async getAuthenticatedRouteSession(
+    authorizationHeader: string | null | undefined,
+  ): Promise<AuthenticatedRouteSessionResult> {
+    const resolved = await this.resolveLoginContextForAccessSession(authorizationHeader);
+
+    return {
+      sessionResponse: this.toSessionResponseData(resolved.loginContext),
+      tenantContextSession: this.toTenantContextAuthenticatedSession(resolved),
+    };
+  }
+
+  private async resolveLoginContextForAccessSession(
+    authorizationHeader: string | null | undefined,
+  ): Promise<ResolvedAccessSession> {
     const accessToken = this.getBearerAccessToken(authorizationHeader);
     const accessTokenPayload = await this.accessTokenService.verify(accessToken);
     const now = new Date();
@@ -579,14 +612,8 @@ export class AuthService {
     this.assertAccessTokenMatchesLoginContext(accessTokenPayload, loginContext);
 
     return {
-      user: this.toUserSummary(loginContext),
-      tenant: loginContext.tenant,
-      effective_permissions: loginContext.permissions,
-      branches: loginContext.branches,
-      tenant_wide_branch_access: loginContext.tenantWideBranchAccess,
-      effective_plan: loginContext.effectivePlan,
-      subscription: loginContext.subscription,
-      access: this.buildSessionAccess(loginContext),
+      loginContext,
+      accessTokenPayload,
     };
   }
 
@@ -711,6 +738,50 @@ export class AuthService {
       session_id: input.sessionId,
       email_verified: input.loginContext.user.emailVerifiedAt !== null,
     });
+  }
+
+  private toSessionResponseData(loginContext: AuthLoginContext): AuthSessionResponseData {
+    return {
+      user: this.toUserSummary(loginContext),
+      tenant: loginContext.tenant,
+      effective_permissions: loginContext.permissions,
+      branches: loginContext.branches,
+      tenant_wide_branch_access: loginContext.tenantWideBranchAccess,
+      effective_plan: loginContext.effectivePlan,
+      subscription: loginContext.subscription,
+      access: this.buildSessionAccess(loginContext),
+    };
+  }
+
+  private toTenantContextAuthenticatedSession(
+    resolved: ResolvedAccessSession,
+  ): TenantContextAuthenticatedSession {
+    const { loginContext, accessTokenPayload } = resolved;
+
+    return {
+      actor: {
+        user_id: loginContext.user.id,
+        user_type: loginContext.user.userType,
+        tenant_id: loginContext.user.tenantId,
+        session_id: accessTokenPayload.session_id,
+        email_verified: loginContext.user.emailVerifiedAt !== null,
+        support_access_session_id: null,
+      },
+      tenant:
+        loginContext.tenant === null
+          ? null
+          : {
+              id: loginContext.tenant.id,
+              status: loginContext.tenant.status,
+            },
+      effective_permissions: loginContext.permissions,
+      branches: loginContext.branches.map((branch) => ({
+        id: branch.id,
+      })),
+      tenant_wide_branch_access: loginContext.tenantWideBranchAccess,
+      subscription_status_source:
+        loginContext.subscriptionStatusSource ?? SUBSCRIPTION_STATUS_SOURCES.SYSTEM_COMPUTED,
+    };
   }
 
   private toUserSummary(loginContext: AuthLoginContext): AuthUserSummary {

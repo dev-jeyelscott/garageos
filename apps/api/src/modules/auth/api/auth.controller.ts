@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Inject, Ip, Post, Res } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Inject, Ip, Post, Res, UseGuards } from '@nestjs/common';
 
 import { ZodValidationPipe } from '../../../shared/api/zod-validation.pipe';
 import {
@@ -28,6 +28,8 @@ import {
   type ResetPasswordRequest,
   resetPasswordRequestSchema,
 } from './auth.schemas';
+import { CurrentAuthSessionResponse } from './current-auth-session-response.decorator';
+import { AccessTokenAuthGuard } from './access-token-auth.guard';
 
 interface RefreshCookieResponse {
   cookie(name: string, value: string, options: RefreshTokenCookieOptions): void;
@@ -165,10 +167,11 @@ export class AuthController {
   }
 
   @Get('session')
-  async getSession(
-    @Headers('authorization') authorizationHeader: string | undefined,
-  ): Promise<AuthSessionResponseData> {
-    return this.authService.getSession(authorizationHeader ?? null);
+  @UseGuards(AccessTokenAuthGuard)
+  getSession(
+    @CurrentAuthSessionResponse() session: AuthSessionResponseData,
+  ): AuthSessionResponseData {
+    return session;
   }
 
   private setRefreshTokenCookie(

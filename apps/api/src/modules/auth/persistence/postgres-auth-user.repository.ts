@@ -21,6 +21,10 @@ import {
   UpdateAuthUserPasswordHashInput,
 } from '../application/auth-user.store';
 import { AUTH_DATABASE_CLIENT, type DatabaseQueryClient } from './database-client';
+import {
+  SUBSCRIPTION_STATUS_SOURCES,
+  type SubscriptionStatusSource,
+} from '../../../shared/tenant-context/tenant-context';
 
 interface UserLoginRow {
   readonly id: string;
@@ -56,6 +60,7 @@ interface SubscriptionRow {
   readonly plan_code: string;
   readonly plan_name: string;
   readonly expiration_date: Date | string;
+  readonly status_source: string;
 }
 
 interface PlanLimitRow {
@@ -68,6 +73,7 @@ interface PlanLimitRow {
 interface SessionSubscriptionContext {
   readonly effectivePlan: AuthEffectivePlanSummary;
   readonly subscription: AuthSubscriptionSummary;
+  readonly subscriptionStatusSource: SubscriptionStatusSource;
 }
 
 const NEAR_EXPIRATION_WARNING_DAYS = 7;
@@ -152,6 +158,7 @@ export class PostgresAuthUserRepository extends AuthUserStore {
         tenantWideBranchAccess: false,
         effectivePlan: null,
         subscription: null,
+        subscriptionStatusSource: SUBSCRIPTION_STATUS_SOURCES.SYSTEM_COMPUTED,
       };
     }
 
@@ -192,6 +199,9 @@ export class PostgresAuthUserRepository extends AuthUserStore {
       tenantWideBranchAccess,
       effectivePlan: sessionSubscription?.effectivePlan ?? null,
       subscription: sessionSubscription?.subscription ?? null,
+      subscriptionStatusSource:
+        sessionSubscription?.subscriptionStatusSource ??
+        SUBSCRIPTION_STATUS_SOURCES.SYSTEM_COMPUTED,
     };
   }
 
@@ -361,7 +371,8 @@ export class PostgresAuthUserRepository extends AuthUserStore {
         sp.id as plan_id,
         sp.code as plan_code,
         sp.name as plan_name,
-        ts.expiration_date
+        ts.expiration_date,
+        ts.status_source
       from tenant_subscriptions ts
       inner join subscription_plans sp on sp.id = ts.plan_id
       where ts.tenant_id = $1
@@ -413,6 +424,7 @@ export class PostgresAuthUserRepository extends AuthUserStore {
           daysUntilExpiration,
         }),
       },
+      subscriptionStatusSource: toSubscriptionStatusSource(subscriptionRow.status_source),
     };
   }
 }
@@ -570,6 +582,16 @@ function getDateTimePart(
   }
 
   return part.value;
+}
+
+function toSubscriptionStatusSource(value: string): SubscriptionStatusSource {
+  switch (value) {
+    case 'system_computed':
+    case 'platform_override':
+      return value;
+    default:
+      throw new Error(`Unsupported subscription status source: ${value}`);
+  }
 }
 
 function dateOnlyToUtcMilliseconds(dateOnly: string): number {

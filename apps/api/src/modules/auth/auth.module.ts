@@ -23,9 +23,11 @@ import {
   AUTH_EMAIL_VERIFICATION_EXPORTS,
   AUTH_EMAIL_VERIFICATION_PROVIDERS,
 } from './auth-email-verification.providers';
+import { AuthorizationModule } from '../../shared/authorization/authorization.module';
+import { AccessTokenAuthGuard } from './api/access-token-auth.guard';
 
 @Module({
-  imports: [DatabaseModule],
+  imports: [DatabaseModule, AuthorizationModule],
   controllers: [AuthController],
   providers: [
     AuthService,
@@ -33,6 +35,7 @@ import {
     SecureTokenService,
     TokenHashingService,
     AuthTokenTransportService,
+    AccessTokenAuthGuard,
     {
       provide: ACCESS_TOKEN_SIGNING_OPTIONS,
       useValue: {
@@ -55,6 +58,7 @@ import {
     TokenHashingService,
     AuthTokenTransportService,
     AccessTokenService,
+    AccessTokenAuthGuard,
     ...AUTH_RATE_LIMIT_EXPORTS,
     ...AUTH_SESSION_EXPORTS,
     ...AUTH_PASSWORD_RESET_EXPORTS,
