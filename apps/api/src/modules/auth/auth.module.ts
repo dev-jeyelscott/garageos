@@ -1,11 +1,14 @@
 import { Module } from '@nestjs/common';
 
+import { DatabaseModule } from '../../shared/database/database.module';
 import { AuthController } from './api/auth.controller';
+import { AUTH_RATE_LIMIT_EXPORTS, AUTH_RATE_LIMIT_PROVIDERS } from './auth-rate-limit.providers';
+import { AuthRateLimitService } from './application/auth-rate-limit.service';
 import { AuthService } from './application/auth.service';
+import { AuthTokenTransportService } from './application/auth-token-transport.service';
 import { PasswordHashingService } from './application/password-hashing.service';
 import { SecureTokenService } from './application/secure-token.service';
 import { TokenHashingService } from './application/token-hashing.service';
-import { AuthTokenTransportService } from './application/auth-token-transport.service';
 import {
   ACCESS_TOKEN_SIGNING_OPTIONS,
   AccessTokenService,
@@ -13,6 +16,7 @@ import {
 } from './security/access-token.service';
 
 @Module({
+  imports: [DatabaseModule],
   controllers: [AuthController],
   providers: [
     AuthService,
@@ -29,6 +33,7 @@ import {
       } satisfies AccessTokenSigningOptions,
     },
     AccessTokenService,
+    ...AUTH_RATE_LIMIT_PROVIDERS,
   ],
   exports: [
     AuthService,
@@ -36,6 +41,8 @@ import {
     SecureTokenService,
     TokenHashingService,
     AuthTokenTransportService,
+    AccessTokenService,
+    ...AUTH_RATE_LIMIT_EXPORTS,
   ],
 })
 export class AuthModule {}

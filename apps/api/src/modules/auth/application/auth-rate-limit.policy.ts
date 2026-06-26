@@ -28,7 +28,7 @@ export const AUTH_RATE_LIMIT_RULES = {
   },
   EMAIL_VERIFICATION_RESEND: {
     bucket: AUTH_RATE_LIMIT_BUCKETS.EMAIL_VERIFICATION_RESEND,
-    maxAttempts: 3,
+    maxAttempts: 5,
     windowSeconds: 60 * 60,
   },
 } as const satisfies Record<string, AuthRateLimitRule>;
