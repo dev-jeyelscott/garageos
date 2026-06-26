@@ -6,7 +6,7 @@ import type {
   AuthSessionResponseData,
 } from './auth-session';
 
-const ACCESS_TOKEN_STORAGE_KEY = 'garageos.access_token';
+let accessTokenCache: string | null = null;
 
 export interface LoginInput {
   readonly email: string;
@@ -69,7 +69,9 @@ export async function getCurrentSession(): Promise<AuthSessionResponseData> {
 }
 
 export async function resendEmailVerification(): Promise<AuthActionResult> {
-  return postJson<AuthActionResult>('/auth/email-verification/resend');
+  return postJson<AuthActionResult>('/auth/email-verification/resend', undefined, {
+    requiresAuth: true,
+  });
 }
 
 export async function confirmEmailVerification(
@@ -87,14 +89,18 @@ export async function resetPassword(input: ResetPasswordInput): Promise<AuthActi
 }
 
 export async function changePassword(input: ChangePasswordInput): Promise<AuthActionResult> {
-  const result = await postJson<AuthActionResult>('/auth/password/change', input);
+  const result = await postJson<AuthActionResult>('/auth/password/change', input, {
+    requiresAuth: true,
+  });
   clearStoredAccessToken();
   return result;
 }
 
 export async function logout(): Promise<AuthActionResult> {
   try {
-    return await postJson<AuthActionResult>('/auth/logout');
+    return await postJson<AuthActionResult>('/auth/logout', undefined, {
+      requiresAuth: true,
+    });
   } finally {
     clearStoredAccessToken();
   }
@@ -102,34 +108,24 @@ export async function logout(): Promise<AuthActionResult> {
 
 export async function logoutAll(): Promise<AuthActionResult> {
   try {
-    return await postJson<AuthActionResult>('/auth/logout-all');
+    return await postJson<AuthActionResult>('/auth/logout-all', undefined, {
+      requiresAuth: true,
+    });
   } finally {
     clearStoredAccessToken();
   }
 }
 
 export function clearStoredAccessToken(): void {
-  if (typeof window === 'undefined') {
-    return;
-  }
-
-  window.sessionStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
+  accessTokenCache = null;
 }
 
 function storeAccessToken(accessToken: string): void {
-  if (typeof window === 'undefined') {
-    return;
-  }
-
-  window.sessionStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, accessToken);
+  accessTokenCache = accessToken;
 }
 
 function getStoredAccessToken(): string | null {
-  if (typeof window === 'undefined') {
-    return null;
-  }
-
-  return window.sessionStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
+  return accessTokenCache;
 }
 
 async function getAccessTokenOrRefresh(): Promise<string> {
@@ -182,6 +178,7 @@ async function postJson<TData>(
   body?: unknown,
   options: {
     readonly idempotencyKey?: string;
+    readonly requiresAuth?: boolean;
   } = {},
 ): Promise<TData> {
   const headers: Record<string, string> = {
@@ -193,6 +190,10 @@ async function postJson<TData>(
     headers,
     credentials: 'include',
   };
+
+  if (options.requiresAuth === true) {
+    headers.Authorization = `Bearer ${await getAccessTokenOrRefresh()}`;
+  }
 
   if (body !== undefined) {
     headers['Content-Type'] = 'application/json';
