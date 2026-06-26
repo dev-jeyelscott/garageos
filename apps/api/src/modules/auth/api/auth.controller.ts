@@ -1,5 +1,12 @@
 import { Body, Controller, Get, Headers, Inject, Ip, Post, Res, UseGuards } from '@nestjs/common';
+import { createHash } from 'node:crypto';
 
+import { GarageOsApiException } from '../../../shared/api/api-exception';
+import {
+  AUDIT_ACTOR_TYPES,
+  AuditService,
+  type AuditActorType,
+} from '../../../shared/audit/audit.service';
 import { ZodValidationPipe } from '../../../shared/api/zod-validation.pipe';
 import {
   type AuthActionResult,
@@ -15,6 +22,7 @@ import type {
   AuthLoginResponseData,
   AuthRefreshResponseData,
   AuthSessionResponseData,
+  AuthUserType,
 } from '../contracts';
 import {
   type ChangePasswordRequest,
@@ -44,6 +52,8 @@ export class AuthController {
     @Inject(AuthService) authService: AuthService,
     @Inject(AuthTokenTransportService)
     private readonly authTokenTransportService: AuthTokenTransportService,
+    @Inject(AuditService)
+    private readonly auditService: AuditService,
   ) {
     this.authService = authService;
   }
@@ -57,15 +67,33 @@ export class AuthController {
   async login(
     @Body(new ZodValidationPipe(loginRequestSchema)) request: LoginRequest,
     @Ip() ipAddress: string | undefined,
+    @Headers('user-agent') userAgent: string | undefined,
     @Res({ passthrough: true }) response: RefreshCookieResponse,
   ): Promise<AuthLoginResponseData> {
-    const result = await this.authService.login(request, {
-      ipAddress: ipAddress ?? null,
-    });
+    try {
+      const result = await this.authService.login(request, {
+        ipAddress: ipAddress ?? null,
+      });
 
-    this.setRefreshTokenCookie(response, result.refreshToken, result.rememberMe);
+      await this.auditLoginSucceeded({
+        result,
+        ipAddress: ipAddress ?? null,
+        userAgent: userAgent ?? null,
+      });
 
-    return this.toLoginResponseData(result);
+      this.setRefreshTokenCookie(response, result.refreshToken, result.rememberMe);
+
+      return this.toLoginResponseData(result);
+    } catch (error) {
+      await this.auditLoginFailed({
+        loginIdentifier: request.email,
+        error,
+        ipAddress: ipAddress ?? null,
+        userAgent: userAgent ?? null,
+      });
+
+      throw error;
+    }
   }
 
   @Post('refresh')
@@ -174,6 +202,70 @@ export class AuthController {
     return session;
   }
 
+  private async auditLoginSucceeded(input: {
+    readonly result: AuthLoginResult;
+    readonly ipAddress: string | null;
+    readonly userAgent: string | null;
+  }): Promise<void> {
+    await this.auditService.record({
+      tenantId: input.result.tenant?.id ?? null,
+      actorUserId: input.result.user.id,
+      actorType: this.toAuditActorType(input.result.user.user_type),
+      action: 'auth.login.succeeded',
+      entityType: 'user',
+      entityId: input.result.user.id,
+      metadataJson: {
+        remember_me: input.result.rememberMe,
+      },
+      ipAddress: input.ipAddress,
+      userAgent: input.userAgent,
+    });
+  }
+
+  private async auditLoginFailed(input: {
+    readonly loginIdentifier: string;
+    readonly error: unknown;
+    readonly ipAddress: string | null;
+    readonly userAgent: string | null;
+  }): Promise<void> {
+    const errorCode = this.getErrorCode(input.error);
+
+    await this.auditService.record({
+      actorType: AUDIT_ACTOR_TYPES.SYSTEM,
+      action: errorCode === 'rate_limited' ? 'auth.login.locked' : 'auth.login.failed',
+      entityType: 'auth_login_attempt',
+      metadataJson: {
+        login_identifier_hash: hashAuditIdentifier(input.loginIdentifier),
+        error_code: errorCode,
+      },
+      reason: errorCode === 'rate_limited' ? 'login_rate_limit_exceeded' : 'invalid_credentials',
+      ipAddress: input.ipAddress,
+      userAgent: input.userAgent,
+    });
+  }
+
+  private getErrorCode(error: unknown): string {
+    if (error instanceof GarageOsApiException) {
+      return error.code;
+    }
+
+    if (typeof error === 'object' && error !== null && 'code' in error) {
+      const code = (error as { readonly code?: unknown }).code;
+
+      if (typeof code === 'string' && code.length > 0) {
+        return code;
+      }
+    }
+
+    return 'unexpected_error';
+  }
+
+  private toAuditActorType(userType: AuthUserType): AuditActorType {
+    return userType === 'platform_admin'
+      ? AUDIT_ACTOR_TYPES.PLATFORM_ADMIN
+      : AUDIT_ACTOR_TYPES.TENANT_USER;
+  }
+
   private setRefreshTokenCookie(
     response: RefreshCookieResponse,
     refreshToken: string,
@@ -216,4 +308,8 @@ export class AuthController {
       expires_in_seconds: result.expires_in_seconds,
     };
   }
+}
+
+function hashAuditIdentifier(value: string): string {
+  return createHash('sha256').update(value.trim().toLowerCase(), 'utf8').digest('hex');
 }

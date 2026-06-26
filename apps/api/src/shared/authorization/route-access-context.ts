@@ -13,6 +13,7 @@ export interface GarageOsRouteAccessRequest {
   readonly params?: StringValueMap;
   readonly query?: Record<string, HeaderValue>;
   readonly body?: unknown;
+  readonly ip?: string;
   garageOsAuthenticatedSession?: TenantContextAuthenticatedSession;
   garageOsTenantContext?: ResolvedTenantContext;
 }
@@ -21,6 +22,30 @@ export function getAuthorizationHeaderFromRequest(
   request: GarageOsRouteAccessRequest,
 ): string | null {
   return normalizeHeaderValue(request.headers?.authorization ?? request.headers?.Authorization);
+}
+
+export function getRequestIpAddressFromRequest(request: GarageOsRouteAccessRequest): string | null {
+  const directIpAddress = normalizeTextValue(request.ip);
+
+  if (directIpAddress !== null) {
+    return directIpAddress;
+  }
+
+  const forwardedFor = normalizeHeaderValue(
+    request.headers?.['x-forwarded-for'] ?? request.headers?.['X-Forwarded-For'],
+  );
+
+  if (forwardedFor === null) {
+    return null;
+  }
+
+  const firstForwardedAddress = forwardedFor.split(',')[0]?.trim();
+
+  return firstForwardedAddress && firstForwardedAddress.length > 0 ? firstForwardedAddress : null;
+}
+
+export function getUserAgentFromRequest(request: GarageOsRouteAccessRequest): string | null {
+  return normalizeHeaderValue(request.headers?.['user-agent'] ?? request.headers?.['User-Agent']);
 }
 
 export function setAuthenticatedSessionOnRequest(

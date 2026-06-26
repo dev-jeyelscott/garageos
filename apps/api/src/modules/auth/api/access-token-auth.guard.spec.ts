@@ -1,14 +1,15 @@
 import type { ExecutionContext } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
 
+import type { AuditService } from '../../../shared/audit/audit.service';
 import type { TenantContextAuthenticatedSession } from '../../../shared/tenant-context/tenant-context';
 import {
   SUBSCRIPTION_STATUS_SOURCES,
   TENANT_CONTEXT_USER_TYPES,
   TENANT_STATUSES,
 } from '../../../shared/tenant-context/tenant-context';
-import type { AuthSessionResponseData } from '../contracts';
 import type { AuthService } from '../application/auth.service';
+import type { AuthSessionResponseData } from '../contracts';
 import { AccessTokenAuthGuard, type GarageOsAuthenticatedRequest } from './access-token-auth.guard';
 
 describe('AccessTokenAuthGuard', () => {
@@ -25,12 +26,14 @@ describe('AccessTokenAuthGuard', () => {
         tenantContextSession: createTenantContextSession(),
       })),
     } as unknown as AuthService;
+    const auditService = createAuditService();
 
-    const guard = new AccessTokenAuthGuard(authService);
+    const guard = new AccessTokenAuthGuard(authService, auditService);
 
     await expect(guard.canActivate(createExecutionContext(request))).resolves.toBe(true);
 
     expect(authService.getAuthenticatedRouteSession).toHaveBeenCalledWith('Bearer access-token');
+    expect(auditService.record).not.toHaveBeenCalled();
     expect(request.garageOsAuthSessionResponse?.user.id).toBe(
       '11111111-1111-4111-8111-111111111111',
     );
@@ -46,6 +49,12 @@ function createExecutionContext(request: GarageOsAuthenticatedRequest): Executio
       getRequest: () => request,
     }),
   } as unknown as ExecutionContext;
+}
+
+function createAuditService(): AuditService {
+  return {
+    record: vi.fn(),
+  } as unknown as AuditService;
 }
 
 function createSessionResponse(): AuthSessionResponseData {

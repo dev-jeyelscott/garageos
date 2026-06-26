@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { API_ERROR_CODES } from '../api/api-error-code';
 import { GarageOsApiException } from '../api/api-exception';
+import type { AuditService } from '../audit/audit.service';
 import {
   SUBSCRIPTION_STATUS_SOURCES,
   TENANT_CONTEXT_USER_TYPES,
@@ -29,6 +30,12 @@ const SESSION_ID = '33333333-3333-4333-8333-333333333333';
 const BRANCH_ID = '44444444-4444-4444-8444-444444444444';
 const OTHER_BRANCH_ID = '55555555-5555-4555-8555-555555555555';
 
+type RecordedAuditInput = Parameters<AuditService['record']>[0];
+
+type FakeAuditService = AuditService & {
+  readonly records: RecordedAuditInput[];
+};
+
 describe('route access guards', () => {
   it('resolves and attaches tenant context from an authenticated session request', () => {
     const request: GarageOsRouteAccessRequest = {
@@ -50,12 +57,13 @@ describe('route access guards', () => {
     );
   });
 
-  it('blocks route access when tenant status does not allow the required operation type', () => {
+  it('blocks route access when tenant status does not allow the required operation type', async () => {
     const request: GarageOsRouteAccessRequest = {
       garageOsTenantContext: createResolvedTenantContext({
         tenantStatus: TENANT_STATUSES.READ_ONLY,
       }),
     };
+    const auditService = createAuditService();
 
     const guard = new TenantStatusAccessRouteGuard(
       createReflector({
@@ -63,19 +71,32 @@ describe('route access guards', () => {
           operationType: TENANT_ACCESS_OPERATION_TYPES.OPERATIONAL_WRITE,
         } satisfies Omit<TenantStatusAccessInput, 'context'>,
       }),
+      auditService,
     );
 
-    expectApiError(() => guard.canActivate(createExecutionContext(request)), {
+    await expectApiError(() => guard.canActivate(createExecutionContext(request)), {
       code: API_ERROR_CODES.SUBSCRIPTION_ACCESS_BLOCKED,
     });
+
+    expect(auditService.records).toEqual([
+      expect.objectContaining({
+        tenantId: TENANT_ID,
+        actorUserId: USER_ID,
+        action: 'access.tenant_status_denied',
+        entityType: 'tenant',
+        entityId: TENANT_ID,
+        reason: 'read_only_blocks_operational_writes',
+      }),
+    ]);
   });
 
-  it('allows route access when all required permissions are present', () => {
+  it('allows route access when all required permissions are present', async () => {
     const request: GarageOsRouteAccessRequest = {
       garageOsTenantContext: createResolvedTenantContext({
         effectivePermissions: ['customers.read', 'customers.update'],
       }),
     };
+    const auditService = createAuditService();
 
     const guard = new PermissionAccessRouteGuard(
       createReflector({
@@ -84,17 +105,20 @@ describe('route access guards', () => {
           mode: PERMISSION_REQUIREMENT_MODES.ALL,
         },
       }),
+      auditService,
     );
 
-    expect(guard.canActivate(createExecutionContext(request))).toBe(true);
+    await expect(guard.canActivate(createExecutionContext(request))).resolves.toBe(true);
+    expect(auditService.records).toEqual([]);
   });
 
-  it('blocks route access when a required permission is missing', () => {
+  it('blocks route access when a required permission is missing', async () => {
     const request: GarageOsRouteAccessRequest = {
       garageOsTenantContext: createResolvedTenantContext({
         effectivePermissions: ['customers.read'],
       }),
     };
+    const auditService = createAuditService();
 
     const guard = new PermissionAccessRouteGuard(
       createReflector({
@@ -102,14 +126,25 @@ describe('route access guards', () => {
           permissions: ['customers.update'],
         },
       }),
+      auditService,
     );
 
-    expectApiError(() => guard.canActivate(createExecutionContext(request)), {
+    await expectApiError(() => guard.canActivate(createExecutionContext(request)), {
       code: API_ERROR_CODES.FORBIDDEN,
     });
+
+    expect(auditService.records).toEqual([
+      expect.objectContaining({
+        tenantId: TENANT_ID,
+        actorUserId: USER_ID,
+        action: 'access.permission_denied',
+        entityType: 'permission',
+        reason: 'required_permission_access_is_missing',
+      }),
+    ]);
   });
 
-  it('allows route access for an assigned branch id from params', () => {
+  it('allows route access for an assigned branch id from params', async () => {
     const request: GarageOsRouteAccessRequest = {
       params: {
         branch_id: BRANCH_ID,
@@ -119,6 +154,7 @@ describe('route access guards', () => {
         tenantWideBranchAccess: false,
       }),
     };
+    const auditService = createAuditService();
 
     const guard = new BranchAccessRouteGuard(
       createReflector({
@@ -127,12 +163,14 @@ describe('route access guards', () => {
           key: 'branch_id',
         },
       }),
+      auditService,
     );
 
-    expect(guard.canActivate(createExecutionContext(request))).toBe(true);
+    await expect(guard.canActivate(createExecutionContext(request))).resolves.toBe(true);
+    expect(auditService.records).toEqual([]);
   });
 
-  it('blocks route access for an unassigned branch id from params', () => {
+  it('blocks route access for an unassigned branch id from params', async () => {
     const request: GarageOsRouteAccessRequest = {
       params: {
         branch_id: OTHER_BRANCH_ID,
@@ -142,6 +180,7 @@ describe('route access guards', () => {
         tenantWideBranchAccess: false,
       }),
     };
+    const auditService = createAuditService();
 
     const guard = new BranchAccessRouteGuard(
       createReflector({
@@ -150,11 +189,23 @@ describe('route access guards', () => {
           key: 'branch_id',
         },
       }),
+      auditService,
     );
 
-    expectApiError(() => guard.canActivate(createExecutionContext(request)), {
+    await expectApiError(() => guard.canActivate(createExecutionContext(request)), {
       code: API_ERROR_CODES.BRANCH_ACCESS_DENIED,
     });
+
+    expect(auditService.records).toEqual([
+      expect.objectContaining({
+        tenantId: TENANT_ID,
+        actorUserId: USER_ID,
+        action: 'access.branch_denied',
+        entityType: 'branch',
+        branchId: OTHER_BRANCH_ID,
+        reason: 'assigned_branch_access_is_missing',
+      }),
+    ]);
   });
 });
 
@@ -172,6 +223,37 @@ function createReflector(metadata: Record<string, unknown>): Reflector {
   return {
     getAllAndOverride: vi.fn((key: string) => metadata[key]),
   } as unknown as Reflector;
+}
+
+function createAuditService(): FakeAuditService {
+  const records: RecordedAuditInput[] = [];
+
+  return {
+    records,
+    record: vi.fn(async (input: RecordedAuditInput) => {
+      records.push(input);
+
+      return {
+        id: '99999999-9999-4999-8999-999999999999',
+        tenantId: input.tenantId ?? null,
+        actorUserId: input.actorUserId ?? null,
+        actorType: input.actorType,
+        supportAccessSessionId: input.supportAccessSessionId ?? null,
+        action: input.action,
+        entityType: input.entityType,
+        entityId: input.entityId ?? null,
+        branchId: input.branchId ?? null,
+        beforeJson: input.beforeJson ?? null,
+        afterJson: input.afterJson ?? null,
+        metadataJson: input.metadataJson ?? null,
+        reason: input.reason ?? null,
+        ipAddress: input.ipAddress ?? null,
+        userAgent: input.userAgent ?? null,
+        retentionClass: input.retentionClass ?? 'standard_3_year',
+        createdAt: input.createdAt ?? new Date('2026-06-26T00:00:00.000Z'),
+      };
+    }),
+  } as unknown as FakeAuditService;
 }
 
 function createAuthenticatedSession(): TenantContextAuthenticatedSession {
@@ -217,9 +299,12 @@ function createResolvedTenantContext(
   };
 }
 
-function expectApiError(action: () => unknown, expected: { readonly code: string }): void {
+async function expectApiError(
+  action: () => unknown | Promise<unknown>,
+  expected: { readonly code: string },
+): Promise<void> {
   try {
-    action();
+    await action();
   } catch (error) {
     expect(error).toBeInstanceOf(GarageOsApiException);
     expect((error as GarageOsApiException).code).toBe(expected.code);

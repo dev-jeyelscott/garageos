@@ -1,33 +1,34 @@
 import { Module } from '@nestjs/common';
 
+import { AuditModule } from '../../shared/audit/audit.module';
+import { AuthorizationModule } from '../../shared/authorization/authorization.module';
 import { DatabaseModule } from '../../shared/database/database.module';
 import { AuthController } from './api/auth.controller';
-import { AUTH_RATE_LIMIT_EXPORTS, AUTH_RATE_LIMIT_PROVIDERS } from './auth-rate-limit.providers';
-import { AUTH_USER_PROVIDERS } from './auth-user.providers';
+import { AccessTokenAuthGuard } from './api/access-token-auth.guard';
+import {
+  AUTH_EMAIL_VERIFICATION_EXPORTS,
+  AUTH_EMAIL_VERIFICATION_PROVIDERS,
+} from './auth-email-verification.providers';
 import {
   AUTH_PASSWORD_RESET_EXPORTS,
   AUTH_PASSWORD_RESET_PROVIDERS,
 } from './auth-password-reset.providers';
+import { AUTH_RATE_LIMIT_EXPORTS, AUTH_RATE_LIMIT_PROVIDERS } from './auth-rate-limit.providers';
+import { AUTH_SESSION_EXPORTS, AUTH_SESSION_PROVIDERS } from './auth-session.providers';
+import { AUTH_USER_PROVIDERS } from './auth-user.providers';
 import { AuthService } from './application/auth.service';
 import { AuthTokenTransportService } from './application/auth-token-transport.service';
 import { PasswordHashingService } from './application/password-hashing.service';
 import { SecureTokenService } from './application/secure-token.service';
 import { TokenHashingService } from './application/token-hashing.service';
-import { AUTH_SESSION_EXPORTS, AUTH_SESSION_PROVIDERS } from './auth-session.providers';
 import {
   ACCESS_TOKEN_SIGNING_OPTIONS,
   AccessTokenService,
-  AccessTokenSigningOptions,
+  type AccessTokenSigningOptions,
 } from './security/access-token.service';
-import {
-  AUTH_EMAIL_VERIFICATION_EXPORTS,
-  AUTH_EMAIL_VERIFICATION_PROVIDERS,
-} from './auth-email-verification.providers';
-import { AuthorizationModule } from '../../shared/authorization/authorization.module';
-import { AccessTokenAuthGuard } from './api/access-token-auth.guard';
 
 @Module({
-  imports: [DatabaseModule, AuthorizationModule],
+  imports: [DatabaseModule, AuthorizationModule, AuditModule],
   controllers: [AuthController],
   providers: [
     AuthService,
