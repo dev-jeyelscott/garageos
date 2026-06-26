@@ -12,6 +12,7 @@ import { ErrorEnvelopeFilter } from './shared/api/error-envelope.filter';
 import { ResponseEnvelopeInterceptor } from './shared/api/response-envelope.interceptor';
 import { RequestContextMiddleware } from './shared/observability/request-context.middleware';
 import { AuthModule } from './modules/auth/auth.module';
+import { IdempotencyModule } from './shared/idempotency/idempotency.module';
 
 @Controller()
 class HealthController {
@@ -25,7 +26,7 @@ class HealthController {
 }
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, IdempotencyModule],
   controllers: [HealthController],
 })
 class AppModule implements NestModule {
