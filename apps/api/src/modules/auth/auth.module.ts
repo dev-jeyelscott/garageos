@@ -9,6 +9,7 @@ import { AuthTokenTransportService } from './application/auth-token-transport.se
 import { PasswordHashingService } from './application/password-hashing.service';
 import { SecureTokenService } from './application/secure-token.service';
 import { TokenHashingService } from './application/token-hashing.service';
+import { AUTH_SESSION_EXPORTS, AUTH_SESSION_PROVIDERS } from './auth-session.providers';
 import {
   ACCESS_TOKEN_SIGNING_OPTIONS,
   AccessTokenService,
@@ -34,6 +35,7 @@ import {
     },
     AccessTokenService,
     ...AUTH_RATE_LIMIT_PROVIDERS,
+    ...AUTH_SESSION_PROVIDERS,
   ],
   exports: [
     AuthService,
@@ -43,6 +45,7 @@ import {
     AuthTokenTransportService,
     AccessTokenService,
     ...AUTH_RATE_LIMIT_EXPORTS,
+    ...AUTH_SESSION_EXPORTS,
   ],
 })
 export class AuthModule {}
