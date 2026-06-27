@@ -141,6 +141,8 @@ export class PostgresAuthUserRepository extends AuthUserStore {
     }
 
     if (user.tenant_id === null) {
+      const permissions = await this.findPlatformPermissions();
+
       return {
         user: {
           id: user.id,
@@ -153,7 +155,7 @@ export class PostgresAuthUserRepository extends AuthUserStore {
           fullName: user.full_name,
         },
         tenant: null,
-        permissions: [],
+        permissions,
         branches: [],
         tenantWideBranchAccess: false,
         effectivePlan: null,
@@ -232,6 +234,19 @@ export class PostgresAuthUserRepository extends AuthUserStore {
     );
 
     return result.rows[0] ?? null;
+  }
+
+  private async findPlatformPermissions(): Promise<readonly string[]> {
+    const result = await this.database.query<PermissionRow>(
+      `
+        select code
+        from permissions
+        where code like 'platform.%'
+        order by code asc
+      `,
+    );
+
+    return result.rows.map((row) => row.code);
   }
 
   private async findEffectivePermissions(

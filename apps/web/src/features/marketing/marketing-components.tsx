@@ -110,7 +110,7 @@ export function MarketingHero() {
       id="top"
       className="relative overflow-hidden border-b border-border bg-background py-16 sm:py-20 lg:py-24"
     >
-      <div className="absolute inset-x-0 top-0 h-48 bg-[radial-gradient(circle_at_top,_rgb(var(--accent))_0,_transparent_60%)]" />
+      <div className="absolute inset-x-0 top-0 h-48 bg-[radial-gradient(circle_at_top,rgb(var(--accent))_0,transparent_60%)]" />
 
       <Container className="relative grid gap-10 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
         <div>

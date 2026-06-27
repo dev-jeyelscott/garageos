@@ -34,18 +34,18 @@ If this document conflicts with the PRD, database design, or database schema, th
 
 ## 3. Recommended Stack
 
-| Layer | Decision | Notes |
-| --- | --- | --- |
-| Client | TypeScript mobile-first PWA | Installable, responsive, offline shell/read-only cache. |
-| UI | React / Next.js or equivalent | Strong PWA and routing ecosystem. |
-| Backend | TypeScript modular monolith | Keeps transactional workflows simple. |
-| API | REST + explicit workflow command endpoints | Predictable, testable, permission-aware. |
-| Database | PostgreSQL 16+ | Transactions, locks, constraints, FTS/trigram, JSONB, optional RLS. |
-| Jobs | Database-backed jobs and outbox first | Avoids early queue infrastructure. |
-| Files | Private S3-compatible object storage | Tenant paths, signed URLs, lifecycle deletion. |
-| Cache | Browser PWA cache; optional server ephemeral cache | PostgreSQL remains authoritative. |
-| Observability | Logs, metrics, error monitoring, correlation IDs | Required for API, jobs, auth, inventory, exports. |
-| Deployment | Containers behind HTTPS | Separate PWA/API/worker/scheduler units. |
+| Layer         | Decision                                           | Notes                                                               |
+| ------------- | -------------------------------------------------- | ------------------------------------------------------------------- |
+| Client        | TypeScript mobile-first PWA                        | Installable, responsive, offline shell/read-only cache.             |
+| UI            | React / Next.js or equivalent                      | Strong PWA and routing ecosystem.                                   |
+| Backend       | TypeScript modular monolith                        | Keeps transactional workflows simple.                               |
+| API           | REST + explicit workflow command endpoints         | Predictable, testable, permission-aware.                            |
+| Database      | PostgreSQL 16+                                     | Transactions, locks, constraints, FTS/trigram, JSONB, optional RLS. |
+| Jobs          | Database-backed jobs and outbox first              | Avoids early queue infrastructure.                                  |
+| Files         | Private S3-compatible object storage               | Tenant paths, signed URLs, lifecycle deletion.                      |
+| Cache         | Browser PWA cache; optional server ephemeral cache | PostgreSQL remains authoritative.                                   |
+| Observability | Logs, metrics, error monitoring, correlation IDs   | Required for API, jobs, auth, inventory, exports.                   |
+| Deployment    | Containers behind HTTPS                            | Separate PWA/API/worker/scheduler units.                            |
 
 ### Why Modular Monolith
 
@@ -136,25 +136,25 @@ module/
 
 ## 6. Core Domain Modules
 
-| Module | Responsibility | Critical Rule |
-| --- | --- | --- |
-| Auth | Login, logout, verification, reset, sessions, rate limits | Stored tokens must be hashed. |
-| Tenant Lifecycle | Status, onboarding, subscription gates, deletion | Runs before operational permissions. |
-| Platform Admin | Tenants, plans, overrides, support access | Platform admins are not tenant employees. |
-| RBAC | Roles, permissions, branch access | Additive permissions; no explicit deny. |
-| Customers & Motorcycles | Tenant-wide records, search, restoration | Histories remain branch-restricted. |
-| Service Work | Services, estimates, job orders, mechanic sessions | Transitions must be explicit and audited. |
-| Inventory | Products, stock, reservations, FIFO, ledger | Ledger/FIFO are authoritative. |
-| Transfers | Branch transfers and variances | Preserve FIFO cost references. |
-| Purchasing & AP | POs, receiving, returns, payments, credits | Credit purchases affect AP; cash purchases do not. |
-| Invoicing & AR | Invoices, allocations, tax, discounts, AR | Allocations prevent overbilling. |
-| Payments & Refunds | Payments, immutable receipts, refunds | One payment creates one receipt. |
-| Expenses | Categories, records, edits, voids | Voided expenses excluded from profit reports. |
-| Reminders & Notifications | Due evaluation, channels, attempts | Enforce plan-based channels. |
-| Files & Exports | Signed URLs, tenant files, export packages | No permanent public tenant file URLs. |
-| Reports & Dashboard | Operational summaries and exports | Large exports are asynchronous. |
-| Audit | Tenant and platform audit logs | Critical actions cannot bypass audit. |
-| Background Jobs | Jobs, outbox, attempts, failures | No duplicate irreversible side effects. |
+| Module                    | Responsibility                                            | Critical Rule                                      |
+| ------------------------- | --------------------------------------------------------- | -------------------------------------------------- |
+| Auth                      | Login, logout, verification, reset, sessions, rate limits | Stored tokens must be hashed.                      |
+| Tenant Lifecycle          | Status, onboarding, subscription gates, deletion          | Runs before operational permissions.               |
+| Platform Admin            | Tenants, plans, overrides, support access                 | Platform admins are not tenant employees.          |
+| RBAC                      | Roles, permissions, branch access                         | Additive permissions; no explicit deny.            |
+| Customers & Motorcycles   | Tenant-wide records, search, restoration                  | Histories remain branch-restricted.                |
+| Service Work              | Services, estimates, job orders, mechanic sessions        | Transitions must be explicit and audited.          |
+| Inventory                 | Products, stock, reservations, FIFO, ledger               | Ledger/FIFO are authoritative.                     |
+| Transfers                 | Branch transfers and variances                            | Preserve FIFO cost references.                     |
+| Purchasing & AP           | POs, receiving, returns, payments, credits                | Credit purchases affect AP; cash purchases do not. |
+| Invoicing & AR            | Invoices, allocations, tax, discounts, AR                 | Allocations prevent overbilling.                   |
+| Payments & Refunds        | Payments, immutable receipts, refunds                     | One payment creates one receipt.                   |
+| Expenses                  | Categories, records, edits, voids                         | Voided expenses excluded from profit reports.      |
+| Reminders & Notifications | Due evaluation, channels, attempts                        | Enforce plan-based channels.                       |
+| Files & Exports           | Signed URLs, tenant files, export packages                | No permanent public tenant file URLs.              |
+| Reports & Dashboard       | Operational summaries and exports                         | Large exports are asynchronous.                    |
+| Audit                     | Tenant and platform audit logs                            | Critical actions cannot bypass audit.              |
+| Background Jobs           | Jobs, outbox, attempts, failures                          | No duplicate irreversible side effects.            |
 
 ---
 
@@ -186,25 +186,25 @@ Every authenticated tenant request resolves:
 
 ### Enforcement Layers
 
-| Layer | Responsibility |
-| --- | --- |
-| API/routing | Reject missing or invalid context. |
-| Policy | Enforce permission and branch scope. |
-| Service | Enforce lifecycle and business rules. |
-| Repository | Require `tenant_id` and `branch_id` where applicable. |
-| Database | Enforce constraints, indexes, FKs, optional RLS. |
+| Layer       | Responsibility                                        |
+| ----------- | ----------------------------------------------------- |
+| API/routing | Reject missing or invalid context.                    |
+| Policy      | Enforce permission and branch scope.                  |
+| Service     | Enforce lifecycle and business rules.                 |
+| Repository  | Require `tenant_id` and `branch_id` where applicable. |
+| Database    | Enforce constraints, indexes, FKs, optional RLS.      |
 
 ### Tenant Status Gate
 
-| Status | Rule |
-| --- | --- |
-| `pending_setup` | Owner setup only; operational modules blocked. |
-| `active` | Full access by permission and branch scope. |
-| `grace_period` | Full access plus renewal warnings. |
-| `read_only` | Reads, exports, renewal, password change, logout; writes blocked. |
-| `suspended` | Owner renewal/export only; non-owner access blocked. |
-| `pending_deletion` | Operational access blocked. |
-| `deleted` | No tenant operational access. |
+| Status             | Rule                                                              |
+| ------------------ | ----------------------------------------------------------------- |
+| `pending_setup`    | Owner setup only; operational modules blocked.                    |
+| `active`           | Full access by permission and branch scope.                       |
+| `grace_period`     | Full access plus renewal warnings.                                |
+| `read_only`        | Reads, exports, renewal, password change, logout; writes blocked. |
+| `suspended`        | Owner renewal/export only; non-owner access blocked.              |
+| `pending_deletion` | Operational access blocked.                                       |
+| `deleted`          | No tenant operational access.                                     |
 
 ---
 
@@ -222,13 +222,13 @@ Rules:
 - Business dates use tenant timezone.
 - Source-of-truth records are relational, not JSON-only.
 
-| Category | Examples | Scope |
-| --- | --- | --- |
-| Platform-owned | plans, platform admins, platform audit | platform-wide |
-| Tenant-wide | customers, motorcycles, products, suppliers, files | `tenant_id` |
+| Category        | Examples                                              | Scope                     |
+| --------------- | ----------------------------------------------------- | ------------------------- |
+| Platform-owned  | plans, platform admins, platform audit                | platform-wide             |
+| Tenant-wide     | customers, motorcycles, products, suppliers, files    | `tenant_id`               |
 | Branch-specific | jobs, invoices, purchases, stock, transfers, expenses | `tenant_id` + `branch_id` |
-| Append-only | ledgers, receipts, refunds, audit logs | immutable/correction-only |
-| Read models | reports, search, dashboard snapshots | rebuildable |
+| Append-only     | ledgers, receipts, refunds, audit logs                | immutable/correction-only |
+| Read models     | reports, search, dashboard snapshots                  | rebuildable               |
 
 Transactional source tables remain authoritative. Reporting snapshots, dashboard snapshots, and search documents are derived and rebuildable.
 
@@ -238,18 +238,18 @@ Transactional source tables remain authoritative. Reporting snapshots, dashboard
 
 All critical writes require database transactions and appropriate locks, constraints, optimistic locking, or idempotency.
 
-| Workflow | Transaction Scope |
-| --- | --- |
-| Invoice issue | invoice, lines, job links, allocations, document sequence |
-| Payment + receipt | invoice, payment, receipt, sequence, audit |
-| Refund | payment, invoice, refund, optional inventory reversal, audit |
-| Job completion | job, reservations, stock, FIFO, ledger |
-| Inventory reservation/release | stock, FIFO layers, allocations, reservation, ledger |
-| Adjustment posting | adjustment, stock, FIFO, ledger, audit |
-| Purchase receiving | PO lines, stock, FIFO, AP, ledger |
-| Supplier return | return, stock, FIFO, AP/credit, ledger |
-| Transfer receive/cancel | transfer, source/destination stock, FIFO, ledger |
-| Tenant deletion | deletion job, records, storage manifest, retained audit |
+| Workflow                      | Transaction Scope                                            |
+| ----------------------------- | ------------------------------------------------------------ |
+| Invoice issue                 | invoice, lines, job links, allocations, document sequence    |
+| Payment + receipt             | invoice, payment, receipt, sequence, audit                   |
+| Refund                        | payment, invoice, refund, optional inventory reversal, audit |
+| Job completion                | job, reservations, stock, FIFO, ledger                       |
+| Inventory reservation/release | stock, FIFO layers, allocations, reservation, ledger         |
+| Adjustment posting            | adjustment, stock, FIFO, ledger, audit                       |
+| Purchase receiving            | PO lines, stock, FIFO, AP, ledger                            |
+| Supplier return               | return, stock, FIFO, AP/credit, ledger                       |
+| Transfer receive/cancel       | transfer, source/destination stock, FIFO, ledger             |
+| Tenant deletion               | deletion job, records, storage manifest, retained audit      |
 
 ---
 
@@ -284,14 +284,14 @@ Flow: reserve key → return cached success if already completed → execute com
 
 Key concepts:
 
-| Concept | Role |
-| --- | --- |
-| `stock_balances` | Fast branch/product quantity summary. |
-| `inventory_ledger_entries` | Immutable record of stock-changing events. |
-| `fifo_layers` | Received quantity at specific unit cost. |
-| `inventory_reservations` | Allocated stock for jobs/transfers. |
+| Concept                        | Role                                               |
+| ------------------------------ | -------------------------------------------------- |
+| `stock_balances`               | Fast branch/product quantity summary.              |
+| `inventory_ledger_entries`     | Immutable record of stock-changing events.         |
+| `fifo_layers`                  | Received quantity at specific unit cost.           |
+| `inventory_reservations`       | Allocated stock for jobs/transfers.                |
 | `fifo_reservation_allocations` | FIFO layer reservation without consuming quantity. |
-| `fifo_consumptions` | Actual FIFO stock consumption. |
+| `fifo_consumptions`            | Actual FIFO stock consumption.                     |
 
 Rules:
 
@@ -549,14 +549,14 @@ Alert on critical job failure, repeated tenant deletion failure, payment/receipt
 
 Deployable units:
 
-| Unit | Responsibility |
-| --- | --- |
-| PWA static app | Shell/assets via CDN. |
-| API service | Auth, commands, queries, signed URLs. |
+| Unit           | Responsibility                               |
+| -------------- | -------------------------------------------- |
+| PWA static app | Shell/assets via CDN.                        |
+| API service    | Auth, commands, queries, signed URLs.        |
 | Worker service | Jobs, outbox, exports, lifecycle, reminders. |
-| Scheduler | Periodic job enqueueing. |
-| PostgreSQL | Transactional source of truth. |
-| Object storage | Tenant files and exports. |
+| Scheduler      | Periodic job enqueueing.                     |
+| PostgreSQL     | Transactional source of truth.               |
+| Object storage | Tenant files and exports.                    |
 
 Environments: `local`, `development`, `staging`, `production`.
 
@@ -584,12 +584,12 @@ Backup and DR:
 
 Targets:
 
-| Metric | Target |
-| --- | --- |
-| Initial mobile page load | < 3s over 4G |
-| API P50 | < 200ms |
-| API P95 | < 500ms |
-| API P99 | < 1000ms |
+| Metric                     | Target                                |
+| -------------------------- | ------------------------------------- |
+| Initial mobile page load   | < 3s over 4G                          |
+| API P50                    | < 200ms                               |
+| API P95                    | < 500ms                               |
+| API P99                    | < 1000ms                              |
 | Interactive report summary | < 5s for default ranges up to 90 days |
 
 Techniques:
@@ -606,14 +606,14 @@ Techniques:
 
 Minimum supported scale:
 
-| Target | Scale |
-| --- | ---: |
-| Active shops | 500 |
-| Tenant users | 10,000 |
-| Active branches | 2,000 |
-| Customers | 1,000,000 |
-| Motorcycles | 1,500,000 |
-| Job orders | 2,000,000 |
+| Target                   |     Scale |
+| ------------------------ | --------: |
+| Active shops             |       500 |
+| Tenant users             |    10,000 |
+| Active branches          |     2,000 |
+| Customers                | 1,000,000 |
+| Motorcycles              | 1,500,000 |
+| Job orders               | 2,000,000 |
 | Inventory ledger entries | 5,000,000 |
 
 Scaling path: horizontal API/workers → optimize queries/indexes → read replicas → partition append-only tables → isolate reporting/export workers → extract services only after proven need.
@@ -652,49 +652,49 @@ Must-pass themes:
 
 ## 24. Security Checklist
 
-| Control | Requirement |
-| --- | --- |
-| HTTPS | Production traffic over HTTPS; HTTP redirected/blocked. |
-| Passwords | Argon2id or bcrypt cost 12+. |
-| Tokens | Store only hashes for reset, verification, invite, refresh. |
-| Sessions | Revoke on deactivation/password reset. |
-| Rate limits | Login, reset, verification resend, uploads, public APIs, reminders, exports. |
-| Tenant isolation | Middleware, policies, repository scoping, optional RLS. |
-| Branch access | Enforced on branch-specific records. |
-| Files | Private storage and signed URLs only. |
-| Card data | Do not store card number, CVV, or magnetic stripe data. |
-| Audit logs | Immutable; retained at least 3 years. |
-| Secrets | Outside source code in env/secret manager. |
-| Backups | Encrypted and tested quarterly. |
+| Control          | Requirement                                                                  |
+| ---------------- | ---------------------------------------------------------------------------- |
+| HTTPS            | Production traffic over HTTPS; HTTP redirected/blocked.                      |
+| Passwords        | Argon2id or bcrypt cost 12+.                                                 |
+| Tokens           | Store only hashes for reset, verification, invite, refresh.                  |
+| Sessions         | Revoke on deactivation/password reset.                                       |
+| Rate limits      | Login, reset, verification resend, uploads, public APIs, reminders, exports. |
+| Tenant isolation | Middleware, policies, repository scoping, optional RLS.                      |
+| Branch access    | Enforced on branch-specific records.                                         |
+| Files            | Private storage and signed URLs only.                                        |
+| Card data        | Do not store card number, CVV, or magnetic stripe data.                      |
+| Audit logs       | Immutable; retained at least 3 years.                                        |
+| Secrets          | Outside source code in env/secret manager.                                   |
+| Backups          | Encrypted and tested quarterly.                                              |
 
 ---
 
 ## 25. Architecture Decisions
 
-| ID | Decision | Reason | Trade-off |
-| --- | --- | --- | --- |
-| AD-001 | Modular monolith backend | Cross-domain transactions require atomicity. | Less independent domain scaling initially. |
-| AD-002 | PostgreSQL source of truth | Relational integrity, transactions, locks, constraints, FTS/trigram, optional RLS. | Requires indexing, monitoring, partitioning later. |
-| AD-003 | DB-backed jobs/outbox first | Matches schema and avoids premature queue infra. | High-volume async work may need dedicated queue later. |
-| AD-004 | Read models for reports/search | Protects operational transactions. | Requires refresh jobs and freshness monitoring. |
-| AD-005 | Idempotency on critical writes | Prevents duplicate payments, receipts, billing, inventory actions. | Requires intent hashing and response storage. |
-| AD-006 | No full offline writes | PRD excludes offline transactional sync. | Some workflows require connectivity. |
+| ID     | Decision                       | Reason                                                                             | Trade-off                                              |
+| ------ | ------------------------------ | ---------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| AD-001 | Modular monolith backend       | Cross-domain transactions require atomicity.                                       | Less independent domain scaling initially.             |
+| AD-002 | PostgreSQL source of truth     | Relational integrity, transactions, locks, constraints, FTS/trigram, optional RLS. | Requires indexing, monitoring, partitioning later.     |
+| AD-003 | DB-backed jobs/outbox first    | Matches schema and avoids premature queue infra.                                   | High-volume async work may need dedicated queue later. |
+| AD-004 | Read models for reports/search | Protects operational transactions.                                                 | Requires refresh jobs and freshness monitoring.        |
+| AD-005 | Idempotency on critical writes | Prevents duplicate payments, receipts, billing, inventory actions.                 | Requires intent hashing and response storage.          |
+| AD-006 | No full offline writes         | PRD excludes offline transactional sync.                                           | Some workflows require connectivity.                   |
 
 ---
 
 ## 26. Risks and Mitigations
 
-| Risk | Mitigation |
-| --- | --- |
-| Inventory/FIFO bugs | Transaction tests, fixtures, locks, invariant checks, reconciliation reports. |
-| Overbilling/overpayment | Allocation locks, invoice locks, constraints, idempotency. |
-| Tenant isolation defects | Middleware, repositories, tests, optional RLS. |
-| Duplicate job side effects | Idempotent jobs, locks, outbox state, safe retries. |
-| Slow reports/exports | Async jobs, snapshots, pagination, worker isolation. |
-| Object storage leakage | Private buckets, signed URLs, tenant paths, auth before URL generation. |
-| Append-only table growth | Partition-ready schema, keyset pagination, retention, monitoring. |
-| Support misuse | Explicit sessions, reasons, read-only default, visible marker, audit logs. |
-| Scope creep | Enforce documented exclusions in backlog and reviews. |
+| Risk                       | Mitigation                                                                    |
+| -------------------------- | ----------------------------------------------------------------------------- |
+| Inventory/FIFO bugs        | Transaction tests, fixtures, locks, invariant checks, reconciliation reports. |
+| Overbilling/overpayment    | Allocation locks, invoice locks, constraints, idempotency.                    |
+| Tenant isolation defects   | Middleware, repositories, tests, optional RLS.                                |
+| Duplicate job side effects | Idempotent jobs, locks, outbox state, safe retries.                           |
+| Slow reports/exports       | Async jobs, snapshots, pagination, worker isolation.                          |
+| Object storage leakage     | Private buckets, signed URLs, tenant paths, auth before URL generation.       |
+| Append-only table growth   | Partition-ready schema, keyset pagination, retention, monitoring.             |
+| Support misuse             | Explicit sessions, reasons, read-only default, visible marker, audit logs.    |
+| Scope creep                | Enforce documented exclusions in backlog and reviews.                         |
 
 ---
 

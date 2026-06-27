@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 
 import { AuthModule } from './modules/auth/auth.module';
+import { PlatformModule } from './modules/platform/platform.module';
 import { AuditModule } from './shared/audit/audit.module';
 import { IdempotencyModule } from './shared/idempotency/idempotency.module';
 import { RequestContextMiddleware } from './shared/observability/request-context.middleware';
@@ -24,7 +25,7 @@ export class HealthController {
 }
 
 @Module({
-  imports: [AuthModule, AuditModule, IdempotencyModule],
+  imports: [AuthModule, PlatformModule, AuditModule, IdempotencyModule],
   controllers: [HealthController],
 })
 export class AppModule implements NestModule {
