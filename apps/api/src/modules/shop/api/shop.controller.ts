@@ -4,8 +4,6 @@ import { ZodValidationPipe } from '../../../shared/api/zod-validation.pipe';
 import { AccessTokenAuthGuard } from '../../auth/api/access-token-auth.guard';
 import { AuthService } from '../../auth/application/auth.service';
 import {
-  type CreateBranchRequest,
-  createBranchRequestSchema,
   type RenewalRequest,
   renewalRequestSchema,
   type ShopProfileRequest,
@@ -59,16 +57,5 @@ export class ShopController {
     const session = await this.authService.getAuthenticatedRouteSession(authorizationHeader);
 
     return this.shopService.requestRenewal(request, session.tenantContextSession);
-  }
-
-  @Post('branches')
-  async createBranch(
-    @Headers('authorization') authorizationHeader: string | undefined,
-    @Body(new ZodValidationPipe(createBranchRequestSchema))
-    request: CreateBranchRequest,
-  ): ReturnType<ShopService['createBranch']> {
-    const session = await this.authService.getAuthenticatedRouteSession(authorizationHeader);
-
-    return this.shopService.createBranch(request, session.tenantContextSession);
   }
 }

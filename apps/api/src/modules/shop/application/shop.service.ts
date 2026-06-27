@@ -17,7 +17,7 @@ import {
   type ResolvedTenantContext,
   type TenantContextAuthenticatedSession,
 } from '../../../shared/tenant-context/tenant-context';
-import type { CreateBranchRequest, RenewalRequest, ShopProfileRequest } from '../api/shop.schemas';
+import type { RenewalRequest, ShopProfileRequest } from '../api/shop.schemas';
 import { ShopStore } from './shop.store';
 
 export interface OnboardingStateResponse {
@@ -34,13 +34,6 @@ export interface OnboardingStateResponse {
   };
   readonly missing_requirements: readonly string[];
   readonly can_complete_onboarding: boolean;
-}
-
-export interface BranchCreateResponse {
-  readonly id: string;
-  readonly name: string;
-  readonly status: 'active';
-  readonly lock_version: number;
 }
 
 export interface CompleteOnboardingResponse {
@@ -133,77 +126,6 @@ export class ShopService {
     });
 
     return { saved: true };
-  }
-
-  async createBranch(
-    request: CreateBranchRequest,
-    session: TenantContextAuthenticatedSession,
-  ): Promise<BranchCreateResponse> {
-    const context = resolveTenantContextFromAuthenticatedSession(session);
-    const isShopOwner = await this.shopStore.isActiveShopOwner({
-      tenantId: context.tenantId,
-      userId: context.actorUserId,
-    });
-
-    assertTenantLifecycleAccess({
-      context,
-      isShopOwner,
-      action: TENANT_ACCESS_ACTIONS.ONBOARDING_SETUP,
-    });
-
-    if (!isShopOwner && !context.effectivePermissions.includes('branches.create')) {
-      throw GarageOsApiException.forbidden('branches.create');
-    }
-
-    return this.transactionRunner.runInTransaction(async (transaction) => {
-      const [activeBranches, maxActiveBranches] = await Promise.all([
-        this.shopStore.countActiveBranches(context.tenantId, transaction),
-        this.shopStore.getEffectiveMaxActiveBranches(context.tenantId, transaction),
-      ]);
-
-      if (activeBranches >= maxActiveBranches) {
-        await this.auditService.record({
-          tenantId: context.tenantId,
-          actorUserId: context.actorUserId,
-          actorType: AUDIT_ACTOR_TYPES.TENANT_USER,
-          action: 'branches.create.blocked_by_plan_limit',
-          entityType: 'branch',
-          metadataJson: {
-            capability: 'max_active_branches',
-            current_active_branches: activeBranches,
-            limit: maxActiveBranches,
-          },
-          reason: 'plan_limit_exceeded',
-          client: transaction,
-        });
-
-        throw GarageOsApiException.forbidden(
-          'branches.create',
-          'Your current plan does not allow another active branch.',
-        );
-      }
-
-      const branch = await this.shopStore.createBranch(
-        {
-          id: randomUUID(),
-          tenantId: context.tenantId,
-          name: request.name.trim(),
-          normalizedName: normalizeName(request.name),
-          address: request.address.trim(),
-          contactNumber: request.contact_number.trim(),
-          businessHoursJson: request.business_hours,
-          createdAt: new Date(),
-        },
-        transaction,
-      );
-
-      return {
-        id: branch.id,
-        name: branch.name,
-        status: branch.status,
-        lock_version: branch.lockVersion,
-      };
-    });
   }
 
   async completeOnboarding(

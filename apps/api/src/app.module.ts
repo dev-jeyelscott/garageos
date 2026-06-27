@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 
 import { AuthModule } from './modules/auth/auth.module';
+import { MasterDataModule } from './modules/master-data/master-data.module';
 import { PlatformModule } from './modules/platform/platform.module';
 import { ShopModule } from './modules/shop/shop.module';
 import { AuditModule } from './shared/audit/audit.module';
@@ -26,7 +27,14 @@ export class HealthController {
 }
 
 @Module({
-  imports: [AuthModule, PlatformModule, ShopModule, AuditModule, IdempotencyModule],
+  imports: [
+    AuthModule,
+    PlatformModule,
+    ShopModule,
+    MasterDataModule,
+    AuditModule,
+    IdempotencyModule,
+  ],
   controllers: [HealthController],
 })
 export class AppModule implements NestModule {
