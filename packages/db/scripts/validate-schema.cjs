@@ -9,7 +9,7 @@ require('dotenv').config({
 const DATABASE_URL = process.env.DATABASE_URL;
 
 const EXPECTED = {
-  migrationCount: 16,
+  migrationCount: 17,
   publicTableCount: 106,
   subscriptionPlans: 3,
   subscriptionPlanLimits: 27,
@@ -69,6 +69,82 @@ async function validateBaselineCounts(client) {
   assertEqual('subscription plans', subscriptionPlans, EXPECTED.subscriptionPlans);
   assertEqual('subscription plan limits', subscriptionPlanLimits, EXPECTED.subscriptionPlanLimits);
   assertEqual('permissions', permissions, EXPECTED.permissions);
+}
+
+async function validateTenantDuplicateApprovalSchema(client) {
+  const duplicateApprovalColumnCount = await count(
+    client,
+    `
+      select count(*)
+      from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'tenants'
+        and column_name in (
+          'duplicate_approved_at',
+          'duplicate_approved_by_platform_admin_user_id',
+          'duplicate_approval_reason'
+        )
+    `,
+  );
+
+  const duplicateApprovalConstraintCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_constraint
+      where conname = 'chk_tenants_duplicate_approval_complete'
+    `,
+  );
+
+  const oldDuplicateIndexCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_indexes
+      where schemaname = 'public'
+        and indexname = 'ux_tenants_active_business_email'
+    `,
+  );
+
+  const unapprovedDuplicateIndexCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_class index_class
+      join pg_index index_definition
+        on index_definition.indexrelid = index_class.oid
+      join pg_class table_class
+        on table_class.oid = index_definition.indrelid
+      join pg_namespace namespace
+        on namespace.oid = table_class.relnamespace
+      where namespace.nspname = 'public'
+        and table_class.relname = 'tenants'
+        and index_class.relname = 'ux_tenants_unapproved_business_email'
+        and pg_get_expr(index_definition.indpred, index_definition.indrelid) ilike '%status%'
+        and pg_get_expr(index_definition.indpred, index_definition.indrelid) ilike '%deleted%'
+        and pg_get_expr(index_definition.indpred, index_definition.indrelid) ilike '%duplicate_approved_at IS NULL%'
+    `,
+  );
+
+  const duplicateApprovalAuditIndexCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_indexes
+      where schemaname = 'public'
+        and indexname = 'idx_tenants_duplicate_approval'
+    `,
+  );
+
+  assertEqual('tenant duplicate approval columns', duplicateApprovalColumnCount, 3);
+  assertEqual(
+    'tenant duplicate approval completeness constraint',
+    duplicateApprovalConstraintCount,
+    1,
+  );
+  assertEqual('old tenant duplicate unique index removed', oldDuplicateIndexCount, 0);
+  assertEqual('unapproved tenant duplicate unique index', unapprovedDuplicateIndexCount, 1);
+  assertEqual('tenant duplicate approval audit index', duplicateApprovalAuditIndexCount, 1);
 }
 
 async function validateMoneyPrecision(client) {
@@ -149,6 +225,7 @@ async function main() {
   try {
     await validateMigrationFiles(client);
     await validateBaselineCounts(client);
+    await validateTenantDuplicateApprovalSchema(client);
     await validateMoneyPrecision(client);
     await validateQuantityPrecision(client);
 
