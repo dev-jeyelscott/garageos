@@ -12,6 +12,14 @@ export const platformTenantStatusSchema = z.enum([
 
 const dateOnlySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must use YYYY-MM-DD.');
 
+const ownerInvitationRequestSchema = z
+  .object({
+    full_name: z.string().trim().min(1).max(200),
+    email: z.string().trim().email(),
+    send_invitation: z.literal(true),
+  })
+  .strict();
+
 export const listPlatformTenantsQuerySchema = z
   .object({
     limit: z.coerce.number().int().min(1).max(100).optional(),
@@ -28,17 +36,24 @@ export const createPlatformTenantRequestSchema = z
     plan_id: z.string().trim().uuid(),
     subscription_start_date: dateOnlySchema,
     subscription_expiration_date: dateOnlySchema,
-    owner: z
-      .object({
-        full_name: z.string().trim().min(1).max(200),
-        email: z.string().trim().email(),
-        send_invitation: z.literal(true),
-      })
-      .strict(),
+    owner: ownerInvitationRequestSchema,
     duplicate_approval_reason: z.string().trim().min(1).max(500).nullable().optional(),
+  })
+  .strict();
+
+export const updatePlatformTenantSubscriptionRequestSchema = z
+  .object({
+    plan_id: z.string().trim().uuid(),
+    subscription_start_date: dateOnlySchema,
+    subscription_expiration_date: dateOnlySchema,
+    reason: z.string().trim().min(1).max(500),
   })
   .strict();
 
 export type ListPlatformTenantsQuery = z.infer<typeof listPlatformTenantsQuerySchema>;
 
 export type CreatePlatformTenantRequest = z.infer<typeof createPlatformTenantRequestSchema>;
+
+export type UpdatePlatformTenantSubscriptionRequest = z.infer<
+  typeof updatePlatformTenantSubscriptionRequestSchema
+>;

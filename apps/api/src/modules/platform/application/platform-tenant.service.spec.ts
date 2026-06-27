@@ -25,6 +25,7 @@ import {
   type PlatformTenantListRecord,
   type PlatformTenantOwnerInvitationSummary,
   PlatformTenantStore,
+  type UpsertTenantSubscriptionInput,
 } from './platform-tenant.store';
 import { PLATFORM_PERMISSIONS, PlatformTenantService } from './platform-tenant.service';
 
@@ -35,6 +36,134 @@ const INVITATION_ID = '44444444-4444-4444-8444-444444444444';
 const NOW = new Date('2026-06-27T00:00:00.000Z');
 
 describe('PlatformTenantService', () => {
+  it('updates tenant subscription with previous and new values in the audit log', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+
+    try {
+      const { service, store, auditService } = createService();
+
+      store.tenantById = createTenantRecord({
+        subscription: createSubscriptionRecord({
+          planId: '77777777-7777-4777-8777-777777777777',
+          startDate: '2026-06-01',
+          expirationDate: '2026-06-30',
+        }),
+      });
+
+      const response = await service.updateTenantSubscription(
+        TENANT_ID,
+        {
+          plan_id: PLAN_ID,
+          subscription_start_date: '2026-06-27',
+          subscription_expiration_date: '2026-08-27',
+          reason: 'External subscription payment confirmed.',
+        },
+        createPlatformSession([PLATFORM_PERMISSIONS.SUBSCRIPTIONS_UPDATE]),
+        {
+          ipAddress: '127.0.0.1',
+          userAgent: 'vitest',
+        },
+      );
+
+      expect(response).toMatchObject({
+        subscription: {
+          plan_id: PLAN_ID,
+          start_date: '2026-06-27',
+          expiration_date: '2026-08-27',
+          status_source: 'system_computed',
+          updated_by_platform_admin_user_id: PLATFORM_ADMIN_USER_ID,
+        },
+      });
+
+      expect(store.updatedSubscriptions[0]).toMatchObject({
+        tenantId: TENANT_ID,
+        planId: PLAN_ID,
+        startDate: '2026-06-27',
+        expirationDate: '2026-08-27',
+        updatedByPlatformAdminUserId: PLATFORM_ADMIN_USER_ID,
+      });
+
+      expect(auditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'platform.tenant_subscription.updated',
+          entityType: 'tenant_subscription',
+          entityId: TENANT_ID,
+          beforeJson: expect.objectContaining({
+            plan_id: '77777777-7777-4777-8777-777777777777',
+            expiration_date: '2026-06-30',
+          }),
+          afterJson: expect.objectContaining({
+            plan_id: PLAN_ID,
+            plan_code: 'basic',
+            expiration_date: '2026-08-27',
+          }),
+          reason: 'External subscription payment confirmed.',
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('requires a reason before updating tenant subscription', async () => {
+    const { service, store } = createService();
+
+    store.tenantById = createTenantRecord({
+      subscription: createSubscriptionRecord(),
+    });
+
+    await expect(
+      service.updateTenantSubscription(
+        TENANT_ID,
+        {
+          plan_id: PLAN_ID,
+          subscription_start_date: '2026-06-27',
+          subscription_expiration_date: '2026-08-27',
+          reason: '   ',
+        },
+        createPlatformSession([PLATFORM_PERMISSIONS.SUBSCRIPTIONS_UPDATE]),
+        {
+          ipAddress: null,
+          userAgent: null,
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.VALIDATION_FAILED,
+      details: [
+        expect.objectContaining({
+          field: 'reason',
+          code: 'required',
+        }),
+      ],
+    });
+
+    expect(store.updatedSubscriptions).toEqual([]);
+  });
+
+  it('rejects subscription updates for missing tenants', async () => {
+    const { service } = createService();
+
+    await expect(
+      service.updateTenantSubscription(
+        TENANT_ID,
+        {
+          plan_id: PLAN_ID,
+          subscription_start_date: '2026-06-27',
+          subscription_expiration_date: '2026-08-27',
+          reason: 'External subscription payment confirmed.',
+        },
+        createPlatformSession([PLATFORM_PERMISSIONS.SUBSCRIPTIONS_UPDATE]),
+        {
+          ipAddress: null,
+          userAgent: null,
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.RESOURCE_NOT_FOUND,
+    });
+  });
+
   it('requires a verified platform admin with the requested platform permission', () => {
     const { service } = createService();
 
@@ -425,9 +554,11 @@ class FakePlatformTenantStore extends PlatformTenantStore {
     status: 'active',
   };
   duplicate: PlatformTenantDetailRecord | null = null;
+  tenantById: PlatformTenantDetailRecord | null = null;
   readonly listInputs: ListPlatformTenantsInput[] = [];
   readonly createdTenants: CreateTenantInput[] = [];
   readonly createdSubscriptions: CreateTenantSubscriptionInput[] = [];
+  readonly updatedSubscriptions: UpsertTenantSubscriptionInput[] = [];
   readonly createdInvitations: CreateOwnerInvitationInput[] = [];
   readonly lifecycleEvents: CreateTenantLifecycleEventInput[] = [];
 
@@ -438,7 +569,7 @@ class FakePlatformTenantStore extends PlatformTenantStore {
   }
 
   async findTenantById(): Promise<PlatformTenantDetailRecord | null> {
-    return null;
+    return this.tenantById;
   }
 
   async findActivePlanById(): Promise<PlatformPlanSummary | null> {
@@ -465,6 +596,20 @@ class FakePlatformTenantStore extends PlatformTenantStore {
     input: CreateTenantSubscriptionInput,
   ): Promise<PlatformSubscriptionSummary> {
     this.createdSubscriptions.push(input);
+
+    return createSubscriptionRecord({
+      planId: input.planId,
+      startDate: input.startDate,
+      expirationDate: input.expirationDate,
+      updatedByPlatformAdminUserId: input.updatedByPlatformAdminUserId,
+      updatedAt: input.updatedAt,
+    });
+  }
+
+  async upsertTenantSubscription(
+    input: UpsertTenantSubscriptionInput,
+  ): Promise<PlatformSubscriptionSummary> {
+    this.updatedSubscriptions.push(input);
 
     return createSubscriptionRecord({
       planId: input.planId,

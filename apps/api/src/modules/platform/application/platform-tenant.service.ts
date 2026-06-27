@@ -14,6 +14,7 @@ import type { AuthSessionResponseData } from '../../auth/contracts';
 import type {
   CreatePlatformTenantRequest,
   ListPlatformTenantsQuery,
+  UpdatePlatformTenantSubscriptionRequest,
 } from '../api/platform-tenant.schemas';
 import {
   type PlatformPlanSummary,
@@ -74,6 +75,10 @@ export interface CreatePlatformTenantResponse {
   };
   readonly subscription: PlatformSubscriptionResponse;
   readonly owner_invitation_sent: boolean;
+}
+
+export interface UpdatePlatformTenantSubscriptionResponse {
+  readonly subscription: PlatformSubscriptionResponse;
 }
 
 interface PlatformPlanResponse {
@@ -326,6 +331,84 @@ export class PlatformTenantService {
     });
   }
 
+  async updateTenantSubscription(
+    tenantId: string,
+    request: UpdatePlatformTenantSubscriptionRequest,
+    session: AuthSessionResponseData,
+    auditContext: PlatformRequestAuditContext,
+  ): Promise<UpdatePlatformTenantSubscriptionResponse> {
+    this.assertPlatformPermission(session, PLATFORM_PERMISSIONS.SUBSCRIPTIONS_UPDATE);
+
+    const reason = normalizeRequiredReason(request.reason, 'reason');
+    const startDate = validateDateOnly(request.subscription_start_date, 'subscription_start_date');
+    const expirationDate = validateDateOnly(
+      request.subscription_expiration_date,
+      'subscription_expiration_date',
+    );
+
+    if (expirationDate.getTime() < startDate.getTime()) {
+      throw GarageOsApiException.validationFailed([
+        {
+          field: 'subscription_expiration_date',
+          code: 'date_before_start',
+          message: 'Subscription expiration date must be on or after start date.',
+        },
+      ]);
+    }
+
+    const platformAdminUserId = session.user.id;
+    const now = new Date();
+
+    return this.transactionRunner.runInTransaction(async (transaction) => {
+      const tenant = await this.tenantStore.findTenantById(tenantId, transaction);
+
+      if (tenant === null) {
+        throw GarageOsApiException.resourceNotFound('Tenant was not found.');
+      }
+
+      const plan = await this.tenantStore.findActivePlanById(request.plan_id, transaction);
+
+      if (plan === null) {
+        throw GarageOsApiException.validationFailed([
+          {
+            field: 'plan_id',
+            code: 'active_plan_required',
+            message: 'An active Basic, Mid, or High subscription plan is required.',
+          },
+        ]);
+      }
+
+      const previousSubscription = tenant.subscription;
+
+      const subscription = await this.tenantStore.upsertTenantSubscription(
+        {
+          tenantId,
+          planId: plan.id,
+          startDate: request.subscription_start_date,
+          expirationDate: request.subscription_expiration_date,
+          updatedByPlatformAdminUserId: platformAdminUserId,
+          updatedAt: now,
+        },
+        transaction,
+      );
+
+      await this.auditTenantSubscriptionUpdate({
+        tenant,
+        plan,
+        previousSubscription,
+        subscription,
+        session,
+        auditContext,
+        reason,
+        client: transaction,
+      });
+
+      return {
+        subscription: toSubscriptionResponse(subscription),
+      };
+    });
+  }
+
   assertPlatformPermission(session: AuthSessionResponseData, permission: string): void {
     if (session.user.user_type !== 'platform_admin') {
       throw GarageOsApiException.forbidden(permission);
@@ -420,6 +503,38 @@ export class PlatformTenantService {
       });
     }
   }
+
+  private async auditTenantSubscriptionUpdate(input: {
+    readonly tenant: PlatformTenantDetailRecord;
+    readonly plan: PlatformPlanSummary;
+    readonly previousSubscription: PlatformSubscriptionSummary | null;
+    readonly subscription: PlatformSubscriptionSummary;
+    readonly session: AuthSessionResponseData;
+    readonly auditContext: PlatformRequestAuditContext;
+    readonly reason: string;
+    readonly client: DatabaseQueryClient;
+  }): Promise<void> {
+    await this.auditService.record({
+      tenantId: input.tenant.id,
+      actorUserId: input.session.user.id,
+      actorType: AUDIT_ACTOR_TYPES.PLATFORM_ADMIN,
+      ipAddress: input.auditContext.ipAddress,
+      userAgent: input.auditContext.userAgent,
+      client: input.client,
+      action: 'platform.tenant_subscription.updated',
+      entityType: 'tenant_subscription',
+      entityId: input.tenant.id,
+      beforeJson:
+        input.previousSubscription === null
+          ? null
+          : toSubscriptionAuditJson(input.previousSubscription),
+      afterJson: {
+        ...toSubscriptionAuditJson(input.subscription),
+        plan_code: input.plan.code,
+      },
+      reason: input.reason,
+    });
+  }
 }
 
 function toTenantSummaryResponse(row: PlatformTenantListRecord): PlatformTenantSummaryResponse {
@@ -482,6 +597,20 @@ function toSubscriptionResponse(
   };
 }
 
+function toSubscriptionAuditJson(
+  subscription: PlatformSubscriptionSummary,
+): Record<string, string | null> {
+  return {
+    plan_id: subscription.planId,
+    start_date: subscription.startDate,
+    expiration_date: subscription.expirationDate,
+    status_source: subscription.statusSource,
+    last_renewal_at: subscription.lastRenewalAt?.toISOString() ?? null,
+    updated_by_platform_admin_user_id: subscription.updatedByPlatformAdminUserId,
+    updated_at: subscription.updatedAt.toISOString(),
+  };
+}
+
 function toOwnerInvitationResponse(
   invitation: PlatformTenantOwnerInvitationSummary,
 ): PlatformOwnerInvitationResponse {
@@ -508,6 +637,22 @@ function normalizeSearchQuery(value: string | null): string | null {
   const normalizedValue = value.trim().replace(/\s+/g, ' ').toLowerCase();
 
   return normalizedValue.length > 0 ? normalizedValue : null;
+}
+
+function normalizeRequiredReason(value: string, field: string): string {
+  const normalizedValue = value.trim();
+
+  if (normalizedValue.length === 0) {
+    throw GarageOsApiException.validationFailed([
+      {
+        field,
+        code: 'required',
+        message: 'Reason is required.',
+      },
+    ]);
+  }
+
+  return normalizedValue;
 }
 
 function validateDateOnly(value: string, field: string): Date {

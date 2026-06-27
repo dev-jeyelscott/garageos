@@ -21,6 +21,7 @@ import {
   type PlatformTenantOwnerSummary,
   type PlatformTenantStatus,
   PlatformTenantStore,
+  type UpsertTenantSubscriptionInput,
 } from '../application/platform-tenant.store';
 
 interface PlatformTenantRow extends DatabaseRow {
@@ -280,6 +281,51 @@ export class PostgresPlatformTenantRepository extends PlatformTenantStore {
     );
 
     return mapSubscriptionRow(getRequiredRow(result, 'create tenant subscription'));
+  }
+
+  async upsertTenantSubscription(
+    input: UpsertTenantSubscriptionInput,
+    client: DatabaseQueryClient,
+  ): Promise<PlatformSubscriptionSummary> {
+    const result = await client.query<PlatformSubscriptionRow>(
+      `
+        insert into tenant_subscriptions (
+          tenant_id,
+          plan_id,
+          start_date,
+          expiration_date,
+          status_source,
+          updated_by_platform_admin_user_id,
+          updated_at
+        )
+        values ($1, $2, $3::date, $4::date, 'system_computed', $5, $6)
+        on conflict (tenant_id) do update set
+          plan_id = excluded.plan_id,
+          start_date = excluded.start_date,
+          expiration_date = excluded.expiration_date,
+          status_source = excluded.status_source,
+          updated_by_platform_admin_user_id = excluded.updated_by_platform_admin_user_id,
+          updated_at = excluded.updated_at
+        returning
+          plan_id,
+          start_date,
+          expiration_date,
+          status_source,
+          last_renewal_at,
+          updated_by_platform_admin_user_id,
+          updated_at
+      `,
+      [
+        input.tenantId,
+        input.planId,
+        input.startDate,
+        input.expirationDate,
+        input.updatedByPlatformAdminUserId,
+        input.updatedAt,
+      ],
+    );
+
+    return mapSubscriptionRow(getRequiredRow(result, 'upsert tenant subscription'));
   }
 
   async createOwnerInvitation(

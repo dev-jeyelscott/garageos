@@ -91,6 +91,15 @@ export interface CreateTenantSubscriptionInput {
   readonly updatedAt: Date;
 }
 
+export interface UpsertTenantSubscriptionInput {
+  readonly tenantId: string;
+  readonly planId: string;
+  readonly startDate: string;
+  readonly expirationDate: string;
+  readonly updatedByPlatformAdminUserId: string;
+  readonly updatedAt: Date;
+}
+
 export interface CreateOwnerInvitationInput {
   readonly id: string;
   readonly tenantId: string;
@@ -147,6 +156,11 @@ export abstract class PlatformTenantStore {
 
   abstract createTenantSubscription(
     input: CreateTenantSubscriptionInput,
+    client: DatabaseQueryClient,
+  ): Promise<PlatformSubscriptionSummary>;
+
+  abstract upsertTenantSubscription(
+    input: UpsertTenantSubscriptionInput,
     client: DatabaseQueryClient,
   ): Promise<PlatformSubscriptionSummary>;
 
