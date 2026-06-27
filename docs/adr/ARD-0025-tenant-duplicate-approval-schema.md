@@ -1,0 +1,155 @@
+# ARD-0025 — Tenant Duplicate Approval Schema
+
+Status: Proposed  
+Date: 2026-06-27  
+Decision Owner: Engineering  
+Source Alignment: PRD 4.2, User Story US-001, Database Schema 5.1, API platform tenant creation contract, Permission Matrix platform tenant permissions
+
+## Context
+
+GarageOS requires platform-created tenant creation and owner signup tenant creation.
+
+The product requirement states that the system must prevent duplicate active tenants with the same normalized shop email and business name combination unless a platform admin explicitly approves the duplicate.
+
+US-001 requires platform admins to create tenants, assign subscription plan/start/expiration before activation, create or invite the shop owner, block duplicate active tenants unless explicitly approved by platform admin, create the tenant in `pending_setup`, and audit tenant creation.
+
+The current schema blueprint defines the tenant uniqueness rule as:
+
+```sql
+create unique index ux_tenants_active_business_email
+on tenants(normalized_business_name, normalized_shop_email)
+where status <> 'deleted';
+```
+
+That index blocks every non-deleted duplicate at the database level. This is safe for default duplicate prevention, but it prevents the documented platform-admin-approved duplicate exception from being implemented.
+
+## Decision
+
+Do not implement approved duplicate tenant creation until the schema can represent an explicit approval.
+
+Adopt the following schema direction:
+
+1. Keep duplicate prevention as the default behavior.
+2. Add explicit duplicate approval metadata to tenant records or an associated approval table.
+3. Replace `ux_tenants_active_business_email` with a unique index that blocks only unapproved non-deleted duplicates.
+4. Require platform-admin actor, approval reason, and approval timestamp before a duplicate can bypass the default duplicate block.
+5. Keep owner signup duplicate behavior blocked. The duplicate approval exception is only for platform-admin tenant creation.
+6. Audit all duplicate approval actions and tenant creation outcomes.
+
+## Preferred Minimal Schema Shape
+
+Add nullable approval fields to `tenants`:
+
+```sql
+duplicate_approved_at timestamptz null,
+duplicate_approved_by_platform_admin_user_id uuid null,
+duplicate_approval_reason text null
+```
+
+Replace the current unique index with:
+
+```sql
+drop index if exists ux_tenants_active_business_email;
+
+create unique index ux_tenants_unapproved_business_email
+on tenants(normalized_business_name, normalized_shop_email)
+where status <> 'deleted'
+  and duplicate_approved_at is null;
+```
+
+Add a check constraint to prevent partial approval metadata:
+
+```sql
+alter table tenants
+add constraint chk_tenants_duplicate_approval_complete
+check (
+  (
+    duplicate_approved_at is null
+    and duplicate_approved_by_platform_admin_user_id is null
+    and duplicate_approval_reason is null
+  )
+  or
+  (
+    duplicate_approved_at is not null
+    and duplicate_approved_by_platform_admin_user_id is not null
+    and duplicate_approval_reason is not null
+    and length(trim(duplicate_approval_reason)) > 0
+  )
+);
+```
+
+Service-layer validation remains required because PostgreSQL cannot fully enforce that the approving user is a platform admin through a simple check constraint.
+
+## API Direction
+
+Do not expose generic duplicate approval on public owner signup.
+
+For platform tenant creation only, a future implementation may add an explicit approval input such as:
+
+```json
+{
+  "approve_duplicate": true,
+  "duplicate_approval_reason": "Separate legal branch using same email during migration."
+}
+```
+
+Validation rules:
+
+1. If a duplicate non-deleted tenant exists and approval is not provided, return `409 duplicate_resource`.
+2. If approval is provided but reason is missing or blank, return `422 validation_failed`.
+3. If the actor is not a platform admin with tenant creation permission, return `403 forbidden`.
+4. If approval is provided and validation passes, create the duplicate tenant with duplicate approval metadata populated.
+5. Always audit duplicate detection, duplicate approval, tenant creation, and tenant subscription assignment.
+
+## Migration Plan
+
+1. Add nullable duplicate approval columns.
+2. Backfill nothing for existing rows.
+3. Drop `ux_tenants_active_business_email`.
+4. Create `ux_tenants_unapproved_business_email`.
+5. Add approval metadata completeness check.
+6. Add repository/service tests for:
+
+   * duplicate without approval is blocked;
+   * duplicate with approval is allowed;
+   * blank approval reason is blocked;
+   * owner signup duplicate remains blocked;
+   * approved duplicate creates audit log;
+   * unapproved duplicate still fails under concurrent create attempts.
+
+## Code Plan
+
+1. Keep existing duplicate validation behavior unchanged until this ARD is accepted.
+2. Add DTO fields only after migration direction is accepted.
+3. Add platform tenant create service validation for explicit duplicate approval.
+4. Do not add approval handling to owner signup.
+5. Map unique constraint violations to `409 duplicate_resource`.
+6. Add tests before enabling the approved duplicate path.
+
+## Consequences
+
+Benefits:
+
+* Preserves default duplicate blocking.
+* Enables the documented platform-admin-approved duplicate exception.
+* Keeps owner signup safer.
+* Gives the database a clear invariant for unapproved duplicates.
+* Keeps approval metadata auditable and queryable.
+
+Trade-offs:
+
+* Database constraints cannot fully prove the approving actor is a platform admin.
+* Service-layer authorization and audit logging remain mandatory.
+* Existing schema documentation must be updated after acceptance.
+
+## Open Questions
+
+1. Should approval metadata live directly on `tenants`, or should a separate `tenant_duplicate_approvals` table be used?
+2. Should duplicate approval apply to all non-deleted statuses or only `active`, `grace_period`, `read_only`, and `suspended`?
+3. Should approved duplicates be limited to one approval per duplicate tenant, or should approval history be retained in a separate table?
+
+## Recommendation
+
+Accept the minimal column-based approach for Milestone 3 unless Product/Architecture requires approval history as a first-class table.
+
+Do not implement approved duplicate creation until this decision is accepted and the migration is added.
