@@ -17,12 +17,16 @@ import type { PasswordHashingService } from '../../auth/application/password-has
 import type { SecureTokenService } from '../../auth/application/secure-token.service';
 import type { TokenHashingService } from '../../auth/application/token-hashing.service';
 import {
+  type ActiveRoleRecord,
   type ChangeEmployeeStatusInput,
   type CreateEmployeeInput,
   type CreateInvitationInput,
   EmployeeStore,
   type EmployeeInvitationRecord,
   type EmployeeRecord,
+  type ReplaceEmployeeBranchesInput,
+  type ReplaceEmployeeRolesInput,
+  type RevokeInvitationInput,
   type UpdateEmployeeInput,
 } from './employee.store';
 import { EmployeesService } from './employees.service';
@@ -32,6 +36,10 @@ const OTHER_TENANT_ID = '22222222-2222-4222-8222-222222222222';
 const USER_ID = '33333333-3333-4333-8333-333333333333';
 const EMPLOYEE_ID = '44444444-4444-4444-8444-444444444444';
 const EMPLOYEE_USER_ID = '55555555-5555-4555-8555-555555555555';
+const INVITATION_ID = '66666666-6666-4666-8666-666666666666';
+const ROLE_ID = '77777777-7777-4777-8777-777777777777';
+const SHOP_OWNER_ROLE_ID = '88888888-8888-4888-8888-888888888888';
+const BRANCH_ID = '99999999-9999-4999-8999-999999999999';
 const NOW = new Date('2026-06-27T00:00:00.000Z');
 
 describe('EmployeesService', () => {
@@ -378,6 +386,186 @@ describe('EmployeesService', () => {
       details: [expect.objectContaining({ code: 'employee_requires_active_branch_assignment' })],
     });
   });
+
+  it('assigns active roles with users.assign_roles permission and audit logging', async () => {
+    const { service, store, auditService } = createService();
+    store.employeeById = createEmployeeRecord();
+    store.activeRoles = [{ id: ROLE_ID, roleType: 'custom' }];
+    store.roleAssignedEmployee = createEmployeeRecord({
+      roleIds: [ROLE_ID],
+      lockVersion: 1,
+    });
+
+    const response = await service.assignRoles(
+      EMPLOYEE_ID,
+      {
+        role_ids: [ROLE_ID],
+        lock_version: 0,
+        change_reason: 'Promoted.',
+      },
+      createTenantSession(['users.assign_roles']),
+    );
+
+    expect(store.roleAssignmentInputs[0]).toMatchObject({
+      tenantId: TENANT_ID,
+      userId: EMPLOYEE_USER_ID,
+      roleIds: [ROLE_ID],
+      expectedLockVersion: 0,
+    });
+    expect(response).toMatchObject({
+      role_ids: [ROLE_ID],
+      lock_version: 1,
+    });
+    expect(auditService.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'employees.roles_assigned',
+        reason: 'Promoted.',
+      }),
+    );
+  });
+
+  it('blocks demoting the last active Shop Owner through role assignment', async () => {
+    const { service, store } = createService();
+    store.employeeById = createEmployeeRecord({
+      roleIds: [SHOP_OWNER_ROLE_ID],
+    });
+    store.employeeIsOwner = true;
+    store.otherActiveOwnerCount = 0;
+    store.activeRoles = [{ id: ROLE_ID, roleType: 'custom' }];
+
+    await expect(
+      service.assignRoles(
+        EMPLOYEE_ID,
+        {
+          role_ids: [ROLE_ID],
+          lock_version: 0,
+        },
+        createTenantSession(['users.assign_roles']),
+      ),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.VALIDATION_FAILED,
+      details: [expect.objectContaining({ code: 'last_active_shop_owner' })],
+    });
+  });
+
+  it('assigns active branches and tenant-wide branch access with audit logging', async () => {
+    const { service, store, auditService } = createService();
+    store.employeeById = createEmployeeRecord();
+    store.activeBranchIds = [BRANCH_ID];
+    store.branchAssignedEmployee = createEmployeeRecord({
+      branchIds: [BRANCH_ID],
+      tenantWideBranchAccess: false,
+      lockVersion: 1,
+    });
+
+    const response = await service.assignBranches(
+      EMPLOYEE_ID,
+      {
+        branch_ids: [BRANCH_ID],
+        tenant_wide_branch_access: false,
+        lock_version: 0,
+        change_reason: 'Assigned to main branch.',
+      },
+      createTenantSession(['users.assign_branches']),
+    );
+
+    expect(store.branchAssignmentInputs[0]).toMatchObject({
+      tenantId: TENANT_ID,
+      employeeId: EMPLOYEE_ID,
+      userId: EMPLOYEE_USER_ID,
+      branchIds: [BRANCH_ID],
+      tenantWideBranchAccess: false,
+      expectedLockVersion: 0,
+    });
+    expect(response).toMatchObject({
+      branch_ids: [BRANCH_ID],
+      tenant_wide_branch_access: false,
+      lock_version: 1,
+    });
+    expect(auditService.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'employees.branches_assigned',
+        reason: 'Assigned to main branch.',
+      }),
+    );
+  });
+
+  it('blocks assigning unknown or inactive branches', async () => {
+    const { service, store } = createService();
+    store.employeeById = createEmployeeRecord();
+    store.activeBranchIds = [];
+
+    await expect(
+      service.assignBranches(
+        EMPLOYEE_ID,
+        {
+          branch_ids: [BRANCH_ID],
+          tenant_wide_branch_access: false,
+          lock_version: 0,
+        },
+        createTenantSession(['users.assign_branches']),
+      ),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.VALIDATION_FAILED,
+      details: [expect.objectContaining({ code: 'unknown_or_inactive_branch' })],
+    });
+  });
+
+  it('lists invitations and audit-logs pending invitation expiration', async () => {
+    const { service, store, auditService } = createService();
+    store.expiredInvitations = [
+      createInvitationRecord({
+        status: 'expired',
+        expiresAt: new Date('2026-06-20T00:00:00.000Z'),
+      }),
+    ];
+    store.invitations = [createInvitationRecord({ status: 'expired' })];
+
+    const response = await service.listInvitations(createTenantSession(['users.read']));
+
+    expect(response.invitations).toHaveLength(1);
+    expect(response.invitations[0]).toMatchObject({
+      id: INVITATION_ID,
+      status: 'expired',
+    });
+    expect(auditService.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorType: 'system',
+        action: 'employee_invitations.expired',
+        entityType: 'employee_invitation',
+      }),
+    );
+  });
+
+  it('revokes pending invitations and writes an audit log', async () => {
+    const { service, store, auditService } = createService();
+    store.invitationById = createInvitationRecord();
+    store.revokedInvitation = createInvitationRecord({
+      status: 'revoked',
+      revokedAt: NOW,
+    });
+
+    const response = await service.revokeInvitation(
+      INVITATION_ID,
+      { reason: 'Wrong email.' },
+      createTenantSession(['users.create']),
+    );
+
+    expect(store.revokedInvitationInputs[0]).toMatchObject({
+      tenantId: TENANT_ID,
+      invitationId: INVITATION_ID,
+    });
+    expect(response).toMatchObject({
+      status: 'revoked',
+      revoked_at: NOW.toISOString(),
+    });
+    expect(auditService.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'employee_invitations.revoked',
+        reason: 'Wrong email.',
+      }),
+    );
+  });
 });
 
 function createService(): {
@@ -480,6 +668,8 @@ function createEmployeeRecord(overrides: Partial<EmployeeRecord> = {}): Employee
     status: overrides.status ?? 'active',
     userStatus: overrides.userStatus ?? overrides.status ?? 'active',
     tenantWideBranchAccess: overrides.tenantWideBranchAccess ?? false,
+    roleIds: overrides.roleIds ?? [],
+    branchIds: overrides.branchIds ?? [],
     lockVersion: overrides.lockVersion ?? 0,
     createdAt: overrides.createdAt ?? NOW,
     updatedAt: overrides.updatedAt ?? NOW,
@@ -492,7 +682,7 @@ function createInvitationRecord(
   overrides: Partial<EmployeeInvitationRecord> = {},
 ): EmployeeInvitationRecord {
   return {
-    id: overrides.id ?? '66666666-6666-4666-8666-666666666666',
+    id: overrides.id ?? INVITATION_ID,
     tenantId: overrides.tenantId ?? TENANT_ID,
     email: overrides.email ?? 'invitee@example.com',
     normalizedEmail: overrides.normalizedEmail ?? 'invitee@example.com',
@@ -535,6 +725,20 @@ class FakeEmployeeStore extends EmployeeStore {
   otherActiveOwnerCount = 1;
   activeRoleCount = 1;
   activeBranchAssignmentCount = 1;
+  activeRoles: ActiveRoleRecord[] = [{ id: ROLE_ID, roleType: 'custom' }];
+  activeBranchIds: string[] = [BRANCH_ID];
+  roleAssignedEmployee: EmployeeRecord | null = createEmployeeRecord({
+    roleIds: [ROLE_ID],
+    lockVersion: 1,
+  });
+  branchAssignedEmployee: EmployeeRecord | null = createEmployeeRecord({
+    branchIds: [BRANCH_ID],
+    lockVersion: 1,
+  });
+  invitations: EmployeeInvitationRecord[] = [];
+  invitationById: EmployeeInvitationRecord | null = null;
+  expiredInvitations: EmployeeInvitationRecord[] = [];
+  revokedInvitation: EmployeeInvitationRecord | null = null;
   readonly listTenantIds: string[] = [];
   readonly findInputs: Array<{ tenantId: string; employeeId: string }> = [];
   readonly createdInputs: CreateEmployeeInput[] = [];
@@ -548,6 +752,9 @@ class FakeEmployeeStore extends EmployeeStore {
     readonly expiresAt: Date;
   }> = [];
   readonly invitationInputs: CreateInvitationInput[] = [];
+  readonly roleAssignmentInputs: ReplaceEmployeeRolesInput[] = [];
+  readonly branchAssignmentInputs: ReplaceEmployeeBranchesInput[] = [];
+  readonly revokedInvitationInputs: RevokeInvitationInput[] = [];
 
   async isActiveShopOwner(input: { readonly userId: string }): Promise<boolean> {
     return input.userId === EMPLOYEE_USER_ID ? this.employeeIsOwner : this.isOwner;
@@ -596,6 +803,28 @@ class FakeEmployeeStore extends EmployeeStore {
     return this.changedEmployee;
   }
 
+  async findActiveRolesByIds(): Promise<readonly ActiveRoleRecord[]> {
+    return this.activeRoles;
+  }
+
+  async findActiveBranchesByIds(): Promise<readonly string[]> {
+    return this.activeBranchIds;
+  }
+
+  async replaceEmployeeRoles(input: ReplaceEmployeeRolesInput): Promise<EmployeeRecord | null> {
+    this.roleAssignmentInputs.push(input);
+
+    return this.roleAssignedEmployee;
+  }
+
+  async replaceEmployeeBranches(
+    input: ReplaceEmployeeBranchesInput,
+  ): Promise<EmployeeRecord | null> {
+    this.branchAssignmentInputs.push(input);
+
+    return this.branchAssignedEmployee;
+  }
+
   async revokeRefreshSessionsForUser(input: { readonly userId: string }): Promise<void> {
     this.revokedUserIds.push(input.userId);
   }
@@ -629,6 +858,18 @@ class FakeEmployeeStore extends EmployeeStore {
     return this.pendingInvitationAlreadyExists;
   }
 
+  async listInvitations(): Promise<readonly EmployeeInvitationRecord[]> {
+    return this.invitations;
+  }
+
+  async findInvitationById(): Promise<EmployeeInvitationRecord | null> {
+    return this.invitationById;
+  }
+
+  async expirePendingInvitations(): Promise<readonly EmployeeInvitationRecord[]> {
+    return this.expiredInvitations;
+  }
+
   async createInvitation(input: CreateInvitationInput): Promise<EmployeeInvitationRecord> {
     this.invitationInputs.push(input);
 
@@ -640,5 +881,11 @@ class FakeEmployeeStore extends EmployeeStore {
       expiresAt: input.expiresAt,
       createdByUserId: input.createdByUserId,
     });
+  }
+
+  async revokeInvitation(input: RevokeInvitationInput): Promise<EmployeeInvitationRecord | null> {
+    this.revokedInvitationInputs.push(input);
+
+    return this.revokedInvitation;
   }
 }

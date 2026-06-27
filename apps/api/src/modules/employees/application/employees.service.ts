@@ -2,16 +2,16 @@ import { Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 
 import { GarageOsApiException } from '../../../shared/api/api-exception';
+import {
+  assertTenantLifecycleAccess,
+  TENANT_ACCESS_ACTIONS,
+} from '../../../shared/authorization/tenant-lifecycle-access.policy';
 import { AUDIT_ACTOR_TYPES, AuditService } from '../../../shared/audit/audit.service';
 import {
   API_TRANSACTION_RUNNER,
   type DatabaseTransactionRunner,
 } from '../../../shared/database/database-transaction';
 import { normalizeLockVersion } from '../../../shared/locking/optimistic-locking';
-import {
-  assertTenantLifecycleAccess,
-  TENANT_ACCESS_ACTIONS,
-} from '../../../shared/authorization/tenant-lifecycle-access.policy';
 import {
   resolveTenantContextFromAuthenticatedSession,
   type ResolvedTenantContext,
@@ -21,15 +21,19 @@ import { PasswordHashingService } from '../../auth/application/password-hashing.
 import { SecureTokenService } from '../../auth/application/secure-token.service';
 import { TokenHashingService } from '../../auth/application/token-hashing.service';
 import {
+  type AssignEmployeeBranchesRequest,
+  type AssignEmployeeRolesRequest,
   type CreateEmployeeInvitationRequest,
   type CreateEmployeeRequest,
   type EmployeeStatusChangeRequest,
+  type RevokeEmployeeInvitationRequest,
   type UpdateEmployeeRequest,
 } from '../api/employee.schemas';
 import {
+  type ActiveRoleRecord,
   EmployeeStore,
-  type EmployeeRecord,
   type EmployeeInvitationRecord,
+  type EmployeeRecord,
 } from './employee.store';
 
 export interface EmployeeResponse {
@@ -40,6 +44,8 @@ export interface EmployeeResponse {
   readonly mobile_number: string | null;
   readonly status: 'active' | 'inactive';
   readonly tenant_wide_branch_access: boolean;
+  readonly role_ids: readonly string[];
+  readonly branch_ids: readonly string[];
   readonly lock_version: number;
   readonly created_at: string;
   readonly updated_at: string;
@@ -57,11 +63,18 @@ export interface EmployeeInvitationResponse {
   readonly status: 'pending' | 'accepted' | 'revoked' | 'expired';
   readonly expires_at: string;
   readonly created_at: string;
+  readonly accepted_at: string | null;
+  readonly revoked_at: string | null;
+}
+
+export interface EmployeeInvitationListResponse {
+  readonly invitations: readonly EmployeeInvitationResponse[];
 }
 
 const IDEMPOTENCY_RETENTION_HOURS = 24;
 const INVITATION_EXPIRES_DAYS = 7;
 const PASSWORD_RESET_EXPIRES_MINUTES = 30;
+const SHOP_OWNER_ROLE_TYPE = 'shop_owner';
 
 @Injectable()
 export class EmployeesService {
@@ -260,6 +273,164 @@ export class EmployeesService {
     });
   }
 
+  async assignRoles(
+    employeeId: string,
+    request: AssignEmployeeRolesRequest,
+    session: TenantContextAuthenticatedSession,
+  ): Promise<EmployeeResponse> {
+    const context = resolveTenantContextFromAuthenticatedSession(session);
+    const isShopOwner = await this.isShopOwner(context);
+
+    assertTenantLifecycleAccess({
+      context,
+      isShopOwner,
+      action: TENANT_ACCESS_ACTIONS.OPERATIONAL_WRITE,
+    });
+
+    assertPermission(context, isShopOwner, 'users.assign_roles');
+
+    const requestedRoleIds = normalizeIdList(request.role_ids);
+
+    return this.transactionRunner.runInTransaction(async (transaction) => {
+      const existing = await this.employeeStore.findEmployeeById(
+        context.tenantId,
+        employeeId.trim(),
+        transaction,
+      );
+
+      if (existing === null) {
+        throw GarageOsApiException.resourceNotFound('Employee was not found.');
+      }
+
+      const activeRoles = await this.employeeStore.findActiveRolesByIds(
+        context.tenantId,
+        requestedRoleIds,
+        transaction,
+      );
+
+      assertAllRequestedRolesAreActive(requestedRoleIds, activeRoles);
+
+      await this.assertLastShopOwnerIsNotDemoted(existing, activeRoles, context, transaction);
+
+      const changed = await this.employeeStore.replaceEmployeeRoles(
+        {
+          tenantId: context.tenantId,
+          userId: existing.userId,
+          roleIds: requestedRoleIds,
+          expectedLockVersion: normalizeLockVersion(request.lock_version),
+          changedAt: new Date(),
+        },
+        transaction,
+      );
+
+      if (changed === null) {
+        throw GarageOsApiException.versionConflict();
+      }
+
+      await this.auditService.record({
+        tenantId: context.tenantId,
+        actorUserId: context.actorUserId,
+        actorType: AUDIT_ACTOR_TYPES.TENANT_USER,
+        action: 'employees.roles_assigned',
+        entityType: 'employee',
+        entityId: changed.id,
+        beforeJson: toEmployeeResponse(existing),
+        afterJson: toEmployeeResponse(changed),
+        metadataJson: {
+          previous_role_ids: existing.roleIds,
+          next_role_ids: changed.roleIds,
+        },
+        reason: normalizeNullableText(request.change_reason) ?? 'employee_roles_assigned',
+        client: transaction,
+      });
+
+      return toEmployeeResponse(changed);
+    });
+  }
+
+  async assignBranches(
+    employeeId: string,
+    request: AssignEmployeeBranchesRequest,
+    session: TenantContextAuthenticatedSession,
+  ): Promise<EmployeeResponse> {
+    const context = resolveTenantContextFromAuthenticatedSession(session);
+    const isShopOwner = await this.isShopOwner(context);
+
+    assertTenantLifecycleAccess({
+      context,
+      isShopOwner,
+      action: TENANT_ACCESS_ACTIONS.OPERATIONAL_WRITE,
+    });
+
+    assertPermission(context, isShopOwner, 'users.assign_branches');
+
+    const nextTenantWideBranchAccess = request.tenant_wide_branch_access === true;
+    const requestedBranchIds = normalizeIdList(request.branch_ids ?? []);
+
+    if (!nextTenantWideBranchAccess && requestedBranchIds.length === 0) {
+      throw employeeRequiresBranchAssignmentError();
+    }
+
+    return this.transactionRunner.runInTransaction(async (transaction) => {
+      const existing = await this.employeeStore.findEmployeeById(
+        context.tenantId,
+        employeeId.trim(),
+        transaction,
+      );
+
+      if (existing === null) {
+        throw GarageOsApiException.resourceNotFound('Employee was not found.');
+      }
+
+      const activeBranchIds = await this.employeeStore.findActiveBranchesByIds(
+        context.tenantId,
+        requestedBranchIds,
+        transaction,
+      );
+
+      assertAllRequestedBranchesAreActive(requestedBranchIds, activeBranchIds);
+
+      const changed = await this.employeeStore.replaceEmployeeBranches(
+        {
+          tenantId: context.tenantId,
+          employeeId: existing.id,
+          userId: existing.userId,
+          branchIds: requestedBranchIds,
+          tenantWideBranchAccess: nextTenantWideBranchAccess,
+          assignedByUserId: context.actorUserId,
+          expectedLockVersion: normalizeLockVersion(request.lock_version),
+          changedAt: new Date(),
+        },
+        transaction,
+      );
+
+      if (changed === null) {
+        throw GarageOsApiException.versionConflict();
+      }
+
+      await this.auditService.record({
+        tenantId: context.tenantId,
+        actorUserId: context.actorUserId,
+        actorType: AUDIT_ACTOR_TYPES.TENANT_USER,
+        action: 'employees.branches_assigned',
+        entityType: 'employee',
+        entityId: changed.id,
+        beforeJson: toEmployeeResponse(existing),
+        afterJson: toEmployeeResponse(changed),
+        metadataJson: {
+          previous_branch_ids: existing.branchIds,
+          next_branch_ids: changed.branchIds,
+          previous_tenant_wide_branch_access: existing.tenantWideBranchAccess,
+          next_tenant_wide_branch_access: changed.tenantWideBranchAccess,
+        },
+        reason: normalizeNullableText(request.change_reason) ?? 'employee_branches_assigned',
+        client: transaction,
+      });
+
+      return toEmployeeResponse(changed);
+    });
+  }
+
   async deactivateEmployee(
     employeeId: string,
     request: EmployeeStatusChangeRequest,
@@ -292,13 +463,7 @@ export class EmployeesService {
       }
 
       if (await this.isLastActiveShopOwner(context.tenantId, existing.userId, transaction)) {
-        throw GarageOsApiException.validationFailed([
-          {
-            field: 'employee_id',
-            code: 'last_active_shop_owner',
-            message: 'Tenant must keep at least one active Shop Owner.',
-          },
-        ]);
+        throw lastActiveShopOwnerError();
       }
 
       const changedAt = new Date();
@@ -411,6 +576,31 @@ export class EmployeesService {
     });
   }
 
+  async listInvitations(
+    session: TenantContextAuthenticatedSession,
+  ): Promise<EmployeeInvitationListResponse> {
+    const context = resolveTenantContextFromAuthenticatedSession(session);
+    const isShopOwner = await this.isShopOwner(context);
+
+    assertTenantLifecycleAccess({
+      context,
+      isShopOwner,
+      action: TENANT_ACCESS_ACTIONS.OPERATIONAL_READ,
+    });
+
+    assertPermission(context, isShopOwner, 'users.read');
+
+    return this.transactionRunner.runInTransaction(async (transaction) => {
+      await this.expirePendingInvitations(context, new Date(), transaction);
+
+      const invitations = await this.employeeStore.listInvitations(context.tenantId, transaction);
+
+      return {
+        invitations: invitations.map(toInvitationResponse),
+      };
+    });
+  }
+
   async createInvitation(
     request: CreateEmployeeInvitationRequest,
     session: TenantContextAuthenticatedSession,
@@ -431,6 +621,8 @@ export class EmployeesService {
     const invitationToken = this.secureTokenService.generateOpaqueToken();
 
     return this.transactionRunner.runInTransaction(async (transaction) => {
+      await this.expirePendingInvitations(context, now, transaction);
+
       if (
         await this.employeeStore.activeUserExistsByNormalizedEmail(normalizedEmail, transaction)
       ) {
@@ -482,6 +674,73 @@ export class EmployeesService {
     });
   }
 
+  async revokeInvitation(
+    invitationId: string,
+    request: RevokeEmployeeInvitationRequest,
+    session: TenantContextAuthenticatedSession,
+  ): Promise<EmployeeInvitationResponse> {
+    const context = resolveTenantContextFromAuthenticatedSession(session);
+    const isShopOwner = await this.isShopOwner(context);
+
+    assertTenantLifecycleAccess({
+      context,
+      isShopOwner,
+      action: TENANT_ACCESS_ACTIONS.OPERATIONAL_WRITE,
+    });
+
+    assertPermission(context, isShopOwner, 'users.create');
+
+    return this.transactionRunner.runInTransaction(async (transaction) => {
+      const now = new Date();
+      await this.expirePendingInvitations(context, now, transaction);
+
+      const existing = await this.employeeStore.findInvitationById(
+        context.tenantId,
+        invitationId.trim(),
+        transaction,
+      );
+
+      if (existing === null) {
+        throw GarageOsApiException.resourceNotFound('Employee invitation was not found.');
+      }
+
+      const revoked = await this.employeeStore.revokeInvitation(
+        {
+          tenantId: context.tenantId,
+          invitationId: existing.id,
+          revokedAt: now,
+        },
+        transaction,
+      );
+
+      if (revoked === null) {
+        throw GarageOsApiException.validationFailed([
+          {
+            field: 'invitation_id',
+            code: 'employee_invitation_not_revokable',
+            message:
+              'Employee invitation must be pending, unused, unexpired, and not revoked before it can be revoked.',
+          },
+        ]);
+      }
+
+      await this.auditService.record({
+        tenantId: context.tenantId,
+        actorUserId: context.actorUserId,
+        actorType: AUDIT_ACTOR_TYPES.TENANT_USER,
+        action: 'employee_invitations.revoked',
+        entityType: 'employee_invitation',
+        entityId: revoked.id,
+        beforeJson: toInvitationResponse(existing),
+        afterJson: toInvitationResponse(revoked),
+        reason: normalizeNullableText(request.reason) ?? 'employee_invitation_revoked',
+        client: transaction,
+      });
+
+      return toInvitationResponse(revoked);
+    });
+  }
+
   private isShopOwner(context: ResolvedTenantContext): Promise<boolean> {
     return this.employeeStore.isActiveShopOwner({
       tenantId: context.tenantId,
@@ -494,7 +753,7 @@ export class EmployeesService {
     userId: string,
     client: Parameters<EmployeeStore['countActiveShopOwners']>[1],
   ): Promise<boolean> {
-    const isOwner = await this.employeeStore.isActiveShopOwner({ tenantId, userId });
+    const isOwner = await this.employeeStore.isActiveShopOwner({ tenantId, userId }, client);
 
     if (!isOwner) {
       return false;
@@ -509,6 +768,43 @@ export class EmployeesService {
     );
 
     return otherOwnerCount === 0;
+  }
+
+  private async assertLastShopOwnerIsNotDemoted(
+    employee: EmployeeRecord,
+    nextRoles: readonly ActiveRoleRecord[],
+    context: ResolvedTenantContext,
+    client: Parameters<EmployeeStore['countActiveShopOwners']>[1],
+  ): Promise<void> {
+    const currentlyShopOwner = await this.employeeStore.isActiveShopOwner(
+      {
+        tenantId: context.tenantId,
+        userId: employee.userId,
+      },
+      client,
+    );
+
+    if (!currentlyShopOwner) {
+      return;
+    }
+
+    const remainsShopOwner = nextRoles.some((role) => role.roleType === SHOP_OWNER_ROLE_TYPE);
+
+    if (remainsShopOwner) {
+      return;
+    }
+
+    const otherOwnerCount = await this.employeeStore.countActiveShopOwners(
+      {
+        tenantId: context.tenantId,
+        excludingUserId: employee.userId,
+      },
+      client,
+    );
+
+    if (otherOwnerCount === 0) {
+      throw lastActiveShopOwnerError();
+    }
   }
 
   private async assertReactivateAllowed(
@@ -552,15 +848,36 @@ export class EmployeesService {
         );
 
       if (activeBranchAssignmentCount === 0) {
-        throw GarageOsApiException.validationFailed([
-          {
-            field: 'employee_id',
-            code: 'employee_requires_active_branch_assignment',
-            message:
-              'Employee must have an active branch assignment or tenant-wide branch access before reactivation.',
-          },
-        ]);
+        throw employeeRequiresBranchAssignmentError();
       }
+    }
+  }
+
+  private async expirePendingInvitations(
+    context: ResolvedTenantContext,
+    now: Date,
+    client: Parameters<EmployeeStore['expirePendingInvitations']>[1],
+  ): Promise<void> {
+    const expiredInvitations = await this.employeeStore.expirePendingInvitations(
+      {
+        tenantId: context.tenantId,
+        expiredAt: now,
+      },
+      client,
+    );
+
+    for (const invitation of expiredInvitations) {
+      await this.auditService.record({
+        tenantId: context.tenantId,
+        actorUserId: null,
+        actorType: AUDIT_ACTOR_TYPES.SYSTEM,
+        action: 'employee_invitations.expired',
+        entityType: 'employee_invitation',
+        entityId: invitation.id,
+        afterJson: toInvitationResponse(invitation),
+        reason: 'employee_invitation_expired',
+        client,
+      });
     }
   }
 }
@@ -574,6 +891,8 @@ function toEmployeeResponse(employee: EmployeeRecord): EmployeeResponse {
     mobile_number: employee.mobileNumber,
     status: employee.status,
     tenant_wide_branch_access: employee.tenantWideBranchAccess,
+    role_ids: employee.roleIds,
+    branch_ids: employee.branchIds,
     lock_version: employee.lockVersion,
     created_at: employee.createdAt.toISOString(),
     updated_at: employee.updatedAt.toISOString(),
@@ -589,6 +908,8 @@ function toInvitationResponse(invitation: EmployeeInvitationRecord): EmployeeInv
     status: invitation.status,
     expires_at: invitation.expiresAt.toISOString(),
     created_at: invitation.createdAt.toISOString(),
+    accepted_at: invitation.acceptedAt?.toISOString() ?? null,
+    revoked_at: invitation.revokedAt?.toISOString() ?? null,
   };
 }
 
@@ -604,6 +925,10 @@ function assertPermission(
 
 function normalizeEmail(value: string): string {
   return value.trim().toLowerCase();
+}
+
+function normalizeIdList(values: readonly string[]): readonly string[] {
+  return [...new Set(values.map((value) => value.trim()))].sort();
 }
 
 function normalizeNullableText(value: string | null | undefined): string | null {
@@ -624,6 +949,69 @@ function invalidEmployeeStatus(expectedStatus: 'active' | 'inactive'): GarageOsA
       message: `Employee must be ${expectedStatus} before this action.`,
     },
   ]);
+}
+
+function employeeRequiresBranchAssignmentError(): GarageOsApiException {
+  return GarageOsApiException.validationFailed([
+    {
+      field: 'branch_ids',
+      code: 'employee_requires_active_branch_assignment',
+      message:
+        'Employee must have an active branch assignment or tenant-wide branch access before access can be enabled.',
+    },
+  ]);
+}
+
+function lastActiveShopOwnerError(): GarageOsApiException {
+  return GarageOsApiException.validationFailed([
+    {
+      field: 'employee_id',
+      code: 'last_active_shop_owner',
+      message: 'Tenant must keep at least one active Shop Owner.',
+    },
+  ]);
+}
+
+function assertAllRequestedRolesAreActive(
+  requestedRoleIds: readonly string[],
+  activeRoles: readonly ActiveRoleRecord[],
+): void {
+  const activeRoleIds = new Set(activeRoles.map((role) => role.id));
+  const missingRoleIds = requestedRoleIds.filter((roleId) => !activeRoleIds.has(roleId));
+
+  if (missingRoleIds.length === 0) {
+    return;
+  }
+
+  throw GarageOsApiException.validationFailed(
+    missingRoleIds.map((roleId) => ({
+      field: 'role_ids',
+      code: 'unknown_or_inactive_role',
+      message: `Role is unknown or inactive for this tenant: ${roleId}`,
+    })),
+  );
+}
+
+function assertAllRequestedBranchesAreActive(
+  requestedBranchIds: readonly string[],
+  activeBranchIds: readonly string[],
+): void {
+  const activeBranchIdSet = new Set(activeBranchIds);
+  const missingBranchIds = requestedBranchIds.filter(
+    (branchId) => !activeBranchIdSet.has(branchId),
+  );
+
+  if (missingBranchIds.length === 0) {
+    return;
+  }
+
+  throw GarageOsApiException.validationFailed(
+    missingBranchIds.map((branchId) => ({
+      field: 'branch_ids',
+      code: 'unknown_or_inactive_branch',
+      message: `Branch is unknown or inactive for this tenant: ${branchId}`,
+    })),
+  );
 }
 
 async function translateDuplicateActiveEmail<Result>(work: () => Promise<Result>): Promise<Result> {
