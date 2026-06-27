@@ -11,6 +11,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { BranchModule } from './modules/branches/branch.module';
 import { EmployeesModule } from './modules/employees/employees.module';
 import { PlatformModule } from './modules/platform/platform.module';
+import { RolesModule } from './modules/roles/role.module';
 import { ShopModule } from './modules/shop/shop.module';
 import { AuditModule } from './shared/audit/audit.module';
 import { IdempotencyModule } from './shared/idempotency/idempotency.module';
@@ -31,6 +32,7 @@ export class HealthController {
   imports: [
     AuthModule,
     PlatformModule,
+    RolesModule,
     ShopModule,
     BranchModule,
     EmployeesModule,

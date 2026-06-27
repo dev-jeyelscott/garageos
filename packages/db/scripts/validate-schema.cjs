@@ -9,7 +9,7 @@ require('dotenv').config({
 const DATABASE_URL = process.env.DATABASE_URL;
 
 const EXPECTED = {
-  migrationCount: 17,
+  migrationCount: 18,
   publicTableCount: 106,
   subscriptionPlans: 3,
   subscriptionPlanLimits: 27,
@@ -147,6 +147,33 @@ async function validateTenantDuplicateApprovalSchema(client) {
   assertEqual('tenant duplicate approval audit index', duplicateApprovalAuditIndexCount, 1);
 }
 
+async function validateRoleManagementSchema(client) {
+  const roleLockVersionColumnCount = await count(
+    client,
+    `
+      select count(*)
+      from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'roles'
+        and column_name = 'lock_version'
+        and data_type = 'integer'
+    `,
+  );
+
+  const roleTenantStatusIndexCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_indexes
+      where schemaname = 'public'
+        and indexname = 'idx_roles_tenant_status'
+    `,
+  );
+
+  assertEqual('roles lock_version column', roleLockVersionColumnCount, 1);
+  assertEqual('roles tenant status index', roleTenantStatusIndexCount, 1);
+}
+
 async function validateMoneyPrecision(client) {
   const result = await client.query(`
     select table_name, column_name, numeric_precision, numeric_scale
@@ -226,6 +253,7 @@ async function main() {
     await validateMigrationFiles(client);
     await validateBaselineCounts(client);
     await validateTenantDuplicateApprovalSchema(client);
+    await validateRoleManagementSchema(client);
     await validateMoneyPrecision(client);
     await validateQuantityPrecision(client);
 
