@@ -5,6 +5,7 @@ import { MODULE_METADATA } from '@nestjs/common/constants';
 import { describe, expect, it, vi } from 'vitest';
 
 import { AppModule, HealthController } from './app.module';
+import { BranchModule } from './modules/branches/branch.module';
 import { PlatformModule } from './modules/platform/platform.module';
 import { RequestContextMiddleware } from './shared/observability/request-context.middleware';
 
@@ -23,6 +24,14 @@ describe('AppModule', () => {
       | undefined;
 
     expect(imports).toContain(PlatformModule);
+  });
+
+  it('wires the branch module through the real application module', () => {
+    const imports = Reflect.getMetadata(MODULE_METADATA.IMPORTS, AppModule) as
+      | unknown[]
+      | undefined;
+
+    expect(imports).toContain(BranchModule);
   });
 
   it('applies request context middleware to all routes', () => {

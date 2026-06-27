@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 
 import { AuthModule } from './modules/auth/auth.module';
+import { BranchModule } from './modules/branches/branch.module';
 import { EmployeesModule } from './modules/employees/employees.module';
 import { PlatformModule } from './modules/platform/platform.module';
 import { ShopModule } from './modules/shop/shop.module';
@@ -31,6 +32,7 @@ export class HealthController {
     AuthModule,
     PlatformModule,
     ShopModule,
+    BranchModule,
     EmployeesModule,
     AuditModule,
     IdempotencyModule,

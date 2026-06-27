@@ -19,12 +19,10 @@ import {
   type ChangeBranchStatusInput,
   type CreateBranchInput,
   type CreateBranchStatusEventInput,
-  ShopStore,
-  type ShopOnboardingStateRecord,
+  BranchStore,
   type UpdateBranchInput,
-  type UpsertShopProfileInput,
-} from './shop.store';
-import { ShopService } from './shop.service';
+} from './branch.store';
+import { BranchService } from './branch.service';
 
 const TENANT_ID = '11111111-1111-4111-8111-111111111111';
 const OTHER_TENANT_ID = '22222222-2222-4222-8222-222222222222';
@@ -32,7 +30,7 @@ const USER_ID = '33333333-3333-4333-8333-333333333333';
 const BRANCH_ID = '44444444-4444-4444-8444-444444444444';
 const NOW = new Date('2026-06-27T00:00:00.000Z');
 
-describe('ShopService branch management', () => {
+describe('BranchService', () => {
   it('lists tenant-scoped branches only with branches.read permission', async () => {
     const { service, store } = createService();
     store.isOwner = false;
@@ -66,7 +64,10 @@ describe('ShopService branch management', () => {
     store.branchById = null;
 
     await expect(
-      service.getBranch(BRANCH_ID, createTenantSession(['branches.read'], { tenantId: OTHER_TENANT_ID })),
+      service.getBranch(
+        BRANCH_ID,
+        createTenantSession(['branches.read'], { tenantId: OTHER_TENANT_ID }),
+      ),
     ).rejects.toMatchObject({
       code: API_ERROR_CODES.RESOURCE_NOT_FOUND,
     });
@@ -148,7 +149,11 @@ describe('ShopService branch management', () => {
     });
 
     await expect(
-      service.updateBranch(BRANCH_ID, createUpdateBranchRequest(), createTenantSession(['branches.update'])),
+      service.updateBranch(
+        BRANCH_ID,
+        createUpdateBranchRequest(),
+        createTenantSession(['branches.update']),
+      ),
     ).rejects.toMatchObject({
       code: API_ERROR_CODES.DUPLICATE_RESOURCE,
     });
@@ -160,7 +165,11 @@ describe('ShopService branch management', () => {
     store.updatedBranch = null;
 
     await expect(
-      service.updateBranch(BRANCH_ID, createUpdateBranchRequest(), createTenantSession(['branches.update'])),
+      service.updateBranch(
+        BRANCH_ID,
+        createUpdateBranchRequest(),
+        createTenantSession(['branches.update']),
+      ),
     ).rejects.toMatchObject({
       code: API_ERROR_CODES.VERSION_CONFLICT,
     });
@@ -284,11 +293,11 @@ describe('ShopService branch management', () => {
 });
 
 function createService(): {
-  readonly service: ShopService;
-  readonly store: FakeShopStore;
+  readonly service: BranchService;
+  readonly store: FakeBranchStore;
   readonly auditService: AuditService;
 } {
-  const store = new FakeShopStore();
+  const store = new FakeBranchStore();
   const auditService = {
     record: vi.fn(
       async (input: unknown): Promise<AuditLogRecord> => ({
@@ -320,7 +329,7 @@ function createService(): {
   } as unknown as AuditService;
 
   return {
-    service: new ShopService(store, new FakeTransactionRunner(), auditService),
+    service: new BranchService(store, new FakeTransactionRunner(), auditService),
     store,
     auditService,
   };
@@ -407,7 +416,7 @@ class FakeTransactionRunner implements DatabaseTransactionRunner {
   }
 }
 
-class FakeShopStore extends ShopStore {
+class FakeBranchStore extends BranchStore {
   isOwner = false;
   activeBranchCount = 0;
   maxActiveBranches = 10;
@@ -427,17 +436,6 @@ class FakeShopStore extends ShopStore {
 
   async isActiveShopOwner(): Promise<boolean> {
     return this.isOwner;
-  }
-
-  async getOnboardingState(): Promise<ShopOnboardingStateRecord> {
-    throw new Error('Not implemented in branch management tests.');
-  }
-
-  async upsertShopProfile(
-    _input: UpsertShopProfileInput,
-    _client: DatabaseQueryClient,
-  ): Promise<void> {
-    throw new Error('Not implemented in branch management tests.');
   }
 
   async countActiveBranches(): Promise<number> {
@@ -488,13 +486,5 @@ class FakeShopStore extends ShopStore {
 
   async findBranchDeactivationBlockers(): Promise<readonly BranchDeactivationBlocker[]> {
     return this.deactivationBlockers;
-  }
-
-  async markOnboardingComplete(): Promise<void> {
-    throw new Error('Not implemented in branch management tests.');
-  }
-
-  async createRenewalRequestAuditMarker(): Promise<void> {
-    throw new Error('Not implemented in branch management tests.');
   }
 }
