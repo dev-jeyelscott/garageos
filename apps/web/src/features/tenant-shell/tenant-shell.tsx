@@ -27,12 +27,29 @@ interface NavItem {
 }
 
 const navItems: readonly NavItem[] = [
-  { label: 'Dashboard', href: '/dashboard', module: 'dashboard', requiredPermission: 'reports.view_basic', mobilePrimary: true },
-  { label: 'Customers', href: '/customers', module: 'customers', requiredPermission: 'customers.read', mobilePrimary: true },
+  {
+    label: 'Dashboard',
+    href: '/dashboard',
+    module: 'dashboard',
+    requiredPermission: 'reports.view_basic',
+    mobilePrimary: true,
+  },
+  {
+    label: 'Customers',
+    href: '/customers',
+    module: 'customers',
+    requiredPermission: 'customers.read',
+    mobilePrimary: true,
+  },
   { label: 'Branches', href: '/branches', module: 'branches', requiredPermission: 'branches.read' },
   { label: 'Employees', href: '/employees', module: 'employees', requiredPermission: 'users.read' },
   { label: 'Roles', href: '/roles', module: 'roles', requiredPermission: 'roles.read' },
-  { label: 'Tags', href: '/customer-tags', module: 'customer_tags', requiredPermission: 'customers.read' },
+  {
+    label: 'Tags',
+    href: '/customer-tags',
+    module: 'customer_tags',
+    requiredPermission: 'customers.read',
+  },
 ];
 
 export function TenantAppShell({
@@ -180,7 +197,10 @@ function OfflineIndicator({ isOffline }: { readonly isOffline: boolean }) {
   }
 
   return (
-    <div className="rounded-xl border border-border bg-secondary px-4 py-3 text-sm text-secondary-foreground" role="status">
+    <div
+      className="rounded-xl border border-border bg-secondary px-4 py-3 text-sm text-secondary-foreground"
+      role="status"
+    >
       <div className="font-semibold">Offline read-only mode</div>
       <p className="mt-1 text-muted-foreground">
         Creates, edits, approvals, uploads, payments, and settings changes are blocked until the
@@ -278,12 +298,34 @@ export function StandardStateGallery() {
   return (
     <div className="grid gap-3 md:grid-cols-2">
       <LoadingState />
-      <EmptyState title="No records yet" message="Records will appear here when the API returns data." />
-      <BlockedState title="Forbidden" message="Your role does not include the required permission." tone="danger" />
-      <BlockedState title="Subscription blocked" message="This action is unavailable for the current tenant status or plan." tone="warning" />
-      <BlockedState title="Offline blocked" message="Reconnect before creating, editing, approving, uploading, or changing settings." />
-      <BlockedState title="Validation failed" message="Field errors from the API are shown next to the affected inputs." tone="warning" />
-      <BlockedState title="Conflict" message="The record changed or the idempotency key was reused. Reload and retry." tone="warning" />
+      <EmptyState
+        title="No records yet"
+        message="Records will appear here when the API returns data."
+      />
+      <BlockedState
+        title="Forbidden"
+        message="Your role does not include the required permission."
+        tone="danger"
+      />
+      <BlockedState
+        title="Subscription blocked"
+        message="This action is unavailable for the current tenant status or plan."
+        tone="warning"
+      />
+      <BlockedState
+        title="Offline blocked"
+        message="Reconnect before creating, editing, approving, uploading, or changing settings."
+      />
+      <BlockedState
+        title="Validation failed"
+        message="Field errors from the API are shown next to the affected inputs."
+        tone="warning"
+      />
+      <BlockedState
+        title="Conflict"
+        message="The record changed or the idempotency key was reused. Reload and retry."
+        tone="warning"
+      />
     </div>
   );
 }
@@ -317,7 +359,11 @@ export function GuardedPrimaryAction({
     );
   }
 
-  return <ButtonLink href={href} className="w-full sm:w-auto">{label}</ButtonLink>;
+  return (
+    <ButtonLink href={href} className="w-full sm:w-auto">
+      {label}
+    </ButtonLink>
+  );
 }
 
 const tenantStatusCopy: Record<
@@ -341,7 +387,8 @@ const tenantStatusCopy: Record<
   },
   read_only: {
     title: 'Read-only tenant',
-    message: 'Operational writes and settings changes are blocked except documented renewal or export actions.',
+    message:
+      'Operational writes and settings changes are blocked except documented renewal or export actions.',
     className: 'border-border bg-secondary text-secondary-foreground',
   },
   suspended: {

@@ -74,7 +74,11 @@ export async function MasterDataListScreen({ kind }: { readonly kind: MasterData
       ) : (
         <div className="grid gap-3">
           {records.map((record) => (
-            <MasterDataRecordCard key={record.id} record={record} href={`${config.route}/${record.id}`} />
+            <MasterDataRecordCard
+              key={record.id}
+              record={record}
+              href={`${config.route}/${record.id}`}
+            />
           ))}
         </div>
       )}
@@ -107,7 +111,11 @@ export async function MasterDataDetailScreen({
       <PageHeader
         title={record.title}
         description={`${config.title} detail shell. Backend authorization and validation remain authoritative.`}
-        action={<ButtonLink href={`${config.route}/${record.id}/edit`} variant="secondary">Edit</ButtonLink>}
+        action={
+          <ButtonLink href={`${config.route}/${record.id}/edit`} variant="secondary">
+            Edit
+          </ButtonLink>
+        }
       />
       <Card className="space-y-4 p-4">
         <div className="flex items-center justify-between gap-3">
@@ -122,7 +130,9 @@ export async function MasterDataDetailScreen({
         <dl className="grid gap-3 sm:grid-cols-2">
           {record.fields.map((field) => (
             <div key={field.name} className="rounded-xl border border-border p-3">
-              <dt className="text-xs font-semibold uppercase text-muted-foreground">{field.label}</dt>
+              <dt className="text-xs font-semibold uppercase text-muted-foreground">
+                {field.label}
+              </dt>
               <dd className="mt-1 text-sm">{field.value}</dd>
             </div>
           ))}
@@ -182,7 +192,9 @@ export function MasterDataFormScreen({
         </div>
       </Card>
       <Card className="sticky bottom-20 z-10 flex flex-col gap-2 p-3 md:bottom-4 sm:flex-row sm:justify-end">
-        <ButtonLink href={config.route} variant="secondary">Cancel</ButtonLink>
+        <ButtonLink href={config.route} variant="secondary">
+          Cancel
+        </ButtonLink>
         <button
           type="button"
           className="min-h-11 rounded-xl border border-border bg-secondary px-4 text-sm font-semibold text-muted-foreground"

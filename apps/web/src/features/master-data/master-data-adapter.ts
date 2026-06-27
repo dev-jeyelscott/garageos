@@ -88,7 +88,11 @@ export const masterDataModules: Record<MasterDataKind, MasterDataModuleConfig> =
         status: 'active',
         fields: [
           { name: 'name', label: 'Role name', value: 'Shop Owner', required: true },
-          { name: 'permission_summary', label: 'Permission summary', value: 'All tenant permissions' },
+          {
+            name: 'permission_summary',
+            label: 'Permission summary',
+            value: 'All tenant permissions',
+          },
         ],
       },
     ],
