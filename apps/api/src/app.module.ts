@@ -9,6 +9,7 @@ import {
 
 import { AuthModule } from './modules/auth/auth.module';
 import { BranchModule } from './modules/branches/branch.module';
+import { CustomersModule } from './modules/customers/customers.module';
 import { EmployeesModule } from './modules/employees/employees.module';
 import { PlatformModule } from './modules/platform/platform.module';
 import { RolesModule } from './modules/roles/role.module';
@@ -36,6 +37,7 @@ export class HealthController {
     ShopModule,
     BranchModule,
     EmployeesModule,
+    CustomersModule,
     AuditModule,
     IdempotencyModule,
   ],
