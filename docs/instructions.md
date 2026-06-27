@@ -1,39 +1,31 @@
 # GarageOS Working Instructions
 
-Follow these instructions throughout the GarageOS project.
-
-These instructions are optimized for safe, accurate, step-by-step execution without redoing completed work.
+Always read this file before GarageOS work. Keep responses accurate, source-aligned, and concise.
 
 ---
 
 ## 1. Source of Truth
 
-Always follow this priority order:
+Follow this priority order:
 
 1. Project documentation
-2. Approved architecture decisions / ADRs
-3. Existing repository implementation when available
+2. Accepted ADRs / architecture decisions
+3. Verified repository implementation, when available
 4. Previous chat handoff context
-5. User-provided command output, screenshots, patches, ZIPs, pasted code, or uploaded files
+5. User-provided command output, screenshots, ZIPs, pasted code, uploaded files, or local file contents
 
-Do not invent requirements, workflows, routes, schema fields, permissions, architecture behavior, or undocumented implementation details.
+Rules:
 
-If documentation conflicts with repository implementation:
-
-- Identify the conflict.
-- Follow the approved documentation by default.
-- Do not change documented behavior unless I explicitly approve a documentation update.
-
-If repository state conflicts with previous chat context:
-
-- Treat the current verified repository state as the implementation source of truth.
-- If repository access is unavailable or GitHub appears behind my local state, ask for the minimum needed files, command output, screenshots, patch, or ZIP before giving code-specific changes.
+- Do not invent requirements, routes, workflows, schema fields, permissions, architecture behavior, or undocumented implementation details.
+- If documentation conflicts with implementation, identify the conflict and follow approved documentation unless I explicitly approve a documentation change.
+- If repo state conflicts with chat history, trust verified repo state.
+- If repo access is unavailable or GitHub may be behind local state, ask only for the minimum needed files/output before giving code-specific changes.
 
 ---
 
-## 2. Repository Access and GitHub Safety Rules
+## 2. Repository and GitHub Safety
 
-Repository reference:
+Repository:
 
 ```text
 https://github.com/dev-jeyelscott/garageos
@@ -41,101 +33,63 @@ https://github.com/dev-jeyelscott/garageos
 
 The GitHub repository is read-only for AI-assisted work.
 
-Do not assume you can clone, refresh, modify, commit, push, or directly update the GitHub repository unless tool access actually proves that capability in the current chat.
+Do:
 
-For every coding, debugging, refactoring, implementation, or file-update session:
+- Inspect repository files only when tool access is available.
+- Use user-provided files/output as the current implementation source when repo access is unavailable.
+- Review only files relevant to the current step unless a broader issue is proven.
+- Confirm paths, package scripts, tests, naming conventions, module boundaries, and current implementation patterns before proposing code changes.
+- Run local validation only when tool access allows.
+- State clearly when validation was not run.
 
-1. Inspect available repository files only when repository access is actually available in the current chat/tool environment.
-2. If repository access is unavailable, clearly say so.
-3. Ask for the minimum needed files, command output, screenshots, patch, ZIP, or pasted code before giving code-specific changes.
-4. Use user-provided files and command output as the current implementation source of truth.
-5. Review only the files relevant to the current step unless a broader issue appears.
-6. Confirm existing file paths and current implementation patterns before proposing changes.
-7. Verify whether the last completed step is committed/pushed only from user-provided `git status`, logs, screenshots, or repository output.
-8. Try proposed changes locally only when tool access allows.
-9. Run validation commands only when tool access allows.
-10. Do not claim validation passed unless it actually ran and passed.
+Do not:
 
-Allowed:
+- Push, commit, create branches, open PRs, edit GitHub files, change settings/secrets/workflows, or perform any remote write operation.
+- Claim validation passed unless it actually ran and passed.
+- Return Git patch files, `.patch` files, `git apply` instructions, or unified-diff output unless I explicitly ask for a patch.
 
-- Inspect repository files if accessible.
-- Read user-provided repository files, command output, screenshots, patches, ZIPs, or pasted code.
-- Make local sandbox changes only when tool access allows.
-- Run local validation commands only when tool access allows.
-- Provide patches, replacement files, diffs, commands, and commit messages for the user to apply locally.
-
-Not allowed:
-
-- Do not run `git push`.
-- Do not create, update, or delete remote branches.
-- Do not open, update, merge, or close pull requests.
-- Do not commit directly to GitHub.
-- Do not edit files through the GitHub UI, GitHub API, GitHub MCP, or any remote repository write tool.
-- Do not change GitHub repository settings, secrets, workflows, issues, releases, tags, or permissions.
-- Do not perform any action that mutates the remote repository.
-
-All implementation changes must be returned as instructions, patches, diffs, commands, or code blocks.
-
-The user is responsible for applying, committing, and pushing changes.
+Implementation changes must be returned as copy-paste-ready code blocks and local instructions. I apply, validate, commit, and push changes.
 
 ---
 
 ## 3. Continuity Rules
 
-Continue from the last completed step, not from the beginning.
+Continue from the last completed step. Do not restart the project explanation or redo completed work unless:
 
-Do not restart the project explanation unless I ask.
-
-Do not re-explain completed milestones or completed steps.
-
-Do not redo completed work unless:
-
-- The verified repository state shows it is missing.
-- Tests or typecheck prove it is broken.
+- Verified repo state shows the work is missing.
+- Tests/typecheck prove it is broken.
 - A later requirement requires a targeted refactor.
 - I explicitly ask to revisit it.
 
-When continuing from a previous step, first identify:
+When continuing, first identify:
 
 - Last completed step
 - Current milestone
 - Next incomplete step
-- Files likely affected
-- Validation commands to run
+- Likely affected files
+- Validation commands
 
-Then proceed directly.
-
-When I provide an error, failed test, typecheck output, screenshot, or file content:
+When I provide an error, failed command, screenshot, or file content:
 
 - Diagnose the failure.
-- Focus on the smallest safe fix.
-- Do not redesign unrelated areas.
-- Do not move to the next step until the current failure is fixed or explicitly deferred.
+- Fix the smallest safe area.
+- Do not redesign unrelated code.
+- Do not move to the next step until the issue is fixed or explicitly deferred.
 
-When I say:
-
-```text
-all pass
-```
-
-Treat the current step as completed and provide:
+When I say `all pass`, treat the current step as complete and provide:
 
 1. Short completion confirmation
-2. Meaningful commit message
+2. Commit message
 3. Next recommended step
-4. Copy-paste next-chat handoff prompt
+4. Next-chat handoff prompt
 
 ---
 
 ## 4. Execution Modes
 
-Use the mode that matches the request.
-
 ### Planning Mode
 
-Use when starting a milestone, defining a feature, or creating a specification.
-
-Use this format:
+Use for milestones, feature definitions, and specifications.
 
 ```md
 ## Understanding
@@ -155,9 +109,7 @@ Use this format:
 
 ### Coding Mode
 
-Use when implementing a step.
-
-Use this format:
+Use for implementation, refactoring, tests, or file updates.
 
 ```md
 ## Step X.Y — Step Name
@@ -170,7 +122,9 @@ Use this format:
 
 ### Files to Update
 
-### Implementation
+### Copy-Paste Changes
+
+### Implementation Summary
 
 ### Validation Commands
 
@@ -183,13 +137,11 @@ Use this format:
 ### Next-Chat Handoff Prompt
 ```
 
-If repository access is unavailable, the `Repository Review` section must clearly state what was unavailable and what user-provided files/output were used instead.
+`Copy-Paste Changes` must include exact paths, action labels, and complete code blocks. If repo access is unavailable, state what was unavailable and which user-provided files/output were used.
 
 ### Debugging Mode
 
-Use when I provide an error, failed test, broken command, or screenshot.
-
-Use this format:
+Use for errors, failed tests, broken commands, or screenshots.
 
 ```md
 ## Diagnosis
@@ -200,6 +152,8 @@ Use this format:
 
 ## Files to Update
 
+## Copy-Paste Fix
+
 ## Validation Commands
 
 ## Expected Result
@@ -207,15 +161,9 @@ Use this format:
 ## Commit Message
 ```
 
-Focus only on the failing area unless the failure proves a larger design issue.
-
 ### Status Mode
 
-Use when I ask what is done, what remains, or how far we are.
-
-Use a compact checklist or table.
-
-Mark items as:
+Use for progress/status questions. Provide a compact checklist or table using:
 
 - Done
 - In progress
@@ -223,36 +171,119 @@ Mark items as:
 - Blocked
 - Needs repo verification
 
-Do not include code patches in Status Mode unless I ask.
+Do not include code changes in Status Mode unless asked.
 
 ---
 
-## 5. Step Sizing Rules
+## 5. Copy-Paste Coding Delivery
+
+Use the smallest safe format.
+
+### Replace block
+
+````md
+### File: path/to/file.ts
+
+Action: Replace block
+
+Find this code:
+
+```ts
+old code
+```
+
+Replace it with:
+
+```ts
+new code();
+```
+````
+
+### Insert block
+
+````md
+### File: path/to/file.ts
+
+Action: Insert block
+
+Insert this code after `specific existing line or block`:
+
+```ts
+new code();
+```
+````
+
+### Remove block
+
+````md
+### File: path/to/file.ts
+
+Action: Remove block
+
+Remove this code:
+
+```ts
+old code
+```
+````
+
+### Create file
+
+````md
+### File: path/to/new-file.ts
+
+Action: Create file
+
+```ts
+full file content
+```
+````
+
+### Replace entire file
+
+````md
+### File: path/to/file.ts
+
+Action: Replace entire file
+
+```ts
+full file content
+```
+````
+
+Rules:
+
+- Always include exact file paths.
+- Prefer targeted replacements over full-file replacement for large files.
+- Keep code blocks syntactically complete and include required imports.
+- Do not use placeholders unless clearly marked.
+- Do not provide partial code that cannot compile unless the task is explanatory only.
+- State surrounding placement when needed.
+- Never say copy-paste changes were validated unless validation actually ran and passed.
+
+Every implementation response should include files to update, copy-paste changes, validation commands, expected result, commit message, and next-chat handoff prompt.
+
+---
+
+## 6. Step Sizing
 
 Work in small, safe, testable increments.
 
-Each step should be independently understandable, testable, and commit-ready.
+A good step has:
 
-Prefer one focused step per response, especially during Milestone 2 and other foundation work.
-
-A good step usually includes:
-
-- One primary objective
-- A small set of affected files
-- Unit tests or contract tests where practical
-- Typecheck/test validation
-- One meaningful commit message
+- One objective
+- A small affected file set
+- Tests where practical
+- Exact validation commands
+- Copy-paste-ready changes
+- One commit message
 - One next-chat handoff prompt
 
-Do not bundle unrelated changes just to move faster.
-
-Speed comes from avoiding rework, not unsafe batching.
+Do not bundle unrelated changes. Speed comes from avoiding rework, not unsafe batching.
 
 ---
 
-## 6. Implementation Standards
-
-All recommendations must be production-ready.
+## 7. Production Standards
 
 Always consider:
 
@@ -261,8 +292,7 @@ Always consider:
 - Branch access
 - Permission enforcement
 - Subscription status gates
-- Validation
-- Error handling
+- Validation and error handling
 - Idempotency
 - Optimistic locking or row locking where required
 - Transaction boundaries
@@ -273,15 +303,13 @@ Always consider:
 - Deployment impact
 - Maintainability
 
-Backend and database enforcement are authoritative.
-
-UI checks are helpful but must never be the only enforcement.
+Backend and database enforcement are authoritative. UI checks improve UX but must never be the only enforcement.
 
 ---
 
-## 7. GarageOS Architecture Rules
+## 8. GarageOS Architecture Rules
 
-Respect the approved GarageOS architecture:
+Respect the approved architecture:
 
 - Mobile-first PWA
 - TypeScript monorepo
@@ -315,11 +343,9 @@ Do not introduce:
 
 ---
 
-## 8. Validation Rules
+## 9. Validation Rules
 
-For every implemented step, provide exact validation commands.
-
-Prefer commands that match the repository scripts.
+For implemented steps, provide exact validation commands matching repository scripts.
 
 Common commands:
 
@@ -330,9 +356,7 @@ pnpm --filter @garageos/api test -- --reporter=verbose
 pnpm lint
 ```
 
-Never say validation passed unless it actually ran and passed.
-
-If validation cannot be run in the current chat/tool environment, say:
+If validation cannot be run here, say:
 
 ```text
 Validation not run here. Please run:
@@ -341,109 +365,53 @@ Validation not run here. Please run:
 
 When validation fails:
 
-- Diagnose from the output.
+- Diagnose from output.
 - Provide the minimal fix.
-- Do not move to the next step until fixed or explicitly deferred.
+- Keep scope limited to the failing area unless a larger issue is proven.
 
 When validation passes:
 
 - Mark the step ready for commit.
-- Provide a meaningful commit message.
+- Provide the commit message.
 - Provide the next-chat handoff prompt.
 
 ---
 
-## 9. Commit Message Rule
+## 10. Commit Message Rule
 
-At the end of every completed step, provide one meaningful commit message.
-
-Use this format:
+At the end of every completed step, provide one suggested local commit message:
 
 ```bash
 git commit -m "type(scope): short summary"
 ```
 
-Examples:
+Allowed types: `feat`, `fix`, `test`, `refactor`, `docs`, `chore`.
 
-```bash
-git commit -m "feat(auth): add tenant context resolver scaffold"
-git commit -m "test(auth): cover refresh session rotation policy"
-git commit -m "fix(api): preserve correlation id in error envelopes"
-git commit -m "refactor(shared): centralize transaction boundary helper"
-```
-
-Allowed conventional commit types include:
-
-- `feat`
-- `fix`
-- `test`
-- `refactor`
-- `docs`
-- `chore`
-
-Commit messages are suggestions for the user to run locally.
-
-The assistant must not commit or push to the actual GitHub repository.
+The assistant must not commit or push.
 
 ---
 
-## 10. Next-Chat Handoff Prompt Rule
+## 11. Next-Chat Handoff Prompt Rule
 
-After every completed step, provide a copy-paste next-chat handoff prompt.
+After every completed step, provide a copy-paste handoff prompt. Keep the full completion ledger inside the handoff prompt only.
 
-The handoff prompt is the only place where the full completion ledger and tracking block must appear.
+The handoff must include:
 
-The generated handoff prompt must always include:
+- Project context and repository URL
+- Current milestone
+- Last completed step
+- Current/next step
+- Completion ledger with icons
+- Validation status
+- Repository caveats
+- Files changed and likely affected next
+- Summary of copy-paste changes
+- Exact validation commands and expected result
+- Failing output or unresolved issues, if any
+- Commit message already provided
+- Instructions to inspect repo context, ask for files/output if repo access is unavailable, verify commit/push status from user-provided output, avoid redoing completed work, keep GitHub read-only, and return copy-paste-ready changes by default
 
-1. Project context
-2. Repository URL
-3. Current milestone
-4. Last completed step
-5. Current / next step
-6. Full completion ledger with icons
-7. Known validation status
-8. Known repository caveats
-9. Files changed or likely affected
-10. Exact validation commands
-11. Any failing output or unresolved issue, if applicable
-12. Meaningful commit message already provided
-13. Instruction to inspect available repository context before coding
-14. Instruction to ask for files/output if repository access is unavailable
-15. Instruction to verify whether the last step is committed and pushed using user-provided repository output
-16. Instruction not to redo completed work unless repo verification shows it is missing or broken
-17. Instruction that the GitHub repository is read-only for AI-assisted work
-18. Instruction that all changes must be returned as patches, commands, or code blocks
-
-Use this icon format inside the generated handoff prompt:
-
-```md
-## Completion Ledger
-
-### Completed
-
-- ✅ Step X.Y — short title
-
-### Current / Ongoing
-
-- 🔄 Step X.Y — short title
-
-### Pending Queue
-
-- 🕒 Step X.Y — short title
-
-### Known Validation Status
-
-- typecheck: pass/fail/not run
-- tests: pass/fail/not run
-- lint: pass/fail/not run
-- git status: clean/dirty/unknown
-
-### Known Repository Caveats
-
-- None / GitHub main may be behind local state / repository access unavailable / describe caveat
-```
-
-Use this required next-chat handoff prompt format:
+Use this compact template:
 
 ````md
 Continue GarageOS Milestone [N] from after Step [X.Y].
@@ -452,33 +420,16 @@ Repository:
 https://github.com/dev-jeyelscott/garageos
 
 Important:
-Do not update GitHub directly. Use repository inspection only when available. Return patches/instructions for me to apply locally.
-
-Important repository access rule:
-Do not assume you can clone, refresh, modify, commit, push, or directly update the GitHub repository. Inspect repository files only if they are available in the current chat/tool environment. If repository access is unavailable, ask for the minimum needed files, command output, screenshots, patch, or ZIP before giving code-specific patches.
-
-Important GitHub safety rule:
-The GitHub repository is read-only for AI-assisted work. Do not update the actual GitHub repository directly. Do not push, create remote branches, open pull requests, edit GitHub files, update GitHub settings, or use any remote write operation. Return all changes as local patches, commands, or code blocks for the user to apply.
-
-Before coding:
-Inspect available repository context, user-provided files, command output, package scripts, tests, and implementation patterns. Use verified repository state as the current implementation source of truth alongside the GarageOS documentation.
-
-Verify whether Step [X.Y] is committed/pushed using available repository output or user-provided command output before proposing changes. If the repo is missing recent local changes, ask for the current files, command output, screenshots, patch, or ZIP before giving code-specific patches.
+GitHub is read-only for AI-assisted work. Do not push, commit, create branches, open PRs, edit GitHub files/settings, or use remote write operations. Inspect available repo context first. If repo access is unavailable or behind local state, ask for the minimum needed files/output. Return copy-paste-ready code blocks by default; no patch files unless explicitly requested.
 
 Current milestone:
 Milestone [N] — [Milestone Name]
 
-Last completed step:
+Last completed:
 ✅ Step [X.Y] — [Step Name]
 
-Current / ongoing:
+Current / next:
 🔄 Step [X.Y] — [Step Name]
-
-Pending:
-🕒 Step [X.Y] — [Step Name]
-
-Next task:
-Implement Step [X.Y] — [Step Name] safely and incrementally.
 
 ## Completion Ledger
 
@@ -503,17 +454,20 @@ Implement Step [X.Y] — [Step Name] safely and incrementally.
 
 ### Known Repository Caveats
 
-- None / GitHub main may be behind local state / repository access unavailable / describe caveat
+- None / GitHub may be behind local state / repo access unavailable / describe caveat
 
 Files changed in last step:
 
 - path/to/file.ts
-- path/to/file.spec.ts
 
 Files likely affected next:
 
 - path/to/file.ts
-- path/to/file.spec.ts
+
+Copy-paste changes from last step:
+
+- Created/updated/replaced: path/to/file.ts
+- Summary: short summary
 
 Validation commands:
 
@@ -521,6 +475,14 @@ Validation commands:
 pnpm --filter @garageos/api typecheck
 pnpm --filter @garageos/api test
 pnpm --filter @garageos/api test -- --reporter=verbose
+```
+
+Expected result:
+
+```text
+Typecheck passes.
+Relevant tests pass.
+No unrelated regressions are introduced.
 ```
 
 Last commit message provided:
@@ -531,151 +493,14 @@ git commit -m "type(scope): short summary"
 
 Rules:
 
-- Do not redo completed steps unless verified repo state shows they are missing or broken.
-- Follow GarageOS documentation, approved architecture decisions, and existing repository patterns.
-- Keep changes incremental, production-ready, and test-covered.
-- Consider security, tenant isolation, permissions, validation, transactions, audit logs, observability, testing, and maintainability.
+- Do not redo completed work unless verified repo state shows it is missing or broken.
+- Follow GarageOS docs, accepted ADRs, and existing repo patterns.
+- Keep changes incremental, production-ready, test-covered, tenant-safe, permission-safe, auditable, observable, and maintainable.
 - Do not claim validation passed unless it actually ran and passed.
-- Do not update the actual GitHub repository directly.
-- Do not push, open pull requests, create remote branches, or use any remote write operation.
-- Return exact file changes, validation commands, expected result, commit message, and the next-chat handoff prompt.
 ````
 
 ---
 
-## 11. Current Milestone 2 Handoff Prompt Seed
+## 12. Final Rule
 
-Use this as the current next-chat prompt until Step 2.34 is completed. Update the ledger after each completed step.
-
-````md
-Continue GarageOS Milestone 2 from after Step 2.33.
-
-Repository:
-https://github.com/dev-jeyelscott/garageos
-
-Important:
-Do not update GitHub directly. Use repository inspection only when available. Return patches/instructions for me to apply locally.
-
-Important repository access rule:
-Do not assume you can clone, refresh, modify, commit, push, or directly update the GitHub repository. Inspect repository files only if they are available in the current chat/tool environment. If repository access is unavailable, ask for the minimum needed files, command output, screenshots, patch, or ZIP before giving code-specific patches.
-
-Important GitHub safety rule:
-The GitHub repository is read-only for AI-assisted work. Do not update the actual GitHub repository directly. Do not push, create remote branches, open pull requests, edit GitHub files, update GitHub settings, or use any remote write operation. Return all changes as local patches, commands, or code blocks for the user to apply.
-
-Before coding:
-Inspect available repository context, user-provided files, command output, package scripts, tests, and implementation patterns. Use verified repository state as the current implementation source of truth alongside the GarageOS documentation.
-
-Verify whether Step 2.33 is committed/pushed using available repository output or user-provided command output before proposing changes. If the repo is missing recent local changes, ask for the current files, command output, screenshots, patch, or ZIP before giving code-specific patches.
-
-Current milestone:
-Milestone 2 — API Foundation, Auth, Tenant Context, RBAC.
-
-Last completed step:
-✅ Step 2.33 — session endpoint with real authenticated context.
-
-Current / ongoing:
-🔄 Step 2.34 — route-level auth/tenant/permission/branch guard wiring.
-
-Pending:
-🕒 Step 2.35 — idempotency persistence integration.
-🕒 Step 2.36 — audit persistence integration for auth/access events.
-🕒 Step 2.37 — integration/security test hardening.
-🕒 Step 2.38 — auth/session UI screens, if Milestone 2 includes frontend closure.
-
-Next task:
-Implement Step 2.34 — route-level auth/tenant/permission/branch guard wiring safely and incrementally.
-
-## Completion Ledger
-
-### Completed
-
-- ✅ Step 2.1 — NestJS API uses `/api/v1`.
-- ✅ Step 2.2 — response envelope, error envelope, request_id/correlation_id middleware/interceptor/filter added.
-- ✅ Step 2.3 — stable API error codes and `GarageOsApiException` classes added.
-- ✅ Step 2.4 — `ZodValidationPipe` added and fixed for `exactOptionalPropertyTypes`.
-- ✅ Step 2.5 — Auth module skeleton added.
-- ✅ Step 2.6 — documented `/api/v1/auth/*` route stubs added.
-- ✅ Step 2.7 — auth DTO/schema validation aligned with API contracts.
-- ✅ Step 2.8 — password hashing boundary added.
-- ✅ Step 2.9 — access token signing boundary added.
-- ✅ Step 2.10 — refresh session persistence boundary added.
-- ✅ Step 2.11 — login context repository boundary added.
-- ✅ Step 2.12 — auth module provider wiring added.
-- ✅ Step 2.13 — login service behavior scaffolded.
-- ✅ Step 2.14 — refresh token service behavior scaffolded.
-- ✅ Step 2.15 — auth controller cookie handling added.
-- ✅ Step 2.16 — auth response contract alignment.
-- ✅ Step 2.17 — auth tests hardened.
-- ✅ Step 2.18 — tenant context scaffold.
-- ✅ Step 2.19 — tenant status guard scaffold.
-- ✅ Step 2.20 — permission guard scaffold.
-- ✅ Step 2.21 — branch access policy scaffold.
-- ✅ Step 2.22 — platform support access policy.
-- ✅ Step 2.23 — auth repository integration.
-- ✅ Step 2.24 — refresh session repository integration.
-- ✅ Step 2.25 — authorization module provider boundary.
-- ✅ Step 2.26 — auth rate-limit policy boundary.
-- ✅ Step 2.27 — auth session repository/service wiring plan.
-- ✅ Step 2.28 — login real behavior with password verification.
-- ✅ Step 2.29 — refresh-token rotation.
-- ✅ Step 2.30 — logout/logout-all session revocation.
-- ✅ Step 2.31 — forgot/reset/change password behavior.
-- ✅ Step 2.32 — email verification behavior.
-- ✅ Step 2.33 — session endpoint with real authenticated context.
-
-### Current / Ongoing
-
-- 🔄 Step 2.34 — route-level auth/tenant/permission/branch guard wiring.
-
-### Pending Queue
-
-- 🕒 Step 2.35 — idempotency persistence integration.
-- 🕒 Step 2.36 — audit persistence integration for auth/access events.
-- 🕒 Step 2.37 — integration/security test hardening.
-- 🕒 Step 2.38 — auth/session UI screens, if Milestone 2 includes frontend closure.
-
-### Known Validation Status
-
-- typecheck: pass from previous step
-- tests: pass from previous step
-- lint: unknown
-- git status: unknown
-
-### Known Repository Caveats
-
-- Repository access may be unavailable in the current chat/tool environment.
-- GitHub main may be behind local state; verify using user-provided repository output before code-specific patches.
-
-Files likely affected next:
-
-- `apps/api/src/modules/auth/**`
-- `apps/api/src/modules/authorization/**`
-- `apps/api/src/common/**`
-- Existing controller/spec files for protected route wiring
-- Relevant guard/decorator/test files discovered during repository review
-
-Validation commands:
-
-```bash
-pnpm --filter @garageos/api typecheck
-pnpm --filter @garageos/api test
-pnpm --filter @garageos/api test -- --reporter=verbose
-```
-
-Last commit message provided:
-
-```bash
-git commit -m "feat(auth): add authenticated session endpoint"
-```
-
-Rules:
-
-- Do not redo completed steps unless verified repo state shows they are missing or broken.
-- Follow GarageOS documentation, approved architecture decisions, and existing repository patterns.
-- Keep changes incremental, production-ready, and test-covered.
-- Consider security, tenant isolation, permissions, validation, transactions, audit logs, observability, testing, and maintainability.
-- Do not claim validation passed unless it actually ran and passed.
-- Do not update the actual GitHub repository directly.
-- Do not push, open pull requests, create remote branches, or use any remote write operation.
-- Return exact file changes, validation commands, expected result, commit message, and the next-chat handoff prompt.
-````
+Do not guess. Do not invent undocumented behavior. Do not update GitHub directly. Do not return patch files by default. Always align responses, recommendations, specs, and implementation guidance with GarageOS documentation.

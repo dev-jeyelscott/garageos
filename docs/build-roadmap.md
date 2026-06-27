@@ -1,35 +1,30 @@
-# GarageOS Build Roadmap v1.3
+# GarageOS Build Roadmap
 
 **Document:** `build-roadmap.md`  
 **Project:** GarageOS — Motorcycle Shop Management System SaaS  
-**Generated:** 2026-06-24  
-**Status:** Source-aligned implementation roadmap  
-**Roadmap Type:** Engineering sequencing roadmap, not product-scope phasing  
-**Target Platform:** Mobile-first Progressive Web App  
-**Primary Database Target:** PostgreSQL 16+
+**Status:** Source-aligned engineering sequencing roadmap  
+**Roadmap Type:** Engineering checkpoints, not product-scope phases  
+**Target:** Mobile-first PWA, PostgreSQL 16+, modular monolith
 
 ---
 
 ## 1. Purpose
 
-This roadmap defines a step-by-step implementation sequence for GarageOS. It is designed to help the team build the system safely from foundations to launch readiness while preserving the approved product scope.
+This roadmap defines the implementation order for GarageOS from foundation to launch readiness. It preserves approved scope, dependency order, quality gates, and acceptance evidence while removing repeated rationale and role-panel prose.
 
-This document is intended for engineering, architecture, QA, UX, DevOps, security, product, business stakeholders, and future AI-assisted implementation sessions.
+Use this document to answer:
 
-The roadmap answers:
-
-1. What must be built first.
-2. Which modules depend on other modules.
-3. Which workflows are on the critical path.
-4. What each role must validate.
-5. What acceptance gates must pass before moving forward.
-6. How to avoid accidental scope expansion.
+- What should be built first.
+- Which milestones depend on earlier work.
+- What must be validated before closure.
+- Which scope must stay excluded.
+- Which decisions must be resolved before deeper implementation.
 
 ---
 
-## 2. Source-of-Truth Rules
+## 2. Source-of-Truth Order
 
-The roadmap follows these source documents in priority order:
+Follow documents in this priority order:
 
 1. `requirements.md`
 2. `database-design.md`
@@ -43,948 +38,575 @@ The roadmap follows these source documents in priority order:
 10. `qa-acceptance-test-plan.md`
 11. `tech-stack.md`
 12. `architecture-records.md`
-13. Existing `build-roadmap.md` / `build-roadmap-v1.2.md`
+13. Existing roadmap versions
 
-If this roadmap conflicts with `requirements.md`, the PRD wins. If this roadmap conflicts with the schema, architecture, API contracts, QA plan, permission matrix, tech stack, or ARDs, update the dependent artifact instead of inventing undocumented behavior.
+If this roadmap conflicts with the PRD, the PRD wins. If downstream docs conflict with schema, architecture, API contracts, QA, permissions, tech stack, or ADRs, update the dependent artifact instead of inventing behavior.
 
 ---
 
 ## 3. Scope Guardrails
 
-GarageOS is a single approved build scope. The milestones below are engineering checkpoints only. They are not MVP phases, not optional product phases, and not permission to defer documented requirements.
+GarageOS is one approved build scope. Milestones are sequencing checkpoints only; they are not MVP phases or permission to defer documented requirements.
 
 ### In Scope
 
-The roadmap covers only documented GarageOS capabilities:
-
 - Mobile-first PWA.
 - Multi-tenant SaaS backend.
-- PostgreSQL schema and migrations.
-- Tenant lifecycle and subscription enforcement.
-- Platform administration.
-- Authentication, session management, email verification, password reset, RBAC, branch access, and support access.
-- Shop onboarding, settings, branches, employees, roles, and permissions.
-- Customers, motorcycles, service catalog, estimates, job orders, and mechanic sessions.
-- Products, inventory, FIFO costing, reservations, adjustments, transfers, and ledger entries.
-- Suppliers, purchases, supplier returns, accounts payable, supplier payments, and supplier credits.
-- Invoices, billing allocations, payments, receipts, refunds, voids, discounts, tax, and accounts receivable.
-- Expenses.
-- Customer reminders and internal notifications.
-- Files, private object storage, signed URLs, tenant exports, and offline read-only cache.
-- Dashboard, reports, search, report exports, and report calculation verification.
-- Audit logs, idempotency, background jobs, observability, backup, retention, and disaster recovery.
-- Security hardening, performance validation, UAT, and launch readiness.
+- PostgreSQL schema, migrations, seed data, constraints, indexes.
+- Tenant lifecycle, onboarding, subscription enforcement, platform admin, support access.
+- Auth, sessions, email verification, password reset, RBAC, branch access.
+- Shop settings, branches, employees, roles, permissions.
+- Customers, motorcycles, services, estimates, job orders, mechanic sessions.
+- Products, stock balances, FIFO, reservations, adjustments, transfers, ledger entries.
+- Suppliers, purchases, supplier returns, AP, supplier payments, supplier credits.
+- Invoices, billing allocations, payments, receipts, refunds, voids, tax, discounts, AR.
+- Expenses, reminders, internal notifications, provider delivery tracking.
+- Files, private object storage, signed URLs, tenant exports, offline read-only cache.
+- Dashboard, reports, search, export formats, calculation verification.
+- Audit logs, idempotency, background jobs, observability, backup, retention, DR.
+- Security hardening, performance validation, UAT, launch readiness.
 
 ### Explicitly Out of Scope
 
 Do not implement or imply:
 
-- Native iOS or Android applications.
-- Offline transaction creation, editing, approval, sync queues, or conflict resolution.
-- General ledger accounting, chart of accounts, journal entries, bank reconciliation, or formal accounting close.
-- Payroll, commissions, payslips, or government payroll contribution workflows.
-- Direct BIR or tax authority filing.
-- E-commerce marketplace, online store, public checkout, or delivery workflow.
+- Native iOS or Android apps.
+- Offline writes, sync queues, conflict resolution, or offline approvals.
+- Full accounting, general ledger, chart of accounts, journal entries, bank reconciliation, formal close.
+- Payroll, commissions, payslips, government payroll contributions.
+- Direct BIR/tax authority filing.
+- E-commerce marketplace, online store, public checkout, delivery workflow.
 - Customer portal or customer self-service login.
-- Loyalty points, rewards, membership tiers, or redemption.
-- Service packages with package-level pricing or package redemption tracking.
-- Predictive analytics, AI recommendations, forecasting, or custom BI dashboards beyond defined reports.
-- Automated subscription payment collection through a payment gateway.
-- Standalone walk-in retail POS/cart checkout independent of job orders or service invoices.
+- Loyalty points, rewards, tiers, redemption.
+- Service packages.
+- Predictive analytics, AI recommendations, forecasting, custom BI beyond defined reports.
+- Automated subscription payment collection.
+- Standalone walk-in retail POS/cart checkout independent of job orders/service invoices.
 - Two-factor authentication.
 - Microservices-first implementation.
 
 ---
 
-## 4. Multi-Agent Roadmap Brainstorm Summary
-
-| Role                 | Review Output                                                                                                                                                                                     | Roadmap Decision                                                                                                                            |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| Business Owner       | GarageOS must support SaaS revenue, plan monetization, subscription lifecycle, support access, exports, and deletion rules.                                                                       | Build tenant lifecycle, platform admin, subscriptions, plan enforcement, export/deletion scaffolding, and support access early.             |
-| Product Manager / BA | The roadmap must preserve full documented scope and avoid undocumented functionality.                                                                                                             | Treat milestones as engineering sequencing only and require traceability for every ticket.                                                  |
-| SMEs                 | Motorcycle shop workflows require coherent service intake, repair execution, parts reservation, purchasing, invoicing, payments, AP/AR, reminders, and service history.                           | Sequence master data, service operations, inventory/FIFO, purchasing/AP, invoicing/payments/AR, reminders, and reports by dependency order. |
-| End Users            | Owners, managers, advisors, mechanics, cashiers, and inventory clerks need fast mobile workflows with role boundaries.                                                                            | UX must support role-based landing, branch context, quick actions, blocked states, and small-screen completion.                             |
-| Architect            | Modular monolith, PostgreSQL source of truth, tenant isolation, command-driven workflows, background jobs, and private object storage are the approved direction.                                 | Keep one backend deployable with strict module boundaries and explicit transaction orchestration.                                           |
-| Senior Engineers     | Complex workflows need idempotency, locks, document-number safety, immutable ledgers, FIFO correctness, billing allocation safety, and clean service boundaries.                                  | Build transaction, idempotency, audit, policy, and locking utilities before high-risk workflows.                                            |
-| UX Designer          | Screen map should drive routes, wireframes, offline/read-only states, permission-aware UI, lifecycle banners, and support markers.                                                                | Complete low-fidelity wireframes and a reusable component baseline before heavy frontend build.                                             |
-| QA                   | Acceptance must cover tenant isolation, branch access, permissions, workflow transitions, idempotency, concurrency, FIFO, financial immutability, reports, exports, offline mode, and operations. | A milestone closes only after relevant QA evidence exists.                                                                                  |
-| Security             | Highest-risk areas are tenant isolation, support access, token handling, file access, audit logs, rate limits, role assignment, refunds, voids, exports, and sensitive logs.                      | Run security review continuously and require high-risk signoff before closure.                                                              |
-| DevOps               | CI/CD, environments, workers, schedulers, observability, backups, restore tests, provider failure tracking, runbooks, and DR evidence must be active throughout the build.                        | DevOps starts at Milestone 0 and remains active through launch.                                                                             |
-| Project Manager      | Delivery must follow dependency order while preserving full-scope delivery.                                                                                                                       | Use milestone gates, dependency tracking, and signoffs as delivery controls.                                                                |
-
----
-
-## 5. Critical Path
+## 4. Critical Path
 
 ```text
-Project foundation
-  -> database migrations and seed data
-  -> auth/session/security middleware
-  -> tenant context + subscription gate + RBAC + branch access
-  -> idempotency + audit + transaction utilities
-  -> tenant lifecycle + onboarding + platform administration
-  -> master data
-  -> job orders and estimates
-  -> inventory/FIFO reservations
-  -> job completion with FIFO consumption
-  -> purchasing/AP and supplier returns
-  -> invoicing/billing allocations
-  -> payments/receipts/refunds/AR
-  -> expenses/reminders/notifications
-  -> files, exports, offline read-only cache
-  -> dashboard, reports, search, export formats
-  -> security, observability, performance, DR hardening
-  -> end-to-end UAT and launch readiness
+foundation
+-> migrations + seed data
+-> auth/session/security middleware
+-> tenant context + subscription gate + RBAC + branch access
+-> idempotency + audit + transaction utilities
+-> tenant lifecycle + onboarding + platform admin
+-> master data
+-> service operations
+-> inventory/FIFO reservation and consumption
+-> purchasing/AP
+-> invoicing/billing allocations
+-> payments/receipts/refunds/AR
+-> expenses/reminders/notifications
+-> files/exports/offline read-only cache
+-> dashboard/reports/search/export formats
+-> security/observability/performance/DR
+-> UAT and launch readiness
 ```
 
-The foundational rule is simple: do not build operational workflows on top of weak tenancy, weak authorization, weak migrations, weak transaction handling, weak idempotency, or weak audit logging.
+Do not build operational workflows on weak tenancy, authorization, migrations, transactions, idempotency, or audit logging.
 
 ---
 
-## 6. Roadmap Principles
+## 5. Roadmap Principles
 
-1. **Documentation first.** Implement documented behavior only.
-2. **No invented scope.** Missing details become ADRs, clarification tickets, or downstream artifacts.
-3. **Foundations first.** Auth, tenant context, subscription gates, RBAC, branch access, idempotency, audit logging, transaction utilities, observability, and database constraints come before operational modules.
-4. **Multi-layer invariant protection.** Enforce critical rules through API validation, service policies, repository scoping, database constraints, indexes, row locks, optimistic locking, audit logs, and tests.
-5. **Vertical slices after foundations.** Each feature slice must include database, API, domain logic, frontend, tests, observability, and docs.
-6. **Backend and database are authoritative.** UI restrictions improve UX but must never be the only enforcement.
-7. **Critical writes must be retry-safe.** Financial, inventory, billing, export, deletion, and irreversible background jobs require idempotency or equivalent duplicate-side-effect protection.
-8. **Reports and exports are first-class.** Report formulas affect earlier data capture and must not be deferred as an afterthought.
-9. **Mobile-first is mandatory.** Core workflows must work on small touch screens and unstable networks.
-10. **Concurrency must be tested early.** The riskiest defects are duplicate numbers, FIFO over-allocation, overbilling, overpayment, over-refund, double consumption, and duplicated background side effects.
-
----
-
-## 7. Milestone Overview
-
-| Milestone | Name                                               | Primary Goal                                                                                                              | Main Dependencies      |
-| --------: | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
-|         0 | Project Foundation and Engineering Decisions       | Establish repo, standards, ADRs, CI, local dev, UX/QA planning.                                                           | Approved documentation |
-|         1 | Database Foundation and Core Migrations            | Implement schema foundations, seed data, constraints, indexes, migration process, and fixtures.                           | M0                     |
-|         2 | API Foundation, Auth, Tenant Context, RBAC         | Build secure request pipeline, auth/session flows, permission architecture, branch guard, idempotency, and audit helpers. | M0-M1                  |
-|         3 | Tenant Lifecycle, Onboarding, Platform Admin       | Enable tenant creation, setup, subscription gates, plan enforcement, support access, export/deletion controls.            | M1-M2                  |
-|         4 | Core Master Data                                   | Build branches, employees, roles, permission assignment, customers, motorcycles, services, and categories.                | M2-M3                  |
-|         5 | Service Operations                                 | Build estimates, job orders, mechanic sessions, status transitions, notes/files, and assignment workflows.                | M4                     |
-|         6 | Inventory Foundation and FIFO                      | Build products, stock balances, inventory ledger, reservations, FIFO layers, and FIFO allocation logic.                   | M1-M5 partial          |
-|         7 | Inventory Workflows                                | Build adjustments, approval/posting flow, transfers, variance handling, low-stock alerts, and cancellation rules.         | M6                     |
-|         8 | Purchasing, Suppliers, and AP                      | Build suppliers, purchase orders, receiving, supplier payments/credits, supplier returns, and AP basis.                   | M6                     |
-|         9 | Invoicing, Payments, Receipts, Refunds, AR         | Build billing allocations, invoices, discounts/tax, payments, immutable receipts, refunds, voids, and AR.                 | M5-M8                  |
-|        10 | Expenses, Reminders, Notifications, Integrations   | Build expenses, reminder rules, notification preferences, provider delivery tracking, and plan-based channel enforcement. | M3-M9                  |
-|        11 | Files, Exports, Offline PWA Cache                  | Build attachments, private object storage, signed URLs, tenant exports, export jobs, and read-only offline cache.         | M2-M10                 |
-|        12 | Dashboard, Reports, Search, Export Formats         | Build dashboard, reports, search/read models, CSV/PDF/Excel exports, and formula verification.                            | M6-M11                 |
-|        13 | Security, Observability, Performance, DR Hardening | Harden security, logs, metrics, alerts, performance, backups, restore tests, RPO/RTO, and runbooks.                       | All previous           |
-|        14 | End-to-End UAT and Launch Readiness                | Execute full acceptance, defect burn-down, sign-offs, production smoke, and controlled launch readiness.                  | All previous           |
+1. Implement documented behavior only.
+2. Missing details become ADRs, clarification tickets, or downstream artifacts.
+3. Foundations come before operational modules.
+4. Protect invariants through API validation, service policies, repository scoping, database constraints, locks, optimistic locking, audit logs, and tests.
+5. Build vertical slices after foundations: database, API, domain logic, frontend, tests, observability, docs.
+6. Backend and database are authoritative; UI restrictions are not sufficient enforcement.
+7. Critical writes must be retry-safe.
+8. Reports and exports are first-class; formulas must influence data capture early.
+9. Mobile-first support is mandatory.
+10. Test concurrency early for duplicate numbers, FIFO over-allocation, overbilling, overpayment, over-refund, double consumption, and duplicate background side effects.
 
 ---
 
-# 8. Detailed Milestone Plan
+## 6. Milestone Overview
 
-## Milestone 0 — Project Foundation and Engineering Decisions
-
-### Goal
-
-Prepare the engineering organization and codebase for predictable execution.
-
-### Step-by-Step Build Sequence
-
-1. Initialize repository and workspace.
-2. Choose final monorepo structure.
-3. Create app packages: `web`, `api`, `worker`, `scheduler`.
-4. Create shared packages: `shared`, `api-client`, `config`, `test-utils`.
-5. Create `/docs/adr`, `/docs/runbooks`, `/docs/api`, and `/docs/testing`.
-6. Configure TypeScript, linting, formatting, commit hooks, and test runner.
-7. Configure local Docker Compose for PostgreSQL and local service execution.
-8. Add `.env.example` with no real secrets.
-9. Create CI pipeline for lint, typecheck, unit tests, dependency scan, and migration validation placeholder.
-10. Record foundational ADRs: frontend, backend, query layer, migrations, enum strategy, token transport, RLS timing, append-only protections, background jobs, OpenAPI strategy, object storage, provider adapter strategy, and deployment model.
-11. Create Definition of Done.
-12. Create feature-ticket traceability template.
-13. Create initial UX wireframe backlog from `ux-sreen-map.md`.
-14. Create baseline QA automation structure.
-
-### Deliverables
-
-- Running local development setup.
-- CI baseline.
-- ADR directory and foundational ADRs.
-- Initial README.
-- Traceability template.
-- Definition of Done.
-- UX wireframe backlog.
-- QA test folder structure.
-
-### Acceptance Gate
-
-- New developer can run the app locally using documented steps.
-- CI blocks lint/type/unit-test failures.
-- No secrets are committed.
-- Foundational ADRs are accepted before database work starts.
-- Feature tickets include PRD, RTM, user story, API, schema, permission, UX, QA, ADR, and audit references where applicable.
+|   # | Milestone                                          | Goal                                                                                                   | Depends On    |
+| --: | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------- |
+|   0 | Project Foundation and Engineering Decisions       | Repo, standards, ADRs, CI, local dev, UX/QA planning                                                   | Approved docs |
+|   1 | Database Foundation and Core Migrations            | Schema foundations, seed data, constraints, indexes, fixtures                                          | M0            |
+|   2 | API Foundation, Auth, Tenant Context, RBAC         | Secure request pipeline, auth/session, permissions, branch guard, idempotency, audit                   | M0-M1         |
+|   3 | Tenant Lifecycle, Onboarding, Platform Admin       | Tenant creation, setup, subscription gates, plan enforcement, support access, export/deletion controls | M1-M2         |
+|   4 | Core Master Data                                   | Branches, employees, roles, customers, motorcycles, services, categories                               | M2-M3         |
+|   5 | Service Operations                                 | Estimates, job orders, mechanic sessions, status transitions, notes/files placeholders                 | M4            |
+|   6 | Inventory Foundation and FIFO                      | Products, stock balances, ledger, reservations, FIFO layers/allocation                                 | M1-M5 partial |
+|   7 | Inventory Workflows                                | Adjustments, approvals, transfers, variance, low-stock, cancellation rules                             | M6            |
+|   8 | Purchasing, Suppliers, AP                          | Suppliers, purchase orders, receiving, supplier payments/credits/returns, AP basis                     | M6            |
+|   9 | Invoicing, Payments, Receipts, Refunds, AR         | Billing allocations, invoices, discounts/tax, payments, receipts, refunds, voids, AR                   | M5-M8         |
+|  10 | Expenses, Reminders, Notifications, Integrations   | Expenses, reminders, preferences, provider adapters, delivery tracking, plan channels                  | M3-M9         |
+|  11 | Files, Exports, Offline PWA Cache                  | Attachments, object storage, signed URLs, tenant exports, read-only offline cache                      | M2-M10        |
+|  12 | Dashboard, Reports, Search, Export Formats         | Dashboard, reports, search/read models, CSV/PDF/Excel exports, formula verification                    | M6-M11        |
+|  13 | Security, Observability, Performance, DR Hardening | Security review, logs/metrics/errors, performance, backups, restore, runbooks                          | All previous  |
+|  14 | End-to-End UAT and Launch Readiness                | Full acceptance, defect burn-down, signoffs, production smoke, pilot launch                            | All previous  |
 
 ---
 
-## Milestone 1 — Database Foundation and Core Migrations
+## 7. Detailed Milestones
 
-### Goal
+## M0 — Project Foundation and Engineering Decisions
 
-Implement the PostgreSQL foundation required by all modules.
+**Goal:** Prepare the repo and engineering process for predictable execution.
 
-### Step-by-Step Build Sequence
+**Build:**
 
-1. Finalize migration tool choice.
-2. Add PostgreSQL extensions: `pg_trgm`, `unaccent`, `pgcrypto`, and optional `citext` if approved.
-3. Define enum/check strategy.
-4. Create platform/tenant/subscription schema.
-5. Create user/auth/session/token schema.
-6. Create roles, permissions, role permissions, user roles, and branch assignments.
-7. Create shop profile, branches, and tenant settings tables.
-8. Create customer and motorcycle tables.
-9. Create services, estimates, job orders, mechanic sessions, and status history tables.
-10. Create products, categories, stock balances, inventory ledger, FIFO layers, reservations, and allocations.
-11. Create adjustments, transfers, suppliers, purchases, supplier returns, supplier payments, supplier credits, AP tables.
-12. Create invoices, billing allocations, payments, receipts, refunds, AR tables.
-13. Create expenses, reminders, notifications, outbox, files, exports, audit logs, idempotency keys, background jobs, and reporting/search read-model scaffolds.
-14. Add constraints, unique indexes, tenant indexes, branch indexes, document-number uniqueness, and foreign keys.
-15. Add seed data for plans, plan limits, permissions, and protected Shop Owner role behavior.
-16. Add database fixture factory and migration tests.
-17. Add schema drift checklist.
+- Initialize repo/workspace.
+- Create `web`, `api`, `worker`, `scheduler`.
+- Create shared packages: `shared`, `api-client`, `config`, `test-utils`.
+- Add `/docs/adr`, `/docs/runbooks`, `/docs/api`, `/docs/testing`.
+- Configure TypeScript, lint, format, tests, hooks, Docker Compose, `.env.example`.
+- Add CI baseline: lint, typecheck, unit tests, dependency scan, migration placeholder.
+- Record foundational ADRs.
+- Create DoD, traceability template, UX wireframe backlog, QA structure.
 
-### Deliverables
+**Deliverables:** local dev setup, CI baseline, ADR directory, README, traceability template, DoD, UX backlog, QA folders.
 
-- Versioned migrations.
-- Seed data.
-- Database integrity test suite.
-- Migration validation in CI.
-- Document-number strategy.
-- Role-template seed-grant approval record.
-
-### Acceptance Gate
-
-- Empty database migrates successfully.
-- Seed scripts are idempotent.
-- Tenant-owned tables include `tenant_id`.
-- Branch-specific tables include both `tenant_id` and `branch_id`.
-- Money and quantity precision rules are implemented.
-- Required constraints and indexes exist.
-- Non-owner role default grants are not finalized without explicit approval.
+**Gate:** local setup works; CI blocks failures; no secrets committed; foundational ADRs accepted; feature tickets include required trace references.
 
 ---
 
-## Milestone 2 — API Foundation, Auth, Tenant Context, RBAC
+## M1 — Database Foundation and Core Migrations
 
-### Goal
+**Goal:** Implement PostgreSQL foundations.
 
-Build the secure API foundation used by every module.
+**Build:**
 
-### Step-by-Step Build Sequence
+- Finalize migration tool and enum/check strategy.
+- Add approved PostgreSQL extensions.
+- Create core schemas: platform, tenant, subscription, auth/session/token, RBAC, branches/settings, customers/motorcycles, services/job orders, inventory/FIFO, purchasing/AP, invoicing/payments/AR, expenses, reminders, notifications, outbox, files, exports, audit, idempotency, background jobs, reporting/search scaffolds.
+- Add constraints, indexes, tenant/branch scoping, document-number uniqueness, FKs.
+- Seed plans, plan limits, permissions, protected Shop Owner behavior.
+- Add fixture factory, migration tests, schema drift checklist.
 
-1. Create REST API skeleton under `/api/v1`.
-2. Implement response and error envelopes.
-3. Add request ID and correlation ID middleware.
-4. Implement auth routes: signup-owner, login, refresh, logout, logout-all, email verification, forgot/reset/change password, and session.
-5. Implement password hashing and token hashing.
-6. Implement access token expiration and refresh token rotation.
-7. Implement remember-me session rules.
-8. Implement login and password-reset rate limits.
-9. Implement tenant context resolution from authenticated session.
-10. Implement tenant status/subscription guard.
-11. Implement platform admin and support access context.
-12. Implement permission guard.
-13. Implement branch access guard.
-14. Implement validation pipeline.
-15. Implement idempotency service for critical writes.
-16. Implement optimistic locking convention.
-17. Implement shared transaction wrapper.
-18. Implement shared audit service.
-19. Implement auth/session UI screens.
-20. Add contract, integration, and security tests.
+**Deliverables:** migrations, seed data, database integrity tests, CI migration validation, document-number strategy, role-template seed-grant approval record.
 
-### Deliverables
-
-- Auth APIs and screens.
-- Shared authorization/policy engine.
-- Shared transaction, idempotency, audit, and logging utilities.
-- Stable error codes and response envelopes.
-- API contract tests.
-
-### Acceptance Gate
-
-- Passwords and tokens are stored securely.
-- Access tokens expire within documented limit.
-- Refresh rotation works.
-- Deactivated users cannot log in.
-- Tenant clients cannot switch scope by passing `tenant_id`.
-- Branch and permission denial responses are stable.
-- Every response includes request/correlation metadata.
-- Sensitive logs do not expose passwords, tokens, provider secrets, or sensitive payment/provider data.
+**Gate:** empty DB migrates; seeds are idempotent; tenant tables include `tenant_id`; branch tables include `tenant_id` + `branch_id`; money/quantity precision works; required constraints/indexes exist; non-owner default grants are not finalized without approval.
 
 ---
 
-## Milestone 3 — Tenant Lifecycle, Onboarding, Platform Admin
+## M2 — API Foundation, Auth, Tenant Context, RBAC
 
-### Goal
+**Goal:** Build the secure API foundation.
 
-Enable SaaS lifecycle operations before tenant business modules are widely used.
+**Build:**
 
-### Step-by-Step Build Sequence
+- Create `/api/v1` REST skeleton.
+- Implement response/error envelopes, request/correlation IDs.
+- Implement auth routes: signup-owner, login, refresh, logout, logout-all, verification, forgot/reset/change password, session.
+- Add password/token hashing, access-token expiry, refresh rotation, remember-me rules, rate limits.
+- Resolve tenant context from session.
+- Add tenant status/subscription guard, platform/support context, permission guard, branch guard.
+- Add validation pipeline, idempotency service, optimistic locking convention, transaction wrapper, audit service.
+- Implement auth/session UI screens.
+- Add contract, integration, security tests.
 
-1. Implement platform-created tenant flow.
-2. Implement owner signup tenant flow.
-3. Validate configured default plan and default subscription duration.
-4. Implement onboarding state machine.
-5. Implement shop profile setup.
-6. Implement first branch setup.
-7. Implement tax/localization setup.
-8. Implement invoice prefix setup.
-9. Implement onboarding completion gate.
-10. Implement subscription status calculation.
-11. Implement grace/read-only/suspended/pending-deletion/deleted gates.
-12. Implement plan limit and tenant override service.
-13. Implement platform tenant management screens.
-14. Implement subscription override UI/API.
-15. Implement support access session flow with reason, mode, expiry, visible marker, and audit logging.
-16. Implement tenant lifecycle worker.
-17. Implement tenant export/deletion job placeholders for later completion.
-18. Implement renewal request/instructions flow without payment collection.
+**Deliverables:** auth APIs/screens, policy engine, transaction/idempotency/audit/logging utilities, stable errors/envelopes, contract tests.
 
-### Deliverables
-
-- Platform tenant APIs and UI.
-- Owner signup and onboarding flow.
-- Subscription lifecycle worker.
-- Plan enforcement service.
-- Support access flow.
-- Renewal request flow.
-- Lifecycle audit/system logs.
-
-### Acceptance Gate
-
-- Owner signup is blocked if default plan/duration is missing.
-- Pending setup tenant can access only allowed setup areas.
-- Tenant becomes active only after onboarding and subscription requirements pass.
-- Lifecycle dates use tenant timezone.
-- Grace period allows operations with warnings.
-- Read-only blocks operational writes.
-- Suspended blocks non-owner users and allows owner renewal/export only.
-- Pending deletion/deleted block tenant operational access.
-- Subscription payment collection is not implemented in GarageOS.
+**Gate:** secure password/token storage; refresh rotation; deactivated users blocked; tenant clients cannot override scope with `tenant_id`; branch/permission denials are stable; responses include metadata; sensitive logs are clean.
 
 ---
 
-## Milestone 4 — Core Master Data
+## M3 — Tenant Lifecycle, Onboarding, Platform Admin
 
-### Goal
+**Goal:** Enable SaaS lifecycle before broad tenant operations.
 
-Build the tenant master-data foundation required by service, inventory, financial, reminder, and reporting workflows.
+**Build:**
 
-### Step-by-Step Build Sequence
+- Platform-created tenant flow.
+- Owner signup tenant flow.
+- Default plan/subscription duration validation.
+- Onboarding state machine: shop profile, first branch, tax/localization, invoice prefix, completion gate.
+- Subscription calculation and tenant status gates: grace, read-only, suspended, pending-deletion, deleted.
+- Plan limit and tenant override service.
+- Platform tenant management UI/API.
+- Subscription override UI/API.
+- Support access with reason, mode, expiry, visible marker, audit.
+- Tenant lifecycle worker.
+- Export/deletion job placeholders.
+- Renewal request/instructions flow without payment collection.
 
-1. Implement branch list/detail/create/update/deactivate/reactivate.
-2. Enforce plan branch limits and last-active-branch rule.
-3. Implement employee invitation, creation, deactivation, and reactivation.
-4. Implement role and permission management.
-5. Implement role-template edit protections.
-6. Implement branch assignment and tenant-wide branch access management.
-7. Implement customer create/search/detail/update/merge/soft-delete/restore.
-8. Implement customer tags if supported by current schema/design.
-9. Implement motorcycle create/search/detail/update/soft-delete/restore.
-10. Implement service catalog create/read/update/deactivate.
-11. Implement product category management where needed by inventory.
-12. Add duplicate warnings without automatic merge.
-13. Add audit logs for high-risk changes.
-14. Add mobile-first screens for branches, employees, roles, customers, motorcycles, and services.
+**Deliverables:** platform tenant APIs/UI, signup/onboarding, lifecycle worker, plan enforcement, support access, renewal request, lifecycle audit/system logs.
 
-### Deliverables
-
-- Master-data APIs and screens.
-- Role-template seed configuration applied.
-- Duplicate-warning services.
-- Branch-access tests.
-- Master-data audit events.
-
-### Acceptance Gate
-
-- Last Shop Owner cannot be deactivated or demoted.
-- Branch limit rules are enforced.
-- Customers and motorcycles are tenant-wide, but linked operational history is branch-filtered.
-- Employee invitations are single-use, tenant-scoped, expiring, and audited.
-- Role permissions resolve additively with no explicit deny.
-- Shop Owner role protections cannot be bypassed.
+**Gate:** owner signup blocked without default plan/duration; pending setup limited to setup areas; tenant activates only after onboarding + subscription requirements; lifecycle dates use tenant timezone; grace allows operations with warnings; read-only/suspended/pending-deletion/deleted gates work; no subscription payment collection is implemented.
 
 ---
 
-## Milestone 5 — Service Operations
+## M4 — Core Master Data
 
-### Goal
+**Goal:** Build tenant master data used by service, inventory, financial, reminder, and reporting workflows.
 
-Implement motorcycle service intake and repair execution workflows.
+**Build:**
 
-### Step-by-Step Build Sequence
+- Branch list/detail/create/update/deactivate/reactivate.
+- Enforce branch limits and last-active-branch rule.
+- Employee invitation, creation, deactivation, reactivation.
+- Role/permission management and role-template protections.
+- Branch assignment and tenant-wide branch access.
+- Customer create/search/detail/update/merge/soft-delete/restore.
+- Motorcycle create/search/detail/update/soft-delete/restore.
+- Service catalog CRUD/deactivate.
+- Product category management as needed by inventory.
+- Duplicate warnings without automatic merge.
+- Audit logs and mobile-first screens.
 
-1. Implement estimate number generation.
-2. Implement estimate draft/create/update.
-3. Implement estimate present, approve, convert, cancel, and expiration flows.
-4. Implement job order number generation.
-5. Implement job order create/detail/update.
-6. Implement job order service, labor, and part line scaffolding.
-7. Implement job order assignment to employees/mechanics.
-8. Implement job order status transitions.
-9. Implement correction workflow with permissions and audit reason.
-10. Implement mechanic assigned-jobs view.
-11. Implement mechanic session start/pause/resume/finish.
-12. Implement service notes and labor task completion.
-13. Implement job attachments placeholders until full file module.
-14. Add status history and audit history UI.
-15. Add mobile-first intake and mechanic workflows.
+**Deliverables:** master-data APIs/screens, role-template seed config, duplicate-warning services, branch-access tests, audit events.
 
-### Deliverables
-
-- Estimate APIs/screens.
-- Job order APIs/screens.
-- Mechanic session APIs/screens.
-- Workflow validators.
-- Status history services.
-- Service workflow tests.
-
-### Acceptance Gate
-
-- Estimates do not affect revenue, AR, on-hand stock, or FIFO layers.
-- Job order represents one service engagement for one motorcycle at one branch.
-- Job order transitions are explicit and validated.
-- Mechanics do not see financial/supplier/subscription modules unless custom-granted.
-- Status corrections require permission and reason.
-- Branch and tenant isolation are enforced.
+**Gate:** last Shop Owner cannot be deactivated/demoted; branch limits enforced; customers/motorcycles tenant-wide with branch-filtered operational history; invitations are single-use, tenant-scoped, expiring, audited; additive role permissions; Shop Owner protections hold.
 
 ---
 
-## Milestone 6 — Inventory Foundation and FIFO
+## M5 — Service Operations
 
-### Goal
+**Goal:** Implement intake and repair execution.
 
-Build the authoritative inventory foundation before stock-affecting workflows depend on it.
+**Build:**
 
-### Step-by-Step Build Sequence
+- Estimate numbers, draft/create/update, present, approve, convert, cancel, expiration.
+- Job order numbers, create/detail/update, line scaffolding, assignment, status transitions.
+- Correction workflow with permission and reason.
+- Mechanic assigned-jobs view.
+- Mechanic session start/pause/resume/finish.
+- Notes, labor task completion, attachment placeholders.
+- Status/audit history UI.
+- Mobile-first intake and mechanic workflows.
 
-1. Implement product and category management.
-2. Implement branch stock balances.
-3. Implement immutable inventory ledger write service.
-4. Implement FIFO layer creation and locking strategy.
-5. Implement available stock calculation.
-6. Implement inventory reservation command.
-7. Implement FIFO reservation allocation from oldest available layers.
-8. Implement reservation release.
-9. Implement FIFO consumption records.
-10. Integrate job order part reservation.
-11. Integrate job order completion with FIFO consumption.
-12. Implement inventory read/search APIs.
-13. Add deterministic FIFO fixtures.
-14. Add concurrency tests for reservation, allocation, and consumption.
-15. Add reconciliation checks between balances, ledger, reservations, and FIFO layers.
+**Deliverables:** estimate/job/mechanic APIs/screens, workflow validators, status history, tests.
 
-### Deliverables
-
-- Product/inventory APIs and screens.
-- Ledger services.
-- FIFO services.
-- Reservation/release/consumption services.
-- Job completion inventory integration.
-- FIFO and stock concurrency tests.
-
-### Acceptance Gate
-
-- Stock-changing operations write ledger entries.
-- FIFO consumes oldest available stock first.
-- Reservations cannot exceed available stock.
-- On-hand cannot drop below reserved quantity.
-- Job completion consumes FIFO allocations atomically.
-- COGS is calculated from consumed FIFO layers.
-- Concurrent reservations cannot over-allocate stock.
+**Gate:** estimates do not affect revenue/AR/on-hand/FIFO; each job order is one service engagement for one motorcycle at one branch; transitions explicit; mechanics do not see financial/supplier/subscription modules unless granted; corrections are permissioned/reasoned/audited; tenant/branch isolation enforced.
 
 ---
 
-## Milestone 7 — Inventory Workflows
+## M6 — Inventory Foundation and FIFO
 
-### Goal
+**Goal:** Build authoritative inventory before stock workflows depend on it.
 
-Implement adjustments, approvals, transfers, variance handling, and low-stock controls.
+**Build:**
 
-### Step-by-Step Build Sequence
+- Product/category management.
+- Branch stock balances.
+- Immutable inventory ledger write service.
+- FIFO layer creation/locking.
+- Available stock calculation.
+- Reservation command and oldest-first FIFO allocation.
+- Reservation release.
+- FIFO consumption records.
+- Integrate job order part reservation and completion with FIFO consumption.
+- Inventory read/search APIs.
+- Deterministic FIFO fixtures, concurrency tests, reconciliation checks.
 
-1. Implement inventory adjustment draft/request flow.
-2. Implement approval/rejection flow.
-3. Implement posting flow with idempotency and locks.
-4. Implement positive adjustment FIFO layer creation.
-5. Implement negative adjustment FIFO consumption.
-6. Implement force adjustment permission and reason handling.
-7. Implement transfer draft/request flow.
-8. Implement transfer reservation.
-9. Implement transfer send.
-10. Implement transfer receive.
-11. Implement variance loss handling.
-12. Implement transfer cancellation rules.
-13. Implement low-stock alerts.
-14. Integrate branch deactivation stock blockers.
-15. Add audit and status history.
+**Deliverables:** product/inventory APIs/screens, ledger/FIFO services, reservation/release/consumption, job completion integration, FIFO/stock concurrency tests.
 
-### Deliverables
+**Gate:** stock changes write ledger entries; FIFO consumes oldest available stock; reservations cannot exceed available; on-hand cannot fall below reserved; job completion consumes atomically; COGS from FIFO consumption; concurrent reservations cannot over-allocate.
 
-- Adjustment APIs/screens.
-- Transfer APIs/screens.
-- Transfer and adjustment state machines.
+---
+
+## M7 — Inventory Workflows
+
+**Goal:** Implement adjustments, transfers, variance, and low-stock controls.
+
+**Build:**
+
+- Adjustment draft/request, approval/rejection, idempotent posting with locks.
+- Positive adjustment FIFO layer creation.
+- Negative adjustment FIFO consumption.
+- Force adjustment permission/reason/audit.
+- Transfer draft/request, reservation, send, receive, variance loss, cancellation.
 - Low-stock alerts.
-- Variance tests.
-- Approval and audit tests.
+- Branch deactivation stock blockers.
+- Audit and status history.
 
-### Acceptance Gate
+**Deliverables:** adjustment APIs/screens, transfer APIs/screens, state machines, low-stock alerts, variance/approval/audit tests.
 
-- Posted adjustments are immutable and corrected only by new adjustments.
-- Transfers preserve FIFO cost references as documented.
-- Variance loss does not create AP, AR, revenue, or expense.
-- Cancellation rules are enforced.
-- Force adjustment is permission-protected, reasoned, and audited.
+**Gate:** posted adjustments immutable/corrected only by new adjustments; transfers preserve FIFO cost references; variance loss does not create AP/AR/revenue/expense; cancellation rules enforced; force adjustment protected, reasoned, audited.
 
 ---
 
-## Milestone 8 — Purchasing, Suppliers, and Accounts Payable
+## M8 — Purchasing, Suppliers, AP
 
-### Goal
+**Goal:** Implement supplier, purchasing, receiving, return, and AP workflows.
 
-Implement supplier, purchasing, receiving, supplier return, and AP workflows.
+**Build:**
 
-### Step-by-Step Build Sequence
+- Supplier create/read/update/deactivate/reactivate.
+- Purchase draft/create/update/cancel and ordered/received/partially received/closed transitions.
+- Receiving with stock + FIFO layer creation.
+- Cash purchase no-AP behavior.
+- Credit purchase AP behavior.
+- Supplier payments, credits, returns.
+- Supplier return valuation from documented costing basis.
+- AP balances/report basis.
+- Status history, audit, idempotency.
+- Mobile purchasing/AP screens.
 
-1. Implement supplier create/read/update/deactivate/reactivate where documented.
-2. Implement purchase order draft/create/update/cancel.
-3. Implement ordered/received/partially received/closed transitions.
-4. Implement purchase receiving with stock and FIFO layer creation.
-5. Implement cash purchase behavior without AP liability.
-6. Implement credit purchase AP behavior.
-7. Implement supplier payment recording.
-8. Implement supplier credits.
-9. Implement supplier returns.
-10. Implement supplier return valuation from documented costing basis.
-11. Implement AP balances and report basis.
-12. Add status history, audit logs, and idempotency.
-13. Add purchasing and AP mobile screens.
+**Deliverables:** supplier/purchase/receiving/payment/credit/return APIs/screens, AP scaffolding, tests.
 
-### Deliverables
-
-- Supplier APIs/screens.
-- Purchase order APIs/screens.
-- Receiving command service.
-- Supplier payment/credit APIs.
-- Supplier return APIs/screens.
-- AP basis/report scaffolding.
-- Receiving and supplier return tests.
-
-### Acceptance Gate
-
-- Purchase receiving updates stock and FIFO layers transactionally.
-- Cash purchases do not create AP balances.
-- Credit purchases create AP balances.
-- Supplier returns adjust stock and supplier balance/credits according to documented rules.
-- Receiving cannot over-receive purchase lines.
-- Supplier balances and payment history are permission-protected.
+**Gate:** receiving updates stock and FIFO transactionally; cash purchases do not create AP; credit purchases create AP; returns adjust stock and supplier balance/credits; receiving cannot over-receive; supplier balances/payment history permission-protected.
 
 ---
 
-## Milestone 9 — Invoicing, Payments, Receipts, Refunds, Accounts Receivable
+## M9 — Invoicing, Payments, Receipts, Refunds, AR
 
-### Goal
+**Goal:** Implement billing, collection records, immutable receipts, refunds, voids, and AR.
 
-Implement billing, payment collection records, immutable receipts, refunds, voids, and AR.
+**Build:**
 
-### Step-by-Step Build Sequence
+- Invoice draft from job orders.
+- Billing allocation to prevent overbilling.
+- Invoice line types, calculations, discount allocation, tax.
+- Invoice issue with idempotency.
+- Cancellation/void rules.
+- Payment creation, partial/split payments, overpayment blocking.
+- Exactly one immutable receipt per payment.
+- Refund creation and controls.
+- Refund inventory reversal where applicable.
+- Paid-invoice refund status recalculation.
+- AR balances/report basis.
+- Financial immutability protections.
+- Cashier mobile flows.
 
-1. Implement invoice draft from job orders.
-2. Implement billing allocation service to prevent overbilling.
-3. Implement invoice line types and calculations.
-4. Implement invoice-level discount allocation.
-5. Implement tax calculation according to tenant tax settings.
-6. Implement invoice issue action with idempotency.
-7. Implement invoice cancellation/void rules.
-8. Implement payment creation against invoice.
-9. Generate exactly one immutable receipt per payment.
-10. Implement partial and split payments.
-11. Enforce overpayment blocking.
-12. Implement refund creation with approval controls where documented.
-13. Implement refund inventory reversal where applicable.
-14. Implement paid-invoice refund status recalculation.
-15. Implement AR balances and reporting basis.
-16. Add financial immutability protections.
-17. Add cashier mobile flows for invoice/payment/receipt/refund.
+**Deliverables:** invoice/payment/receipt/refund/AR APIs/screens, billing allocation service, idempotency/concurrency tests.
 
-### Deliverables
-
-- Invoice APIs/screens.
-- Billing allocation service.
-- Payment APIs/screens.
-- Receipt APIs/screens.
-- Refund APIs/screens.
-- AR APIs/report scaffolding.
-- Financial idempotency and concurrency tests.
-
-### Acceptance Gate
-
-- Invoice issuance cannot overbill job order lines.
-- Payments cannot exceed collectible invoice balance.
-- Every payment creates exactly one immutable receipt.
-- Refunds cannot exceed refundable amount.
-- Issued financial records are immutable or correction-only.
-- Concurrent payments cannot overpay.
-- Concurrent refunds cannot over-refund.
+**Gate:** invoice issuance cannot overbill; payments cannot exceed collectible balance; each payment creates one immutable receipt; refunds cannot exceed refundable amount; issued financial records are immutable/correction-only; concurrent payments/refunds cannot overpay/over-refund.
 
 ---
 
-## Milestone 10 — Expenses, Reminders, Notifications, Integrations
+## M10 — Expenses, Reminders, Notifications, Integrations
 
-### Goal
+**Goal:** Implement expenses, reminders, notifications, adapters, delivery tracking, and plan-channel enforcement.
 
-Implement operating expenses, customer reminders, internal notifications, provider adapters, delivery tracking, and plan-channel enforcement.
+**Build:**
 
-### Step-by-Step Build Sequence
+- Expense categories and create/read/update/void.
+- Expense report basis.
+- Reminder rules: time, mileage, birthday, follow-up.
+- Reminder scheduler.
+- Notification preferences, in-app delivery, push/email/SMS adapters.
+- Delivery attempts/failure tracking.
+- Plan-channel enforcement and no-silent-downgrade behavior.
+- Provider sandbox/fake adapters.
+- Sanitized provider logging.
 
-1. Implement expense categories.
-2. Implement expense create/read/update/void.
-3. Implement expense financial report basis.
-4. Implement reminder rules: time-based, mileage-based, birthday, and follow-up where documented.
-5. Implement reminder scheduling worker.
-6. Implement notification preferences.
-7. Implement in-app notification delivery.
-8. Implement push notification adapter.
-9. Implement email adapter.
-10. Implement SMS adapter.
-11. Implement delivery attempts and failure tracking.
-12. Enforce plan channels for reminders and notifications.
-13. Implement no-silent-downgrade behavior for unavailable channels.
-14. Add provider sandbox/test adapters.
-15. Add sanitized logging for provider payloads.
+**Deliverables:** expense/reminder/notification APIs/screens, provider interfaces, workers, delivery tracking, plan-channel tests.
 
-### Deliverables
-
-- Expense APIs/screens.
-- Reminder APIs/screens.
-- Notification APIs/screens.
-- Provider adapter interfaces.
-- Reminder/notification workers.
-- Delivery attempt tracking.
-- Plan-channel enforcement tests.
-
-### Acceptance Gate
-
-- Voided expenses are excluded from profit reports.
-- Reminder channels obey plan limits.
-- Disabled channels are blocked with clear plan/upgrade messaging.
-- No silent fallback occurs when a channel is unavailable.
-- Provider failures are observable and retry-safe.
-- Provider secrets and sensitive payloads are not logged.
+**Gate:** voided expenses excluded from profit reports; channels obey plan limits; unavailable channels are blocked with clear messaging; no silent fallback; provider failures observable/retry-safe; secrets/payloads not logged.
 
 ---
 
-## Milestone 11 — Files, Exports, Offline PWA Cache
+## M11 — Files, Exports, Offline PWA Cache
 
-### Goal
+**Goal:** Implement files, private access, tenant exports, and read-only offline cache.
 
-Implement attachments, private file access, tenant export packages, export jobs, and read-only offline cache.
+**Build:**
 
-### Step-by-Step Build Sequence
+- Object storage provider/config.
+- Private tenant-scoped object paths.
+- Upload intent API and signed upload/download URLs.
+- File metadata lifecycle, linking, soft-delete/restore, retention.
+- Full tenant export job with structured data, relationships, audit export, attachment manifest, README, selected attachments.
+- Export job status, safe errors, download expiry.
+- PWA manifest/service worker, app-shell cache, read-only recent-record cache.
+- Clear user cache on logout/session invalidation.
+- Block offline writes, uploads, approvals, payments, refunds, inventory actions, settings, role changes.
 
-1. Finalize object storage provider/configuration.
-2. Implement private tenant-scoped object paths.
-3. Implement upload intent API.
-4. Implement signed upload/download URL flow.
-5. Implement file metadata lifecycle.
-6. Implement file linking to documented entities.
-7. Implement file soft-delete and restore.
-8. Implement retention rules for financial/audit-relevant files.
-9. Implement full tenant export job.
-10. Package structured data, relationship data, audit export, attachment manifest, README, and attachments unless metadata-only selected.
-11. Implement export job status and safe error summaries.
-12. Implement export download expiry.
-13. Implement PWA manifest and service worker.
-14. Implement app-shell cache.
-15. Implement read-only recent-record cache.
-16. Clear user-scoped cache on logout/session invalidation.
-17. Block offline writes, uploads, approvals, payments, refunds, inventory actions, settings changes, and role changes.
+**Deliverables:** file APIs/screens, signed URL services, export worker/screens, offline shell/cache, file/offline tests.
 
-### Deliverables
-
-- File APIs/screens.
-- Signed URL services.
-- Export worker.
-- Export job screens.
-- Offline PWA shell and read-only cache.
-- File access and offline tests.
-
-### Acceptance Gate
-
-- No permanent public tenant file URLs exist.
-- Signed URLs are time-limited.
-- File access respects tenant, permission, and branch scope.
-- Tenant exports include required data and attachments where selected.
-- Large exports are asynchronous.
-- Offline cache is read-only, user-scoped, and cleared on logout.
-- Cached records do not bypass permissions after reconnect.
+**Gate:** no permanent public tenant file URLs; signed URLs time-limited; access respects tenant/permission/branch; exports include required data/attachments; large exports async; offline cache read-only/user-scoped/cleared on logout; cached records do not bypass permissions after reconnect.
 
 ---
 
-## Milestone 12 — Dashboard, Reports, Search, Export Formats
+## M12 — Dashboard, Reports, Search, Export Formats
 
-### Goal
+**Goal:** Implement visibility, search, reports, exports, and formula verification.
 
-Implement operational visibility, search, reports, exports, and calculation verification.
+**Build:**
 
-### Step-by-Step Build Sequence
+- Dashboard summary/API/screen.
+- Revenue chart, inventory alerts.
+- Customer, service, inventory, AR/AP, revenue, collection, COGS, gross profit, expenses, variance reports.
+- Branch comparison and advanced reports where plan allows.
+- Search read models.
+- CSV/PDF/Excel exports where documented.
+- Large report export jobs.
+- Formula fixtures and performance tests.
 
-1. Implement dashboard summary API and screen.
-2. Implement revenue chart.
-3. Implement inventory alerts.
-4. Implement customer reports.
-5. Implement service reports.
-6. Implement inventory reports.
-7. Implement AR/AP reports.
-8. Implement revenue, collection, COGS, gross profit, expenses, and variance reports.
-9. Implement branch comparison reports where plan allows.
-10. Implement advanced operational reports where plan allows.
-11. Implement search read models for documented entities.
-12. Implement CSV/PDF/Excel export formats where documented.
-13. Implement report export jobs for large exports.
-14. Add formula verification fixtures.
-15. Add performance tests for high-volume lists, dashboards, ledgers, search, and exports.
+**Deliverables:** dashboard/report/search APIs/screens, calculation services, read-model jobs, export fixtures, access tests.
 
-### Deliverables
-
-- Dashboard APIs/screens.
-- Report APIs/screens.
-- Search APIs/screens.
-- Report calculation services.
-- Read-model generation jobs.
-- Export format fixtures.
-- Report access tests.
-
-### Acceptance Gate
-
-- Reports respect tenant, branch, role, and plan access.
-- Branch comparison reports are blocked unless plan allows.
-- Advanced reports are blocked unless plan allows.
-- Search excludes soft-deleted records by default.
-- Large reports/exports run asynchronously where required.
-- Dashboard handles empty data, branch filters, renewal warnings, read-only banners, and low-stock alerts.
-- Stock valuation uses remaining FIFO quantities and unit costs.
-- COGS comes from FIFO consumption records.
+**Gate:** reports respect tenant/branch/role/plan; restricted reports are blocked unless plan allows; search excludes soft-deleted by default; large exports async; dashboard handles empty/branch/renewal/read-only/low-stock states; stock valuation and COGS use FIFO source data.
 
 ---
 
-## Milestone 13 — Security, Observability, Performance, DR Hardening
+## M13 — Security, Observability, Performance, DR Hardening
 
-### Goal
+**Goal:** Harden for production readiness.
 
-Harden the full system for production readiness.
+**Build:**
 
-### Step-by-Step Build Sequence
+- Threat model by module.
+- Tenant isolation tests across UI/API/repository/database/files/reports/exports.
+- Branch access tests.
+- Support access audit review.
+- Sensitive log review.
+- Rate-limit tests.
+- Dependency/container scans.
+- Structured logs, metrics, error monitoring, traces/correlation IDs.
+- Background job observability.
+- API/report/export performance tests.
+- Encrypted backups and restore rehearsal.
+- Validate or waive RPO 24h/RTO 4h.
+- Runbooks: deployment, rollback, backup/restore, incident response, support access, tenant lifecycle, provider failures.
 
-1. Run threat modeling by module.
-2. Run tenant isolation tests across UI, API, repository, database, files, reports, and exports.
-3. Run branch access tests across branch-specific records and linked histories.
-4. Run support access audit review.
-5. Run sensitive log review.
-6. Run rate-limit tests.
-7. Run dependency and container scans.
-8. Add/verify structured logs.
-9. Add/verify metrics.
-10. Add/verify error monitoring.
-11. Add/verify traces and correlation IDs.
-12. Verify background job observability.
-13. Run API performance tests.
-14. Run report/export performance tests.
-15. Configure encrypted backups.
-16. Perform restore rehearsal.
-17. Validate or formally waive RPO 24h and RTO 4h targets.
-18. Complete runbooks: deployment, rollback, backup/restore, incident response, support access, tenant lifecycle, provider failures.
+**Deliverables:** security report, log review evidence, performance report, observability/runbooks, job retry/failure evidence, backup/restore evidence, DR checklist, incident baseline.
 
-### Deliverables
-
-- Security test report.
-- Sensitive log review evidence.
-- Performance test report.
-- Observability dashboard/runbook.
-- Background job retry/failure evidence.
-- Backup and restore evidence.
-- DR readiness checklist.
-- Launch support runbooks.
-- Incident response baseline.
-
-### Acceptance Gate
-
-- Tenant isolation and branch access tests pass.
-- Sensitive passwords, tokens, provider secrets, and card/provider details are not logged, exported, or returned.
-- Support access sessions are explicit, reasoned, visible, expiring, and audited.
-- Background jobs are observable, retry-safe, and do not duplicate irreversible side effects.
-- Performance targets have evidence or approved mitigation.
-- Encrypted backups and restore evidence exist.
-- RPO/RTO targets are validated or formally waived.
+**Gate:** tenant/branch tests pass; sensitive data not logged/exported/returned; support access explicit/reasoned/visible/expiring/audited; jobs observable/retry-safe/no duplicate irreversible effects; performance evidence or mitigations exist; backups/restore evidence exist; RPO/RTO validated or waived.
 
 ---
 
-## Milestone 14 — End-to-End UAT and Launch Readiness
+## M14 — End-to-End UAT and Launch Readiness
 
-### Goal
+**Goal:** Validate full scope, resolve release blockers, and prepare controlled launch.
 
-Validate the full approved product scope, resolve release-blocking defects, and prepare controlled production launch.
+**Build:**
 
-### Step-by-Step Build Sequence
+- Freeze release candidate against approved docs.
+- Run regression, mobile E2E, and role-based UAT.
+- Validate tenant lifecycle, service flow, purchasing/AP, refunds/voids/AR, reminders/channels, files/exports/offline/deletion.
+- Burn down release-blocking defects.
+- Collect product, QA, security, DevOps, engineering signoffs.
+- Provision production.
+- Bootstrap first platform admin.
+- Verify seeds, plans, permissions, role templates, providers, storage, analytics, errors, backups, restore.
+- Execute production smoke.
+- Onboard limited pilot tenants.
+- Monitor errors, latency, jobs, reports, exports, delivery.
 
-1. Freeze release-candidate scope against approved source docs.
-2. Run full regression suite.
-3. Run mobile-first E2E workflows.
-4. Run role-based UAT scenarios for owner, manager, service advisor, mechanic, cashier, inventory clerk, and platform admin.
-5. Validate tenant lifecycle states end to end.
-6. Validate full service workflow from customer/motorcycle intake through job order, inventory consumption, invoice, payment, receipt, and report impact.
-7. Validate purchasing/AP workflow.
-8. Validate refunds/voids/AR recalculation.
-9. Validate reminders/notifications and plan channels.
-10. Validate files, exports, offline cache, and deletion lifecycle.
-11. Burn down release-blocking defects.
-12. Collect product, QA, security, DevOps, and engineering signoffs.
-13. Provision production environment.
-14. Bootstrap first platform admin.
-15. Verify seeds, plans, permissions, role templates, provider configs, storage, analytics, error monitoring, backups, and restore procedures.
-16. Execute production smoke plan.
-17. Onboard limited pilot tenants manually.
-18. Monitor errors, latency, background jobs, reports, exports, and provider delivery.
-19. Fix launch defects before broader sales rollout.
+**Required UAT Scenarios:**
 
-### Required UAT Scenarios
+1. Owner signup, verification, onboarding, first branch.
+2. Platform-created tenant, owner invitation, subscription assignment, onboarding.
+3. Employee invitation, role assignment, branch assignment, access restriction.
+4. Customer/motorcycle creation, duplicate warning, service history, restore.
+5. Estimate lifecycle and conversion.
+6. Job order lifecycle, mechanic assignment, service/labor lines, release.
+7. Mechanic session lifecycle and productivity reporting.
+8. Product creation, purchase receiving, FIFO layer creation, low-stock alert.
+9. Part reservation, job completion, FIFO consumption, COGS, ledger review.
+10. Adjustment approval/posting.
+11. Transfer reservation/send/receive/variance/FIFO preservation.
+12. Supplier purchase, partial receiving, AP, supplier payment, return.
+13. Invoice, billing allocation, issue, tax/discount, payment.
+14. Split payment, receipt, refund, inventory reversal, AR recalculation.
+15. Expense create/edit/void/report impact.
+16. Reminder/channel enforcement/delivery/notification.
+17. File upload/download/delete/restore/export attachments.
+18. Dashboard/reports with branch filters and plan restrictions.
+19. Tenant read-only/suspended/pending-deletion/renewal/export/deletion.
+20. Offline shell and read-only cache.
 
-1. Owner signup, email verification, onboarding, and first branch setup.
-2. Platform-created tenant, owner invitation, subscription assignment, and onboarding.
-3. Employee invitation, role assignment, branch assignment, and access restriction.
-4. Customer and motorcycle creation, duplicate warning, service history, and restore workflow.
-5. Estimate creation, presentation, approval, expiration, cancellation, and conversion.
-6. Job order creation, mechanic assignment, status transitions, service/labor lines, and release.
-7. Mechanic session start, pause, resume, finish, and productivity reporting.
-8. Product creation, purchase receiving, FIFO layer creation, and low-stock alert.
-9. Job order part reservation, completion, FIFO consumption, COGS calculation, and ledger review.
-10. Inventory adjustment approval and posting.
-11. Branch transfer reservation, send, receive, variance loss, and FIFO cost preservation.
-12. Supplier purchase, partial receiving, AP creation, supplier payment, and supplier return.
-13. Invoice creation, billing allocation, issuance, tax/discount calculation, and payment.
-14. Split payment, receipt generation, refund, refund inventory reversal, and AR recalculation.
-15. Expense creation, edit, void, and financial report impact.
-16. Reminder creation, channel enforcement, delivery tracking, and notification display.
-17. File upload, signed download, soft deletion, restoration, and export attachment packaging.
-18. Dashboard and reports with branch filters and plan restrictions.
-19. Tenant read-only, suspended, pending-deletion, renewal, export, and deletion lifecycle.
-20. Offline app shell and read-only recent-record cache behavior.
+**Deliverables:** QA report, traceability evidence, UAT/security/DevOps/business/engineering signoffs, deployment checklist, rollback/incident plan, pilot checklist.
 
-### Deliverables
-
-- Full QA execution report.
-- Traceability evidence from requirements to tests.
-- UAT signoff.
-- Security signoff.
-- DevOps signoff.
-- Product/Business signoff.
-- Production deployment checklist.
-- Rollback/incident plan.
-- Pilot tenant onboarding checklist.
-
-### Acceptance Gate
-
-- All P0 tests pass.
-- All P1 tests pass or have approved release waivers.
-- No unresolved Critical or High defects remain.
-- Regression suite passes.
-- Security acceptance tests pass.
-- Database integrity, migration, idempotency, and concurrency tests pass.
-- Performance and operational readiness evidence is complete.
-- Backup/restore and DR evidence is complete.
-- Product Owner, QA, Security, DevOps, and Engineering sign off.
-- Controlled production launch plan is approved.
+**Gate:** all P0 pass; all P1 pass or have waivers; no unresolved Critical/High defects; regression, security, DB integrity, migration, idempotency, concurrency tests pass; performance/ops evidence complete; backup/DR evidence complete; launch plan approved.
 
 ---
 
-# 9. Cross-Milestone Definition of Done
+## 8. Cross-Milestone Definition of Done
 
 A feature is done only when:
 
-- Requirement is implemented according to source docs.
-- API contract is implemented.
-- Database constraints and indexes are present where applicable.
-- Authorization and branch access are enforced.
-- Tenant status behavior is enforced where applicable.
-- Plan limits are enforced where applicable.
-- Audit logs are written where required.
-- Idempotency is implemented where required.
-- Frontend handles success, validation errors, forbidden states, loading states, read-only/offline states, and conflict states.
-- Unit, integration, contract, E2E, security, and concurrency tests are added as appropriate.
+- Requirement matches source docs.
+- API contract implemented.
+- Database constraints/indexes exist where needed.
+- Auth, tenant status, permission, branch access, and plan limits enforced where applicable.
+- Audit logs written where required.
+- Idempotency implemented where required.
+- Frontend handles success, validation, forbidden, loading, read-only/offline, and conflict states.
+- Appropriate unit, integration, contract, E2E, security, concurrency, performance, and operational tests are added.
 - Observability events, metrics, and logs are added.
 - Documentation is updated.
 
 ---
 
-# 10. Sprint Execution Pattern
+## 9. Sprint Execution Pattern
 
 For each milestone:
 
-1. Review relevant source documentation.
+1. Review relevant source docs.
 2. Confirm dependencies are complete.
-3. Confirm no excluded scope has entered the backlog.
-4. Break milestone into vertical slices.
-5. Attach PRD, RTM, user story, API, schema, permission, UX, QA, and ADR references.
+3. Confirm excluded scope has not entered backlog.
+4. Break work into vertical slices.
+5. Attach PRD, RTM, user story, API, schema, permission, UX, QA, ADR, and audit references.
 6. Define acceptance tests before implementation.
-7. Implement database and API first for core workflows.
+7. Implement database/API first for core workflows.
 8. Implement frontend against API contract.
-9. Run unit, integration, contract, E2E, security, concurrency, performance, and operational tests as applicable.
-10. Run observability and operational checklist.
-11. Review with Product, QA, Security, UX, DevOps, Engineering, and Operations.
-12. Close milestone only after the quality gate passes.
+9. Run applicable tests.
+10. Run observability/operational checklist.
+11. Review with Product, QA, Security, UX, DevOps, Engineering, Operations.
+12. Close only after quality gate passes.
 
 ---
 
-# 11. Parallelization Guidance
+## 10. Parallelization Guidance
 
-Safe parallel work:
-
-| Parallel Track                              | Rule                                                       |
-| ------------------------------------------- | ---------------------------------------------------------- |
-| Frontend shell and backend foundation       | Use mocked contracts until APIs are ready.                 |
-| UX wireframes and API refinement            | Keep screens aligned to documented endpoints and states.   |
-| Database migrations and API DTOs            | Keep schema/API enum values aligned.                       |
-| Master-data UI and backend modules          | Use contract-first development.                            |
-| Reporting design and transactional modules  | Report formulas should influence data capture early.       |
-| DevOps environments and feature development | Staging must exist before complex integrations.            |
-| Security review and module development      | Threat modeling happens continuously.                      |
-| QA design and implementation                | Acceptance tests should be written before code completion. |
+| Safe Parallel Track                      | Rule                                                 |
+| ---------------------------------------- | ---------------------------------------------------- |
+| Frontend shell + backend foundation      | Use mocked contracts until APIs are ready.           |
+| UX wireframes + API refinement           | Keep screens aligned to documented endpoints/states. |
+| DB migrations + API DTOs                 | Keep schema/API enum values aligned.                 |
+| Master-data UI + backend modules         | Use contract-first development.                      |
+| Reporting design + transactional modules | Let report formulas influence data capture early.    |
+| DevOps environments + feature work       | Staging must exist before complex integrations.      |
+| Security review + module work            | Threat modeling is continuous.                       |
+| QA design + implementation               | Acceptance tests before code completion.             |
 
 Avoid parallelizing workflows that share critical transaction boundaries until foundational services are stable.
 
 ---
 
-# 12. Remaining Decisions Before Deeper Feature Development
+## 11. Remaining Decisions Before Deeper Feature Development
 
-These are not product-scope gaps. They are implementation decisions that must be recorded through ADRs or approval artifacts.
-
-| Decision                                                   | Needed Before              | Recommended Action                                                                |
-| ---------------------------------------------------------- | -------------------------- | --------------------------------------------------------------------------------- |
-| Final migration tool: Kysely migrations vs node-pg-migrate | Milestone 1                | Decide once and enforce in CI.                                                    |
-| Non-owner role-template default seed grants                | Milestone 1 / 2            | Product Manager / BA + Business Owner approval required.                          |
-| OpenAPI generation approach                                | Milestone 2                | Choose generation/contract drift strategy.                                        |
-| PWA token transport details                                | Milestone 2                | Resolve secure cookie vs bearer handling and CSRF/XSS trade-offs.                 |
-| Email/SMS/push provider choices                            | Milestone 10               | Use adapter interface before vendor lock-in.                                      |
-| Object storage provider                                    | Milestone 11               | Choose S3-compatible private storage.                                             |
-| RLS timing and policy coverage                             | Milestone 1 / 13           | Repository/service scoping required from day one; RLS as defense-in-depth by ADR. |
-| Append-only database protections                           | Milestone 13 before launch | Implement approved immutability triggers/protections before production.           |
+| Decision                                             | Needed Before     | Action                                                         |
+| ---------------------------------------------------- | ----------------- | -------------------------------------------------------------- |
+| Migration tool: Kysely migrations vs node-pg-migrate | M1                | Decide once and enforce in CI.                                 |
+| Non-owner role-template default grants               | M1/M2             | Product Manager/BA + Business Owner approval.                  |
+| OpenAPI generation approach                          | M2                | Choose generation and drift strategy.                          |
+| PWA token transport details                          | M2                | Resolve cookie/bearer, CSRF, XSS trade-offs.                   |
+| Email/SMS/push providers                             | M10               | Use adapters before vendor lock-in.                            |
+| Object storage provider                              | M11               | Choose S3-compatible private storage.                          |
+| RLS timing and policy coverage                       | M1/M13            | Repository/service scoping from day one; RLS by ADR.           |
+| Append-only DB protections                           | M13 before launch | Implement immutability triggers/protections before production. |
 
 ---
 
-# 13. Final Recommendation
+## 12. Highest-Risk Areas
 
-Build GarageOS in the milestone order above. Start with foundations that protect the entire system: database constraints, auth/session security, tenant context, subscription status gates, RBAC, branch access, plan capability enforcement, idempotency, audit logging, transaction orchestration, and observability.
+Prioritize tests and reviews around:
 
-After foundations are stable, implement vertical slices in dependency order: master data, service operations, inventory/FIFO, purchasing/AP, invoicing/payments/AR, expenses/reminders/notifications, files/exports/offline cache, dashboard/reports/search, hardening, UAT, and launch readiness.
+- Tenant isolation.
+- Branch access.
+- Inventory/FIFO allocation and consumption.
+- Invoice billing allocations.
+- Payment/refund idempotency.
+- Immutable receipts.
+- File access and signed URLs.
+- Export/deletion jobs.
+- Background job retries and duplicate side effects.
+- Sensitive logging.
+- Subscription lifecycle gates.
+- Permission and role-template behavior.
 
-The highest-risk areas are tenant isolation, branch access, inventory/FIFO, invoice billing allocations, payment/refund idempotency, immutable receipts, file access, export/deletion jobs, and background job retries. These require the strongest automated test coverage, concurrency tests, rollback tests, security checks, and operational evidence.
+---
 
-GarageOS should remain a modular monolith through initial production launch. Distributed services should be considered only after production usage proves a clear scaling or organizational need and only through an approved ADR.
+## 13. Final Recommendation
+
+Build GarageOS in the milestone order above. Stabilize foundations first: database constraints, auth/session security, tenant context, subscription status gates, RBAC, branch access, plan enforcement, idempotency, audit logging, transaction orchestration, and observability.
+
+Then deliver vertical slices in dependency order: master data, service operations, inventory/FIFO, purchasing/AP, invoicing/payments/AR, expenses/reminders/notifications, files/exports/offline cache, dashboard/reports/search, hardening, UAT, and launch readiness.
+
+Keep GarageOS as a modular monolith through initial production launch. Consider distributed services only after production evidence proves a clear scaling or organizational need and an approved ADR exists.

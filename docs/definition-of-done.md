@@ -1,25 +1,16 @@
 # GarageOS Definition of Done
 
-**Document:** `definition-of-done.md`
-**Project:** GarageOS — Motorcycle Shop Management System SaaS
-**Status:** Milestone 0 Quality Contract
-**Scope:** Applies to all GarageOS feature tickets, bug fixes, technical tasks, and release candidates where relevant.
+**Project:** GarageOS — Motorcycle Shop Management System SaaS  
+**Status:** Milestone 0 Quality Contract  
+**Applies to:** features, fixes, technical tasks, release candidates.
 
 ---
 
-## 1. Purpose
+## 1. Rule
 
-This document defines what “done” means for GarageOS work.
+A work item is **done** only when it is source-aligned, implemented, validated, tested, documented, observable, secure, and reviewed. Mark an item **N/A** only with a reason.
 
-A feature, fix, or technical task is not complete until it is implemented, validated, documented, and proven to align with the approved GarageOS source documents.
-
-This Definition of Done exists to prevent incomplete implementation, undocumented scope changes, weak authorization, data integrity gaps, missing tests, missing audit coverage, missing observability, and security regressions.
-
----
-
-## 2. Source-of-Truth Rule
-
-GarageOS work must follow the approved source documents in this order:
+## 2. Source Order
 
 1. `requirements.md`
 2. `database-design.md`
@@ -32,252 +23,132 @@ GarageOS work must follow the approved source documents in this order:
 9. `ux-sreen-map.md`
 10. `qa-acceptance-test-plan.md`
 11. `tech-stack.md`
-12. `architecture-records.md`
-13. `build-roadmap.md`
+12. `garageos-architecture-records.md`
+13. `garageos-build-roadmap-v1.3.md`
 
-If implementation details conflict with the PRD or approved source documents, the source documents win.
-
-Undocumented behavior must not be implemented as hidden scope.
+Approved docs win over implementation. Do not add undocumented behavior, hidden scope, or excluded capabilities.
 
 ---
 
-## 3. Definition of Done Checklist
+## 3. Done Checklist
 
-A GarageOS work item is done only when every applicable item below is complete.
+### 3.1 Traceability and Scope
 
-Use **N/A with reason** only when a checklist item genuinely does not apply.
+- [ ] PRD, RTM, user story, and relevant architecture/API/schema/UX/QA/permission/ADR references are identified.
+- [ ] Behavior matches documented requirements, acceptance criteria, and edge cases.
+- [ ] No undocumented modules, routes, tables, permissions, screens, workflows, integrations, or excluded capabilities are introduced.
+- [ ] Ambiguities and major architecture/data/security/ops/cost/provider decisions have an ADR or approved decision.
+- [ ] Business rules and blocked paths are enforced server-side, not only in UI, with deterministic errors.
 
----
+### 3.2 Database and Schema
 
-## 4. Source Documentation Alignment
+- [ ] DB impact is reviewed; required tables, columns, enums/checks, indexes, FKs, constraints, and seed changes are implemented.
+- [ ] Tenant-owned records include `tenant_id`; branch-specific operational records include `tenant_id` + `branch_id`.
+- [ ] Critical invariants are DB-protected where practical.
+- [ ] Mutable records use `lock_version` or equivalent where required.
+- [ ] Append-only/correction-only records are not directly editable.
+- [ ] Migrations are versioned, CI-repeatable, staging/production safe, and tested.
+- [ ] Seed changes are idempotent.
 
-- [ ] Relevant PRD section is identified.
-- [ ] Relevant RTM ID is identified where available.
-- [ ] Relevant user story ID is identified where available.
-- [ ] Relevant architecture, API, schema, UX, QA, permission, and ADR references are identified where applicable.
-- [ ] No excluded capability has been introduced.
-- [ ] Any ambiguity is documented before implementation.
-- [ ] Any implementation decision affecting architecture, data, security, operations, cost, or provider choice has an ADR or approved decision record.
+### 3.3 API Contract
 
----
-
-## 5. Scope and Requirement Completion
-
-- [ ] The implemented behavior matches the documented requirement.
-- [ ] The feature does not add undocumented modules, routes, tables, permissions, screens, workflows, or integrations.
-- [ ] Business rules are implemented in backend/service logic, not only in the UI.
-- [ ] Blocked paths are implemented with clear, deterministic errors.
-- [ ] Edge cases from the source documents are handled.
-- [ ] Acceptance criteria are satisfied.
-
----
-
-## 6. Database and Schema Impact
-
-- [ ] Database impact has been reviewed.
-- [ ] Required tables, columns, enums/check constraints, indexes, and foreign keys are implemented where applicable.
-- [ ] Tenant-owned tables include `tenant_id`.
-- [ ] Branch-specific operational tables include both `tenant_id` and `branch_id`.
-- [ ] Critical invariants are protected through database constraints where practical.
-- [ ] Mutable records use `lock_version` or equivalent optimistic locking where required.
-- [ ] Append-only or correction-only records are not directly editable.
-- [ ] Migration is versioned, repeatable in CI, and safe for staging/production.
-- [ ] Seed data changes are idempotent.
-- [ ] Schema changes include tests or validation evidence.
-
----
-
-## 7. API Contract Impact
-
-- [ ] API endpoint behavior matches `api-contracts.md`.
-- [ ] Routes use `/api/v1` conventions.
-- [ ] Request and response bodies use documented JSON shape and enum values.
-- [ ] Success responses follow the standard response envelope.
-- [ ] Error responses follow the standard error envelope.
-- [ ] Error codes are stable and machine-readable.
-- [ ] Pagination, filtering, sorting, and search follow the documented contract where applicable.
-- [ ] Critical write endpoints require `Idempotency-Key` where required.
-- [ ] Mutable update endpoints handle version conflicts where required.
+- [ ] Endpoints follow `/api/v1`, documented routes, JSON shapes, enum values, envelopes, and error codes.
+- [ ] Pagination/filtering/sorting/search follow the contract where applicable.
+- [ ] Critical writes require `Idempotency-Key` where required.
+- [ ] Mutable updates handle version conflicts.
 - [ ] API contract tests are added or updated.
 
----
+### 3.4 Auth, Lifecycle, and Plan Gates
 
-## 8. Authorization, Permissions, and Access Control
+- [ ] Auth is required where applicable.
+- [ ] Tenant context is session-derived, never trusted from client payload.
+- [ ] Required permissions, branch access, and tenant-wide visibility rules are enforced.
+- [ ] Platform admin access is separate from tenant-user access.
+- [ ] Support access is explicit, reasoned, time-bound, visible where applicable, and audited.
+- [ ] Shop Owner protected behavior, custom roles, and additive permissions are preserved.
+- [ ] Tenant status gate runs before operational writes and respects `pending_setup`, `read_only`, `suspended`, `pending_deletion`, and `deleted`.
+- [ ] Shop Owner renewal/export exceptions are preserved.
+- [ ] Plan limits and notification-channel restrictions are enforced.
+- [ ] Blocked subscription/plan-limit attempts return clear errors and are audited where required.
 
-- [ ] Authentication is required where applicable.
-- [ ] Tenant context is resolved from the authenticated session, not trusted from client payload.
-- [ ] Required permission code is enforced.
-- [ ] Branch access is enforced for branch-specific records.
-- [ ] Tenant-wide entity visibility rules are respected.
-- [ ] Platform admin access is separated from tenant user access.
-- [ ] Platform support access is explicit, reasoned, time-bound, visibly marked where applicable, and audited.
-- [ ] Shop Owner protected behavior is preserved where applicable.
-- [ ] Custom role and additive permission behavior are respected.
-- [ ] Authorization tests cover allowed and blocked paths.
+### 3.5 Workflow, Transactions, and Audit
 
----
-
-## 9. Tenant Lifecycle and Plan Enforcement
-
-- [ ] Tenant status gate is enforced before operational writes.
-- [ ] `pending_setup`, `read_only`, `suspended`, `pending_deletion`, and `deleted` behavior is respected where applicable.
-- [ ] Shop Owner renewal/export exceptions are respected where documented.
-- [ ] Plan limits are enforced where applicable.
-- [ ] Notification channel restrictions are enforced where applicable.
-- [ ] Blocked subscription or plan-limit actions return clear errors.
-- [ ] Blocked plan-limit attempts are audit logged where required.
-
----
-
-## 10. Business Workflow Correctness
-
-- [ ] Workflow transitions are explicit and validated.
-- [ ] Invalid status transitions are blocked.
-- [ ] Required reason fields are captured for corrective or high-risk actions.
-- [ ] Status history or audit history is recorded where required.
+- [ ] Workflow transitions are explicit, validated, and invalid transitions are blocked.
+- [ ] Required reason fields are captured for corrective/high-risk actions.
+- [ ] Status/audit history is recorded where required.
 - [ ] Financial, inventory, billing, export, deletion, and irreversible workflows are transactionally safe.
-- [ ] Retry behavior cannot duplicate irreversible side effects.
-- [ ] Concurrency-sensitive flows use row locks, optimistic locking, idempotency, or equivalent protection.
-
----
-
-## 11. Audit Requirements
-
-- [ ] Required audit logs are written.
+- [ ] Retries cannot duplicate irreversible side effects.
+- [ ] Concurrency-sensitive flows use locks, optimistic locking, idempotency, or equivalent controls.
 - [ ] Audit logs include actor, tenant, branch where applicable, action, timestamp, previous/new values where appropriate, and reason where required.
-- [ ] Platform admin and support access actions are audited.
-- [ ] High-risk actions are audited, including role changes, permission changes, support access, refunds, voids, force adjustments, exports, deletion, subscription overrides, and tenant lifecycle changes.
-- [ ] Audit logs do not contain passwords, tokens, provider secrets, full payment card data, or sensitive payloads.
-- [ ] Audit tests are added where required.
+- [ ] Platform/support and high-risk actions are audited: role/permission changes, refunds, voids, force adjustments, exports, deletion, subscription overrides, lifecycle changes.
+- [ ] Audit payloads exclude passwords, tokens, provider secrets, full card data, and sensitive payloads.
 
----
-
-## 12. Security Review
+### 3.6 Security
 
 - [ ] No plaintext passwords, tokens, provider secrets, or sensitive credentials are stored, logged, returned, exported, or exposed.
-- [ ] Tenant isolation is enforced.
-- [ ] Branch isolation is enforced.
-- [ ] File access uses private storage and signed URLs where applicable.
+- [ ] Tenant and branch isolation are enforced.
+- [ ] Files use private storage and signed URLs where applicable.
 - [ ] Rate limits are implemented where required.
-- [ ] Inputs are validated server-side.
-- [ ] Authorization is enforced server-side.
+- [ ] Inputs are server-side validated.
+- [ ] Authorization is server-side enforced.
 - [ ] Sensitive error messages are sanitized.
-- [ ] Security-sensitive work has been reviewed by Engineering and Security where applicable.
+- [ ] Security-sensitive work is reviewed by Engineering/Security where applicable.
 
----
+### 3.7 Frontend, UX, and Offline
 
-## 13. Frontend and UX Completion
+- [ ] UI follows the UX screen map, is mobile-first, and adds no undocumented screens/flows.
+- [ ] Loading, empty, success, validation-error, forbidden, subscription/read-only, offline, and conflict states are handled where applicable.
+- [ ] Destructive/corrective actions require confirmation where appropriate.
+- [ ] UI restrictions are UX assistance only; backend remains authoritative.
+- [ ] Offline mode is clearly indicated and read-only.
+- [ ] Offline create/edit/approve/payment/refund/inventory/upload/settings/role-permission changes are blocked.
+- [ ] Cached data is read-only, user-scoped where applicable, cleared on logout/session invalidation, and signed file URLs are not cached past expiry.
 
-- [ ] UI follows the documented UX screen map.
-- [ ] UI does not introduce undocumented screens or flows.
-- [ ] UI works on mobile-first layouts.
-- [ ] Loading state is handled.
-- [ ] Empty state is handled.
-- [ ] Success state is handled.
-- [ ] Validation error state is handled.
-- [ ] Forbidden/permission denied state is handled.
-- [ ] Subscription blocked/read-only state is handled where applicable.
-- [ ] Offline state is handled where applicable.
-- [ ] Conflict/version error state is handled where applicable.
-- [ ] Destructive or corrective actions require confirmation where appropriate.
-- [ ] UI restrictions are treated as UX assistance only; backend remains authoritative.
+### 3.8 Observability and Operations
 
----
-
-## 14. Offline Behavior
-
-- [ ] Offline mode does not allow operational writes.
-- [ ] Offline create, edit, approve, payment, refund, inventory, upload, settings, and role/permission changes are blocked.
-- [ ] Offline state is clearly indicated.
-- [ ] Cached data is read-only.
-- [ ] Cached data is scoped to the logged-in user where applicable.
-- [ ] Cache is cleared on logout or session invalidation where applicable.
-- [ ] Signed file URLs are not cached beyond their expiration.
-
----
-
-## 15. Observability and Operations
-
-- [ ] Logs include request ID or correlation ID where applicable.
+- [ ] Logs include request/correlation IDs where applicable.
 - [ ] Important business events emit structured logs.
 - [ ] Critical failures emit metrics or observable events.
 - [ ] Background jobs expose status, attempts, timestamps, and safe error summaries.
-- [ ] Integration failures are observable and retry-safe where applicable.
-- [ ] Operational dashboards or runbook notes are updated where applicable.
-- [ ] No sensitive data is written to logs, analytics, errors, audit payloads, or monitoring tools.
+- [ ] Integration failures are observable and retry-safe.
+- [ ] Dashboards/runbooks are updated where applicable.
+- [ ] Logs, analytics, errors, audit payloads, and monitoring exclude sensitive data.
 
----
+### 3.9 Testing
 
-## 16. Testing Requirements
-
-Testing must match the risk level of the work item.
-
-- [ ] Unit tests are added for domain rules, calculations, validators, permission resolution, and state transitions where applicable.
-- [ ] Integration tests are added for service/database behavior where applicable.
-- [ ] Repository or database tests verify tenant scoping, branch scoping, constraints, indexes, transactions, and rollback behavior where applicable.
-- [ ] API contract tests verify request/response envelopes, validation, errors, permissions, branch access, idempotency, and optimistic locking where applicable.
+- [ ] Unit tests cover domain rules, calculations, validators, permissions, and state transitions where applicable.
+- [ ] Integration/repository/DB tests cover service behavior, tenant/branch scoping, constraints, indexes, transactions, and rollback where applicable.
+- [ ] API tests cover envelopes, validation, errors, permissions, branch access, idempotency, and optimistic locking where applicable.
 - [ ] E2E tests cover critical mobile-first workflows where applicable.
-- [ ] Security tests cover tenant isolation, branch isolation, sensitive data, file access, rate limits, and support access where applicable.
-- [ ] Concurrency tests cover document numbering, FIFO allocation, inventory reservation, invoice billing allocation, payments, refunds, transfers, receiving, exports, and deletion where applicable.
+- [ ] Security tests cover tenant/branch isolation, sensitive data, file access, rate limits, and support access where applicable.
+- [ ] Concurrency tests cover document numbering, FIFO allocation, reservations, billing allocation, payments, refunds, transfers, receiving, exports, and deletion where applicable.
 - [ ] Regression tests are added for bug fixes.
-- [ ] All relevant tests pass locally and in CI.
+- [ ] Relevant tests pass locally and in CI.
 
----
+### 3.10 Docs, Quality, and Review
 
-## 17. Documentation Requirements
-
-- [ ] Relevant source-aligned documentation is updated.
-- [ ] API docs or OpenAPI notes are updated where applicable.
-- [ ] Schema/migration notes are updated where applicable.
-- [ ] ADRs are added or updated for significant technical decisions.
-- [ ] Runbooks are updated for operational behavior where applicable.
-- [ ] QA test cases are updated where applicable.
-- [ ] Known limitations or follow-up tasks are documented.
-
----
-
-## 18. Code Quality and Maintainability
-
-- [ ] Code follows existing project patterns.
-- [ ] No duplicate business logic is introduced.
-- [ ] Domain logic is not hidden inside controllers or UI components.
-- [ ] Complex workflows are implemented through explicit services/command handlers.
-- [ ] Transaction boundaries are clear.
-- [ ] Errors are handled intentionally.
-- [ ] Validation is centralized where practical.
-- [ ] No dead code, debug code, console noise, or unused files remain.
+- [ ] Source docs, API/OpenAPI notes, schema/migration notes, ADRs, runbooks, and QA cases are updated where applicable.
+- [ ] Known limitations and follow-ups are documented.
+- [ ] Code follows existing patterns and introduces no duplicate business logic.
+- [ ] Domain logic is not hidden in controllers or UI components.
+- [ ] Complex workflows use services/command handlers.
+- [ ] Transaction boundaries, validation, and errors are intentional.
+- [ ] No dead/debug code, console noise, unused files, or stale artifacts remain.
 - [ ] Lint, typecheck, and tests pass.
+- [ ] Required self, Engineering, QA, Security, DevOps, and Product/Business reviews are complete.
+- [ ] No unresolved Critical/High defects remain.
+- [ ] Accepted exceptions include reason, owner, and follow-up.
 
 ---
 
-## 19. Review and Approval
+## 4. Closure Blockers
 
-A work item may be closed only when:
+A work item is **not done** if it:
 
-- [ ] Developer self-review is complete.
-- [ ] Engineering review is complete.
-- [ ] QA review is complete where applicable.
-- [ ] Security review is complete for high-risk work.
-- [ ] DevOps review is complete for operational/infrastructure work.
-- [ ] Product/Business review is complete for user-facing behavior or scope-sensitive work.
-- [ ] No unresolved Critical or High defects remain.
-- [ ] Any accepted exception has a documented reason, owner, and follow-up.
-
----
-
-## 20. Minimum Closure Rule
-
-A GarageOS feature is not done if any of the following are true:
-
-- It is not traceable to approved source documentation.
-- It introduces undocumented scope.
-- It relies only on frontend restrictions for security or business rules.
-- It can leak tenant or branch data.
-- It bypasses required permissions.
-- It ignores tenant lifecycle or plan gates.
-- It changes financial, inventory, receipt, refund, ledger, or audit data in an unsupported way.
-- It lacks required audit logs.
-- It lacks required idempotency or concurrency protection.
-- It lacks required tests.
-- It lacks required observability.
-- It leaves documentation stale.
+- Is not traceable to approved docs.
+- Introduces undocumented scope.
+- Relies only on frontend restrictions for security/business rules.
+- Can leak tenant or branch data.
+- Bypasses permissions, tenant lifecycle, or plan gates.
+- Mutates financial, inventory, receipt, refund, ledger, or audit data in an unsupported way.
+- Lacks required audit logs, idempotency, concurrency protection, tests, observability, or documentation.
