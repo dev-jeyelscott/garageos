@@ -37,9 +37,32 @@ export const createPlatformTenantRequestSchema = z
     subscription_start_date: dateOnlySchema,
     subscription_expiration_date: dateOnlySchema,
     owner: ownerInvitationRequestSchema,
+    approve_duplicate: z.boolean().optional(),
     duplicate_approval_reason: z.string().trim().min(1).max(500).nullable().optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    const duplicateApprovalReason =
+      typeof value.duplicate_approval_reason === 'string'
+        ? value.duplicate_approval_reason.trim()
+        : '';
+
+    if (value.approve_duplicate === true && duplicateApprovalReason.length === 0) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['duplicate_approval_reason'],
+        message: 'Duplicate approval reason is required when approving a duplicate tenant.',
+      });
+    }
+
+    if (value.approve_duplicate !== true && duplicateApprovalReason.length > 0) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['approve_duplicate'],
+        message: 'approve_duplicate must be true when duplicate_approval_reason is provided.',
+      });
+    }
+  });
 
 export const updatePlatformTenantSubscriptionRequestSchema = z
   .object({

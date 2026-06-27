@@ -209,6 +209,8 @@ export class PlatformTenantService {
       ]);
     }
 
+    const duplicateApprovalReason = normalizeDuplicateApproval(request);
+
     const platformAdminUserId = session.user.id;
     const now = new Date();
     const tenantId = randomUUID();
@@ -240,24 +242,40 @@ export class PlatformTenantService {
         transaction,
       );
 
-      if (duplicate !== null) {
+      if (duplicate !== null && duplicateApprovalReason === null) {
         throw GarageOsApiException.duplicateResource(
           'A non-deleted tenant with the same business name and shop email already exists.',
         );
       }
 
-      const tenant = await this.tenantStore.createTenant(
-        {
-          id: tenantId,
-          businessName: request.business_name,
-          normalizedBusinessName,
-          shopEmail: request.shop_email,
-          normalizedShopEmail,
-          status: 'pending_setup',
-          createdAt: now,
-        },
-        transaction,
-      );
+      let tenant: PlatformTenantDetailRecord;
+
+      try {
+        tenant = await this.tenantStore.createTenant(
+          {
+            id: tenantId,
+            businessName: request.business_name,
+            normalizedBusinessName,
+            shopEmail: request.shop_email,
+            normalizedShopEmail,
+            status: 'pending_setup',
+            duplicateApprovedAt: duplicateApprovalReason === null ? null : now,
+            duplicateApprovedByPlatformAdminUserId:
+              duplicateApprovalReason === null ? null : platformAdminUserId,
+            duplicateApprovalReason,
+            createdAt: now,
+          },
+          transaction,
+        );
+      } catch (error) {
+        if (isUnapprovedTenantDuplicateConstraintViolation(error)) {
+          throw GarageOsApiException.duplicateResource(
+            'A non-deleted tenant with the same business name and shop email already exists.',
+          );
+        }
+
+        throw error;
+      }
 
       const subscription = await this.tenantStore.createTenantSubscription(
         {
@@ -315,7 +333,7 @@ export class PlatformTenantService {
         invitation,
         session,
         auditContext,
-        duplicateApprovalReason: request.duplicate_approval_reason ?? null,
+        duplicateApprovalReason,
         client: transaction,
       });
 
@@ -492,12 +510,14 @@ export class PlatformTenantService {
     if (input.duplicateApprovalReason !== null) {
       await this.auditService.record({
         ...baseAudit,
-        action: 'platform.tenant_duplicate_approval.not_applied',
+        action: 'platform.tenant_duplicate_approval.applied',
         entityType: 'tenant',
         entityId: input.tenant.id,
         metadataJson: {
-          reason: input.duplicateApprovalReason,
-          schema_rule: 'duplicates_blocked_for_non_deleted_tenants',
+          duplicate_approved_at: input.tenant.duplicateApprovedAt?.toISOString() ?? null,
+          duplicate_approved_by_platform_admin_user_id:
+            input.tenant.duplicateApprovedByPlatformAdminUserId,
+          duplicate_approval_reason: input.duplicateApprovalReason,
         },
         reason: input.duplicateApprovalReason,
       });
@@ -535,6 +555,53 @@ export class PlatformTenantService {
       reason: input.reason,
     });
   }
+}
+
+function normalizeDuplicateApproval(request: CreatePlatformTenantRequest): string | null {
+  const approveDuplicate = request.approve_duplicate === true;
+  const duplicateApprovalReason =
+    typeof request.duplicate_approval_reason === 'string'
+      ? request.duplicate_approval_reason.trim()
+      : '';
+
+  if (approveDuplicate && duplicateApprovalReason.length === 0) {
+    throw GarageOsApiException.validationFailed([
+      {
+        field: 'duplicate_approval_reason',
+        code: 'required',
+        message: 'Duplicate approval reason is required when approving a duplicate tenant.',
+      },
+    ]);
+  }
+
+  if (!approveDuplicate && duplicateApprovalReason.length > 0) {
+    throw GarageOsApiException.validationFailed([
+      {
+        field: 'approve_duplicate',
+        code: 'required',
+        message: 'approve_duplicate must be true when duplicate_approval_reason is provided.',
+      },
+    ]);
+  }
+
+  return approveDuplicate ? duplicateApprovalReason : null;
+}
+
+function isUnapprovedTenantDuplicateConstraintViolation(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) {
+    return false;
+  }
+
+  const maybeDatabaseError = error as {
+    readonly code?: unknown;
+    readonly constraint?: unknown;
+  };
+
+  return (
+    maybeDatabaseError.code === '23505' &&
+    (maybeDatabaseError.constraint === 'ux_tenants_unapproved_business_email' ||
+      maybeDatabaseError.constraint === 'ux_tenants_active_business_email')
+  );
 }
 
 function toTenantSummaryResponse(row: PlatformTenantListRecord): PlatformTenantSummaryResponse {

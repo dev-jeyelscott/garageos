@@ -309,16 +309,77 @@ describe('PlatformTenantService', () => {
     }
   });
 
-  it('blocks duplicate non-deleted tenant business/email combinations before creating records', async () => {
+  it('allows a duplicate platform-created tenant only with explicit approval and reason', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+
+    try {
+      const { service, store, auditService } = createService();
+      store.duplicate = createTenantRecord({
+        id: '99999999-9999-4999-8999-999999999999',
+        businessName: 'Moto Garage',
+      });
+
+      const response = await service.createTenant(
+        {
+          ...createTenantRequest(),
+          approve_duplicate: true,
+          duplicate_approval_reason: 'Separate legal entity using the same shared admin email.',
+        },
+        createPlatformSession([PLATFORM_PERMISSIONS.TENANTS_CREATE]),
+        {
+          ipAddress: '127.0.0.1',
+          userAgent: 'vitest',
+        },
+      );
+
+      expect(response).toMatchObject({
+        tenant: {
+          business_name: 'Moto Garage',
+          status: 'pending_setup',
+        },
+        owner_invitation_sent: true,
+      });
+
+      expect(store.createdTenants[0]).toMatchObject({
+        businessName: 'Moto Garage',
+        normalizedBusinessName: 'moto garage',
+        normalizedShopEmail: 'owner@motogarage.test',
+        duplicateApprovedAt: NOW,
+        duplicateApprovedByPlatformAdminUserId: PLATFORM_ADMIN_USER_ID,
+        duplicateApprovalReason: 'Separate legal entity using the same shared admin email.',
+      });
+
+      expect(auditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'platform.tenant_duplicate_approval.applied',
+          entityType: 'tenant',
+          metadataJson: expect.objectContaining({
+            duplicate_approved_by_platform_admin_user_id: PLATFORM_ADMIN_USER_ID,
+            duplicate_approval_reason: 'Separate legal entity using the same shared admin email.',
+          }),
+          reason: 'Separate legal entity using the same shared admin email.',
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('blocks duplicate approval when the approval reason is blank', async () => {
     const { service, store } = createService();
     store.duplicate = createTenantRecord({
-      id: TENANT_ID,
+      id: '99999999-9999-4999-8999-999999999999',
       businessName: 'Moto Garage',
     });
 
     await expect(
       service.createTenant(
-        createTenantRequest(),
+        {
+          ...createTenantRequest(),
+          approve_duplicate: true,
+          duplicate_approval_reason: '   ',
+        },
         createPlatformSession([PLATFORM_PERMISSIONS.TENANTS_CREATE]),
         {
           ipAddress: null,
@@ -326,7 +387,13 @@ describe('PlatformTenantService', () => {
         },
       ),
     ).rejects.toMatchObject({
-      code: API_ERROR_CODES.DUPLICATE_RESOURCE,
+      code: API_ERROR_CODES.VALIDATION_FAILED,
+      details: [
+        expect.objectContaining({
+          field: 'duplicate_approval_reason',
+          code: 'required',
+        }),
+      ],
     });
 
     expect(store.createdTenants).toEqual([]);
@@ -484,6 +551,10 @@ function createTenantRecord(
     timezone: overrides.timezone ?? 'Asia/Manila',
     country: overrides.country ?? 'PH',
     currency: overrides.currency ?? 'PHP',
+    duplicateApprovedAt: overrides.duplicateApprovedAt ?? null,
+    duplicateApprovedByPlatformAdminUserId:
+      overrides.duplicateApprovedByPlatformAdminUserId ?? null,
+    duplicateApprovalReason: overrides.duplicateApprovalReason ?? null,
     createdAt,
     updatedAt: overrides.updatedAt ?? createdAt,
     lockVersion: overrides.lockVersion ?? 0,
@@ -588,6 +659,9 @@ class FakePlatformTenantStore extends PlatformTenantStore {
       businessName: input.businessName,
       shopEmail: input.shopEmail,
       status: input.status,
+      duplicateApprovedAt: input.duplicateApprovedAt,
+      duplicateApprovedByPlatformAdminUserId: input.duplicateApprovedByPlatformAdminUserId,
+      duplicateApprovalReason: input.duplicateApprovalReason,
       createdAt: input.createdAt,
     });
   }

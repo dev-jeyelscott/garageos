@@ -29,6 +29,9 @@ interface PlatformTenantRow extends DatabaseRow {
   readonly business_name: string;
   readonly shop_email: string;
   readonly status: string;
+  readonly duplicate_approved_at?: Date | string | null;
+  readonly duplicate_approved_by_platform_admin_user_id?: string | null;
+  readonly duplicate_approval_reason?: string | null;
   readonly timezone: string;
   readonly country: string;
   readonly currency: string;
@@ -195,15 +198,21 @@ export class PostgresPlatformTenantRepository extends PlatformTenantStore {
           shop_email,
           normalized_shop_email,
           status,
+          duplicate_approved_at,
+          duplicate_approved_by_platform_admin_user_id,
+          duplicate_approval_reason,
           created_at,
           updated_at
         )
-        values ($1, $2, $3, $4, $5, $6, $7, $7)
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)
         returning
           id,
           business_name,
           shop_email,
           status,
+          duplicate_approved_at,
+          duplicate_approved_by_platform_admin_user_id,
+          duplicate_approval_reason,
           timezone,
           country,
           currency,
@@ -238,6 +247,9 @@ export class PostgresPlatformTenantRepository extends PlatformTenantStore {
         input.shopEmail,
         input.normalizedShopEmail,
         input.status,
+        input.duplicateApprovedAt,
+        input.duplicateApprovedByPlatformAdminUserId,
+        input.duplicateApprovalReason,
         input.createdAt,
       ],
     );
@@ -419,6 +431,9 @@ function tenantSelectSql(): string {
       t.business_name,
       t.shop_email,
       t.status,
+      t.duplicate_approved_at,
+      t.duplicate_approved_by_platform_admin_user_id,
+      t.duplicate_approval_reason,
       t.timezone,
       t.country,
       t.currency,
@@ -485,6 +500,10 @@ function mapTenantListRecord(row: PlatformTenantRow): PlatformTenantListRecord {
     timezone: row.timezone,
     country: row.country,
     currency: row.currency,
+    duplicateApprovedAt: toNullableDate(row.duplicate_approved_at ?? null),
+    duplicateApprovedByPlatformAdminUserId:
+      row.duplicate_approved_by_platform_admin_user_id ?? null,
+    duplicateApprovalReason: row.duplicate_approval_reason ?? null,
     createdAt: toDate(row.created_at),
     updatedAt: toDate(row.updated_at),
     lockVersion: Number(row.lock_version),

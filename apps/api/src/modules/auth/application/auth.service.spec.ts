@@ -534,7 +534,7 @@ function createRefreshSessionRecord(
 }
 
 describe('AuthService signupOwner', () => {
-  it('keeps owner signup intentionally blocked until Milestone 3 tenant lifecycle and onboarding are implemented', () => {
+  it('keeps owner signup blocked, including any duplicate tenant approval path, until owner signup is implemented', () => {
     const { service } = createService();
 
     expect(() => service.signupOwner()).toThrow(

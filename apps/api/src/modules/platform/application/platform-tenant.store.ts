@@ -32,6 +32,9 @@ export interface PlatformTenantListRecord {
   readonly timezone: string;
   readonly country: string;
   readonly currency: string;
+  readonly duplicateApprovedAt: Date | null;
+  readonly duplicateApprovedByPlatformAdminUserId: string | null;
+  readonly duplicateApprovalReason: string | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
   readonly lockVersion: number;
@@ -79,6 +82,9 @@ export interface CreateTenantInput {
   readonly shopEmail: string;
   readonly normalizedShopEmail: string;
   readonly status: PlatformTenantStatus;
+  readonly duplicateApprovedAt: Date | null;
+  readonly duplicateApprovedByPlatformAdminUserId: string | null;
+  readonly duplicateApprovalReason: string | null;
   readonly createdAt: Date;
 }
 
