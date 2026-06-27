@@ -65,13 +65,13 @@ export function OwnerSignupScreen() {
       secondaryActions={<AuthLink href="/auth/login">Already have an account?</AuthLink>}
     >
       <InfoPanel title="Source-aligned signup note">
-        <p style={styles.paragraph}>
+        <p className={styles.paragraph}>
           Owner signup may be blocked until the platform default plan and default subscription
           duration are configured.
         </p>
       </InfoPanel>
 
-      <form onSubmit={handleSubmit} style={styles.form}>
+      <form onSubmit={handleSubmit} className={styles.form}>
         <InputField label="Business name" name="business_name" type="text" required />
         <InputField label="Shop email" name="shop_email" type="email" required />
         <InputField label="Owner full name" name="owner_full_name" type="text" required />

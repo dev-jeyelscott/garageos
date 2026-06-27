@@ -67,16 +67,16 @@ export function EmailVerificationRequiredScreen() {
       secondaryActions={<AuthLink href="/auth/login">Back to login</AuthLink>}
     >
       <InfoPanel title="Access limited">
-        <p style={styles.paragraph}>
+        <p className={styles.paragraph}>
           Before verification, only verification actions and logout are available.
         </p>
       </InfoPanel>
 
-      <div style={styles.buttonRow}>
-        <button type="button" onClick={handleResend} style={styles.primaryButton}>
+      <div className={styles.buttonRow}>
+        <button type="button" onClick={handleResend} className={styles.primaryButton}>
           Resend verification email
         </button>
-        <button type="button" onClick={handleLogout} style={styles.secondaryButton}>
+        <button type="button" onClick={handleLogout} className={styles.secondaryButton}>
           Logout
         </button>
       </div>
@@ -123,7 +123,7 @@ export function EmailVerificationConfirmScreen() {
       description="Confirm a single-use email verification token."
       secondaryActions={<AuthLink href="/auth/login">Continue to login</AuthLink>}
     >
-      <form onSubmit={handleSubmit} style={styles.form}>
+      <form onSubmit={handleSubmit} className={styles.form}>
         <InputField
           label="Verification token"
           name="token"

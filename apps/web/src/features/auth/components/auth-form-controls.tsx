@@ -40,15 +40,15 @@ export function InputField({
   readonly defaultValue?: string;
 }) {
   return (
-    <label style={styles.field}>
-      <span style={styles.label}>{label}</span>
+    <label className={styles.field}>
+      <span className={styles.label}>{label}</span>
       <input
         name={name}
         type={type}
         required={required}
         autoComplete={autoComplete}
         defaultValue={defaultValue}
-        style={styles.input}
+        className={styles.input}
       />
     </label>
   );
@@ -56,9 +56,9 @@ export function InputField({
 
 export function PasswordPolicy() {
   return (
-    <div style={styles.helpPanel}>
-      <p style={styles.helpTitle}>Password rules</p>
-      <ul style={styles.helpList}>
+    <div className={styles.helpPanel}>
+      <p className={styles.helpTitle}>Password rules</p>
+      <ul className={styles.helpList}>
         <li>At least 8 characters</li>
         <li>At least 1 uppercase letter</li>
         <li>At least 1 lowercase letter</li>
@@ -76,7 +76,7 @@ export function PrimaryButton({
   readonly children: ReactNode;
 }) {
   return (
-    <button type="submit" disabled={disabled} style={styles.primaryButton}>
+    <button type="submit" disabled={disabled} className={styles.primaryButton}>
       {children}
     </button>
   );
@@ -90,7 +90,7 @@ export function AuthLink({
   readonly children: ReactNode;
 }) {
   return (
-    <Link href={href} style={styles.link}>
+    <Link href={href} className={styles.link}>
       {children}
     </Link>
   );
@@ -104,8 +104,8 @@ export function InfoPanel({
   readonly children: ReactNode;
 }) {
   return (
-    <section style={styles.infoPanel}>
-      <h2 style={styles.panelTitle}>{title}</h2>
+    <section className={styles.infoPanel}>
+      <h2 className={styles.panelTitle}>{title}</h2>
       {children}
     </section>
   );
@@ -118,14 +118,14 @@ export function StatusMessage({ state }: { readonly state: ActionState }) {
 
   if (state.status === 'error' && state.error !== null) {
     return (
-      <section role="alert" style={styles.errorPanel}>
-        <h2 style={styles.panelTitle}>{state.message}</h2>
-        <p style={styles.paragraph}>
+      <section role="alert" className={styles.errorPanel}>
+        <h2 className={styles.panelTitle}>{state.message}</h2>
+        <p className={styles.paragraph}>
           {state.error.message} <strong>({state.error.code})</strong>
         </p>
 
         {state.error.details.length === 0 ? null : (
-          <ul style={styles.detailList}>
+          <ul className={styles.detailList}>
             {state.error.details.map((detail, index) => (
               <li key={index}>{formatErrorDetail(detail)}</li>
             ))}
@@ -140,9 +140,9 @@ export function StatusMessage({ state }: { readonly state: ActionState }) {
   return (
     <section
       role="status"
-      style={state.status === 'success' ? styles.successPanel : styles.infoPanel}
+      className={state.status === 'success' ? styles.successPanel : styles.infoPanel}
     >
-      <p style={styles.paragraph}>{state.message}</p>
+      <p className={styles.paragraph}>{state.message}</p>
     </section>
   );
 }
@@ -182,7 +182,7 @@ function RequestMetadata({ error }: { readonly error: ApiClientError }) {
   }
 
   return (
-    <dl style={styles.metadataList}>
+    <dl className={styles.metadataList}>
       {error.requestId === null ? null : (
         <>
           <dt>Request ID</dt>

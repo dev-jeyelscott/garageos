@@ -63,7 +63,7 @@ export function LoginScreen() {
         </>
       }
     >
-      <form onSubmit={handleSubmit} style={styles.form}>
+      <form onSubmit={handleSubmit} className={styles.form}>
         <InputField label="Email" name="email" type="email" autoComplete="email" required />
         <InputField
           label="Password"
@@ -73,7 +73,7 @@ export function LoginScreen() {
           required
         />
 
-        <label style={styles.checkboxLabel}>
+        <label className={styles.checkboxLabel}>
           <input name="remember_me" type="checkbox" />
           Remember me on this device
         </label>

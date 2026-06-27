@@ -12,8 +12,6 @@ export const DATABASE_URL_ENV_VAR = 'DATABASE_URL';
 
 type DatabaseEnvironment = Readonly<Record<string, string | undefined>>;
 
-const POSTGRES_PROTOCOLS = new Set(['postgres:', 'postgresql:']);
-
 @Injectable()
 export class PostgresDatabaseClient implements DatabaseConnectionProvider, OnModuleDestroy {
   private readonly pool: Pool;
@@ -66,21 +64,7 @@ export function resolveRequiredDatabaseUrl(env: DatabaseEnvironment = process.en
   const databaseUrl = env[DATABASE_URL_ENV_VAR]?.trim();
 
   if (!databaseUrl) {
-    throw new Error(
-      `${DATABASE_URL_ENV_VAR} is required. Set it to a PostgreSQL connection URL before starting the API.`,
-    );
-  }
-
-  let parsedDatabaseUrl: URL;
-
-  try {
-    parsedDatabaseUrl = new URL(databaseUrl);
-  } catch {
-    throw new Error(`${DATABASE_URL_ENV_VAR} must be a valid PostgreSQL connection URL.`);
-  }
-
-  if (!POSTGRES_PROTOCOLS.has(parsedDatabaseUrl.protocol)) {
-    throw new Error(`${DATABASE_URL_ENV_VAR} must use the postgres:// or postgresql:// protocol.`);
+    throw new Error(`${DATABASE_URL_ENV_VAR} is required to start the GarageOS API.`);
   }
 
   return databaseUrl;

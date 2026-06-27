@@ -53,7 +53,7 @@ export function ForgotPasswordScreen() {
       description="Request a rate-limited password reset link."
       secondaryActions={<AuthLink href="/auth/login">Back to login</AuthLink>}
     >
-      <form onSubmit={handleSubmit} style={styles.form}>
+      <form onSubmit={handleSubmit} className={styles.form}>
         <InputField label="Email" name="email" type="email" autoComplete="email" required />
         <PrimaryButton disabled={state.status === 'submitting'}>Send reset link</PrimaryButton>
       </form>
@@ -101,7 +101,7 @@ export function ResetPasswordScreen() {
       description="Use a single-use password reset token before it expires."
       secondaryActions={<AuthLink href="/auth/login">Back to login</AuthLink>}
     >
-      <form onSubmit={handleSubmit} style={styles.form}>
+      <form onSubmit={handleSubmit} className={styles.form}>
         <InputField label="Reset token" name="token" type="text" defaultValue={token} required />
         <InputField
           label="New password"
@@ -157,12 +157,12 @@ export function ChangePasswordScreen() {
       description="Change your password while authenticated."
       secondaryActions={
         <>
-          <AuthLink href="/">Current session</AuthLink>
+          <AuthLink href="/">Home</AuthLink>
           <AuthLink href="/auth/login">Login</AuthLink>
         </>
       }
     >
-      <form onSubmit={handleSubmit} style={styles.form}>
+      <form onSubmit={handleSubmit} className={styles.form}>
         <InputField
           label="Current password"
           name="current_password"

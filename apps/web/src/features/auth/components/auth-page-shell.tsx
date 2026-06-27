@@ -1,6 +1,9 @@
 'use client';
 
-import type { CSSProperties, ReactNode } from 'react';
+import Link from 'next/link';
+import type { ReactNode } from 'react';
+
+import { Card, Container } from '../../../components/ui';
 
 export function AuthPageShell({
   title,
@@ -14,232 +17,85 @@ export function AuthPageShell({
   readonly children: ReactNode;
 }) {
   return (
-    <main style={styles.page}>
-      <section style={styles.card}>
-        <div style={styles.header}>
-          <p style={styles.kicker}>GarageOS</p>
-          <h1 style={styles.title}>{title}</h1>
-          <p style={styles.description}>{description}</p>
+    <main className="min-h-dvh bg-background py-8 text-foreground sm:py-12">
+      <Container className="max-w-6xl">
+        <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr] lg:items-stretch">
+          <aside className="rounded-3xl border border-border bg-accent p-8 text-accent-foreground shadow-sm">
+            <Link href="/" className="inline-flex items-center gap-3 font-bold">
+              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
+                G
+              </span>
+              <span>GarageOS</span>
+            </Link>
+
+            <div className="mt-10">
+              <p className="text-sm font-bold uppercase tracking-[0.2em]">Secure shop access</p>
+              <h2 className="mt-3 text-3xl font-black tracking-tight">
+                Mobile-first access for documented GarageOS workflows.
+              </h2>
+              <p className="mt-4 text-sm leading-6">
+                Authentication, email verification, password management, tenant status, permissions,
+                and subscription access are resolved through the GarageOS API.
+              </p>
+            </div>
+          </aside>
+
+          <Card className="p-6 sm:p-8">
+            <div className="mb-6">
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
+                GarageOS
+              </p>
+              <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">{title}</h1>
+              <p className="mt-3 text-sm leading-6 text-muted-foreground">{description}</p>
+            </div>
+
+            {children}
+
+            {secondaryActions === undefined ? null : (
+              <nav
+                aria-label="Related auth actions"
+                className="mt-6 flex flex-wrap gap-3 border-t border-border pt-5 text-sm"
+              >
+                {secondaryActions}
+              </nav>
+            )}
+          </Card>
         </div>
-
-        {children}
-
-        {secondaryActions === undefined ? null : (
-          <nav aria-label="Related auth actions" style={styles.linkRow}>
-            {secondaryActions}
-          </nav>
-        )}
-      </section>
+      </Container>
     </main>
   );
 }
 
-export const styles: Record<string, CSSProperties> = {
-  page: {
-    minHeight: '100vh',
-    padding: '32px 16px',
-    background: '#f8fafc',
-    color: '#0f172a',
-    boxSizing: 'border-box',
-  },
-  card: {
-    width: '100%',
-    maxWidth: '760px',
-    margin: '0 auto',
-    padding: '28px',
-    background: '#ffffff',
-    border: '1px solid #e2e8f0',
-    borderRadius: '18px',
-    boxShadow: '0 20px 60px rgba(15, 23, 42, 0.08)',
-    boxSizing: 'border-box',
-  },
-  header: {
-    marginBottom: '24px',
-  },
-  kicker: {
-    margin: '0 0 8px',
-    fontSize: '12px',
-    fontWeight: 700,
-    letterSpacing: '0.12em',
-    textTransform: 'uppercase',
-    color: '#475569',
-  },
-  title: {
-    margin: 0,
-    fontSize: '32px',
-    lineHeight: 1.1,
-  },
-  description: {
-    margin: '12px 0 0',
-    color: '#475569',
-    lineHeight: 1.6,
-  },
-  form: {
-    display: 'grid',
-    gap: '16px',
-  },
-  field: {
-    display: 'grid',
-    gap: '8px',
-  },
-  label: {
-    fontSize: '14px',
-    fontWeight: 700,
-  },
-  input: {
-    minHeight: '44px',
-    padding: '10px 12px',
-    border: '1px solid #cbd5e1',
-    borderRadius: '10px',
-    fontSize: '16px',
-  },
-  checkboxLabel: {
-    display: 'flex',
-    gap: '10px',
-    alignItems: 'center',
-    color: '#334155',
-  },
-  primaryButton: {
-    minHeight: '44px',
-    padding: '10px 16px',
-    border: '1px solid #0f172a',
-    borderRadius: '10px',
-    background: '#0f172a',
-    color: '#ffffff',
-    fontWeight: 700,
-    cursor: 'pointer',
-    textDecoration: 'none',
-  },
-  secondaryButton: {
-    minHeight: '44px',
-    padding: '10px 16px',
-    border: '1px solid #cbd5e1',
-    borderRadius: '10px',
-    background: '#ffffff',
-    color: '#0f172a',
-    fontWeight: 700,
-    cursor: 'pointer',
-  },
-  secondaryButtonLink: {
-    minHeight: '22px',
-    padding: '10px 16px',
-    border: '1px solid #cbd5e1',
-    borderRadius: '10px',
-    background: '#ffffff',
-    color: '#0f172a',
-    fontWeight: 700,
-    textDecoration: 'none',
-    display: 'inline-flex',
-    alignItems: 'center',
-  },
-  buttonRow: {
-    display: 'flex',
-    gap: '12px',
-    flexWrap: 'wrap',
-    marginTop: '16px',
-  },
-  linkRow: {
-    display: 'flex',
-    gap: '12px',
-    flexWrap: 'wrap',
-    marginTop: '24px',
-    paddingTop: '18px',
-    borderTop: '1px solid #e2e8f0',
-  },
-  link: {
-    color: '#0f172a',
-    fontWeight: 700,
-  },
-  infoPanel: {
-    padding: '16px',
-    border: '1px solid #cbd5e1',
-    borderRadius: '14px',
-    background: '#f8fafc',
-    marginTop: '16px',
-  },
-  successPanel: {
-    padding: '16px',
-    border: '1px solid #86efac',
-    borderRadius: '14px',
-    background: '#f0fdf4',
-    marginTop: '16px',
-  },
-  errorPanel: {
-    padding: '16px',
-    border: '1px solid #fecaca',
-    borderRadius: '14px',
-    background: '#fef2f2',
-    marginTop: '16px',
-  },
-  panelTitle: {
-    margin: '0 0 8px',
-    fontSize: '16px',
-  },
-  paragraph: {
-    margin: '0 0 8px',
-    color: '#334155',
-    lineHeight: 1.6,
-  },
-  helpPanel: {
-    padding: '12px',
-    border: '1px dashed #cbd5e1',
-    borderRadius: '12px',
-    background: '#f8fafc',
-  },
-  helpTitle: {
-    margin: '0 0 6px',
-    fontWeight: 700,
-  },
-  helpList: {
-    margin: 0,
-    paddingLeft: '20px',
-    color: '#334155',
-  },
-  detailList: {
-    margin: '8px 0 0',
-    paddingLeft: '20px',
-    color: '#334155',
-  },
-  metadataList: {
-    display: 'grid',
-    gridTemplateColumns: '120px 1fr',
-    gap: '4px 10px',
-    margin: '12px 0 0',
-    fontSize: '12px',
-    color: '#475569',
-  },
-  sessionGrid: {
-    display: 'grid',
-    gap: '16px',
-  },
-  keyValue: {
-    display: 'grid',
-    gridTemplateColumns: '180px 1fr',
-    gap: '8px',
-    padding: '6px 0',
-    borderBottom: '1px solid #e2e8f0',
-  },
-  key: {
-    color: '#475569',
-    fontWeight: 700,
-  },
-  value: {
-    color: '#0f172a',
-    overflowWrap: 'anywhere',
-  },
-  permissionList: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: '8px',
-    margin: '8px 0 0',
-    padding: 0,
-    listStyle: 'none',
-  },
-  permissionBadge: {
-    padding: '6px 8px',
-    border: '1px solid #cbd5e1',
-    borderRadius: '999px',
-    background: '#ffffff',
-    fontSize: '12px',
-  },
-};
+export const styles = {
+  form: 'grid gap-4',
+  field: 'grid gap-2',
+  label: 'text-sm font-semibold text-foreground',
+  input:
+    'min-h-11 rounded-xl border border-input bg-background px-3 py-2 text-base text-foreground shadow-sm outline-none transition placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/20',
+  checkboxLabel: 'flex items-center gap-3 text-sm font-medium text-muted-foreground',
+  primaryButton:
+    'inline-flex min-h-11 items-center justify-center rounded-xl border border-primary bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition hover:opacity-90 disabled:pointer-events-none disabled:opacity-60',
+  secondaryButton:
+    'inline-flex min-h-11 items-center justify-center rounded-xl border border-border bg-card px-4 py-2 text-sm font-semibold text-card-foreground shadow-sm transition hover:bg-secondary disabled:pointer-events-none disabled:opacity-60',
+  secondaryButtonLink:
+    'inline-flex min-h-11 items-center justify-center rounded-xl border border-border bg-card px-4 py-2 text-sm font-semibold text-card-foreground no-underline shadow-sm transition hover:bg-secondary',
+  buttonRow: 'mt-4 flex flex-wrap gap-3',
+  link: 'font-semibold text-accent-foreground underline-offset-4 hover:underline',
+  infoPanel: 'mt-4 rounded-2xl border border-border bg-muted p-4',
+  successPanel: 'mt-4 rounded-2xl border border-success/30 bg-success/10 p-4',
+  errorPanel: 'mt-4 rounded-2xl border border-destructive/30 bg-destructive/10 p-4',
+  panelTitle: 'mb-2 text-base font-bold text-foreground',
+  paragraph: 'mb-2 text-sm leading-6 text-muted-foreground',
+  helpPanel: 'rounded-2xl border border-dashed border-border bg-muted p-4',
+  helpTitle: 'mb-2 text-sm font-bold text-foreground',
+  helpList: 'm-0 list-disc space-y-1 pl-5 text-sm text-muted-foreground',
+  detailList: 'mt-2 list-disc space-y-1 pl-5 text-sm text-muted-foreground',
+  metadataList: 'mt-3 grid grid-cols-[120px_1fr] gap-x-3 gap-y-1 text-xs text-muted-foreground',
+  sessionGrid: 'grid gap-4',
+  keyValue: 'grid gap-1 border-b border-border py-2 sm:grid-cols-[180px_1fr] sm:gap-3',
+  key: 'text-sm font-bold text-muted-foreground',
+  value: 'break-words text-sm text-foreground',
+  permissionList: 'mt-2 flex list-none flex-wrap gap-2 p-0',
+  permissionBadge:
+    'rounded-full border border-border bg-card px-3 py-1 text-xs font-semibold text-card-foreground',
+} as const;

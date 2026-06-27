@@ -65,7 +65,7 @@ export function HomeSessionScreen() {
 
       {session === null ? (
         <InfoPanel title="No active session">
-          <p style={styles.paragraph}>
+          <p className={styles.paragraph}>
             Log in to load the current user, tenant, permissions, branches, plan, and subscription
             access flags from the GarageOS API.
           </p>
@@ -131,11 +131,11 @@ export function LogoutScreen() {
       description="End your current GarageOS session or revoke all active sessions."
       secondaryActions={<AuthLink href="/">Cancel</AuthLink>}
     >
-      <div style={styles.buttonRow}>
-        <button type="button" onClick={handleLogoutCurrentDevice} style={styles.primaryButton}>
+      <div className={styles.buttonRow}>
+        <button type="button" onClick={handleLogoutCurrentDevice} className={styles.primaryButton}>
           Logout current device
         </button>
-        <button type="button" onClick={handleLogoutAllDevices} style={styles.secondaryButton}>
+        <button type="button" onClick={handleLogoutAllDevices} className={styles.secondaryButton}>
           Logout all devices
         </button>
       </div>
@@ -155,7 +155,7 @@ function SessionSummary({
   const warnings = session.subscription?.warnings ?? [];
 
   return (
-    <section style={styles.sessionGrid}>
+    <section className={styles.sessionGrid}>
       <InfoPanel title="User">
         <KeyValue label="Name" value={session.user.full_name} />
         <KeyValue label="Email" value={session.user.email} />
@@ -166,7 +166,7 @@ function SessionSummary({
 
       <InfoPanel title="Tenant">
         {session.tenant === null ? (
-          <p style={styles.paragraph}>Platform admin session without tenant context.</p>
+          <p className={styles.paragraph}>Platform admin session without tenant context.</p>
         ) : (
           <>
             <KeyValue label="Business" value={session.tenant.business_name} />
@@ -194,7 +194,7 @@ function SessionSummary({
         />
 
         {warnings.length === 0 ? null : (
-          <ul style={styles.detailList}>
+          <ul className={styles.detailList}>
             {warnings.map((warning) => (
               <li key={warning.code}>
                 <strong>{warning.code}:</strong> {warning.message}
@@ -211,9 +211,9 @@ function SessionSummary({
         />
 
         {session.branches.length === 0 ? (
-          <p style={styles.paragraph}>No branch assignments returned.</p>
+          <p className={styles.paragraph}>No branch assignments returned.</p>
         ) : (
-          <ul style={styles.detailList}>
+          <ul className={styles.detailList}>
             {session.branches.map((branch) => (
               <li key={branch.id}>{branch.name}</li>
             ))}
@@ -223,11 +223,11 @@ function SessionSummary({
 
       <InfoPanel title="Permissions">
         {session.effective_permissions.length === 0 ? (
-          <p style={styles.paragraph}>No effective permissions returned.</p>
+          <p className={styles.paragraph}>No effective permissions returned.</p>
         ) : (
-          <ul style={styles.permissionList}>
+          <ul className={styles.permissionList}>
             {session.effective_permissions.slice(0, 16).map((permission) => (
-              <li key={permission} style={styles.permissionBadge}>
+              <li key={permission} className={styles.permissionBadge}>
                 {permission}
               </li>
             ))}
@@ -235,20 +235,20 @@ function SessionSummary({
         )}
 
         {session.effective_permissions.length > 16 ? (
-          <p style={styles.paragraph}>
+          <p className={styles.paragraph}>
             Showing 16 of {session.effective_permissions.length} permissions.
           </p>
         ) : null}
       </InfoPanel>
 
-      <div style={styles.buttonRow}>
-        <button type="button" onClick={() => void onRefresh()} style={styles.primaryButton}>
+      <div className={styles.buttonRow}>
+        <button type="button" onClick={() => void onRefresh()} className={styles.primaryButton}>
           Refresh session
         </button>
-        <Link href="/auth/password/change" style={styles.secondaryButtonLink}>
+        <Link href="/auth/password/change" className={styles.secondaryButtonLink}>
           Change password
         </Link>
-        <Link href="/auth/logout" style={styles.secondaryButtonLink}>
+        <Link href="/auth/logout" className={styles.secondaryButtonLink}>
           Logout
         </Link>
       </div>
@@ -258,9 +258,9 @@ function SessionSummary({
 
 function KeyValue({ label, value }: { readonly label: string; readonly value: string }) {
   return (
-    <div style={styles.keyValue}>
-      <span style={styles.key}>{label}</span>
-      <span style={styles.value}>{value}</span>
+    <div className={styles.keyValue}>
+      <span className={styles.key}>{label}</span>
+      <span className={styles.value}>{value}</span>
     </div>
   );
 }

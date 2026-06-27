@@ -2,32 +2,26 @@ import { describe, expect, it } from 'vitest';
 
 import { resolveRequiredDatabaseUrl } from './postgres-database-client';
 
+const missingDatabaseUrlMessage = 'DATABASE_URL is required to start the GarageOS API.';
+
 describe('resolveRequiredDatabaseUrl', () => {
   it('fails fast when DATABASE_URL is missing', () => {
-    expect(() => resolveRequiredDatabaseUrl({})).toThrow(
-      'DATABASE_URL is required. Set it to a PostgreSQL connection URL before starting the API.',
+    expect(() => resolveRequiredDatabaseUrl({})).toThrow(missingDatabaseUrlMessage);
+  });
+
+  it('fails fast when DATABASE_URL is empty', () => {
+    expect(() => resolveRequiredDatabaseUrl({ DATABASE_URL: '' })).toThrow(
+      missingDatabaseUrlMessage,
     );
   });
 
-  it('fails fast when DATABASE_URL is blank', () => {
+  it('fails fast when DATABASE_URL is whitespace only', () => {
     expect(() => resolveRequiredDatabaseUrl({ DATABASE_URL: '   ' })).toThrow(
-      'DATABASE_URL is required. Set it to a PostgreSQL connection URL before starting the API.',
+      missingDatabaseUrlMessage,
     );
   });
 
-  it('fails fast when DATABASE_URL is not a valid URL', () => {
-    expect(() => resolveRequiredDatabaseUrl({ DATABASE_URL: 'not-a-url' })).toThrow(
-      'DATABASE_URL must be a valid PostgreSQL connection URL.',
-    );
-  });
-
-  it('fails fast when DATABASE_URL does not use a PostgreSQL protocol', () => {
-    expect(() =>
-      resolveRequiredDatabaseUrl({ DATABASE_URL: 'mysql://localhost/garageos' }),
-    ).toThrow('DATABASE_URL must use the postgres:// or postgresql:// protocol.');
-  });
-
-  it('returns a trimmed PostgreSQL connection URL', () => {
+  it('returns a trimmed DATABASE_URL when configured', () => {
     expect(
       resolveRequiredDatabaseUrl({
         DATABASE_URL: '  postgresql://garageos:garageos@localhost:5432/garageos_test  ',

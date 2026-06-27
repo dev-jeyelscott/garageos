@@ -1,0 +1,173 @@
+@import 'tailwindcss';
+
+@theme inline {
+  --color-background: rgb(var(--background));
+  --color-foreground: rgb(var(--foreground));
+  --color-card: rgb(var(--card));
+  --color-card-foreground: rgb(var(--card-foreground));
+  --color-popover: rgb(var(--popover));
+  --color-popover-foreground: rgb(var(--popover-foreground));
+  --color-primary: rgb(var(--primary));
+  --color-primary-foreground: rgb(var(--primary-foreground));
+  --color-secondary: rgb(var(--secondary));
+  --color-secondary-foreground: rgb(var(--secondary-foreground));
+  --color-muted: rgb(var(--muted));
+  --color-muted-foreground: rgb(var(--muted-foreground));
+  --color-accent: rgb(var(--accent));
+  --color-accent-foreground: rgb(var(--accent-foreground));
+  --color-destructive: rgb(var(--destructive));
+  --color-destructive-foreground: rgb(var(--destructive-foreground));
+  --color-border: rgb(var(--border));
+  --color-input: rgb(var(--input));
+  --color-ring: rgb(var(--ring));
+  --color-success: rgb(var(--success));
+  --color-success-foreground: rgb(var(--success-foreground));
+  --color-warning: rgb(var(--warning));
+  --color-warning-foreground: rgb(var(--warning-foreground));
+  --color-info: rgb(var(--info));
+  --color-info-foreground: rgb(var(--info-foreground));
+  --color-readonly: rgb(var(--readonly));
+  --color-readonly-foreground: rgb(var(--readonly-foreground));
+  --color-offline: rgb(var(--offline));
+  --color-offline-foreground: rgb(var(--offline-foreground));
+  --font-sans:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+:root {
+  color-scheme: light;
+
+  --background: 250 250 250;
+  --foreground: 24 24 27;
+
+  --card: 255 255 255;
+  --card-foreground: 24 24 27;
+
+  --popover: 255 255 255;
+  --popover-foreground: 24 24 27;
+
+  --primary: 249 115 0;
+  --primary-foreground: 255 255 255;
+
+  --secondary: 244 244 245;
+  --secondary-foreground: 24 24 27;
+
+  --muted: 244 244 245;
+  --muted-foreground: 113 113 122;
+
+  --accent: 255 244 230;
+  --accent-foreground: 154 52 18;
+
+  --destructive: 220 38 38;
+  --destructive-foreground: 255 255 255;
+
+  --border: 228 228 231;
+  --input: 212 212 216;
+  --ring: 249 115 0;
+
+  --success: 22 163 74;
+  --success-foreground: 255 255 255;
+
+  --warning: 245 158 11;
+  --warning-foreground: 24 24 27;
+
+  --info: 37 99 235;
+  --info-foreground: 255 255 255;
+
+  --readonly: 82 82 91;
+  --readonly-foreground: 255 255 255;
+
+  --offline: 113 113 122;
+  --offline-foreground: 255 255 255;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+
+    --background: 11 11 12;
+    --foreground: 250 250 250;
+
+    --card: 24 24 27;
+    --card-foreground: 250 250 250;
+
+    --popover: 24 24 27;
+    --popover-foreground: 250 250 250;
+
+    --primary: 255 138 0;
+    --primary-foreground: 17 17 19;
+
+    --secondary: 39 39 42;
+    --secondary-foreground: 250 250 250;
+
+    --muted: 39 39 42;
+    --muted-foreground: 161 161 170;
+
+    --accent: 58 36 21;
+    --accent-foreground: 255 216 77;
+
+    --destructive: 248 113 113;
+    --destructive-foreground: 17 17 19;
+
+    --border: 39 39 42;
+    --input: 63 63 70;
+    --ring: 255 170 64;
+
+    --success: 74 222 128;
+    --success-foreground: 17 17 19;
+
+    --warning: 251 191 36;
+    --warning-foreground: 17 17 19;
+
+    --info: 96 165 250;
+    --info-foreground: 17 17 19;
+
+    --readonly: 161 161 170;
+    --readonly-foreground: 17 17 19;
+
+    --offline: 161 161 170;
+    --offline-foreground: 17 17 19;
+  }
+}
+
+:root.light {
+  color-scheme: light;
+}
+
+:root.dark {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
+  scroll-behavior: smooth;
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  background: rgb(var(--background));
+  color: rgb(var(--foreground));
+  font-family: var(--font-sans);
+  text-rendering: optimizeLegibility;
+}
+
+a {
+  color: inherit;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+:focus-visible {
+  outline: 3px solid rgb(var(--ring));
+  outline-offset: 3px;
+}
