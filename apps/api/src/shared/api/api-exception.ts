@@ -61,6 +61,14 @@ export class GarageOsApiException extends HttpException {
     });
   }
 
+  static planLimitExceeded(message: string): GarageOsApiException {
+    return new GarageOsApiException({
+      code: API_ERROR_CODES.PLAN_LIMIT_EXCEEDED,
+      message,
+      status: HttpStatus.FORBIDDEN,
+    });
+  }
+
   static branchAccessDenied(): GarageOsApiException {
     return new GarageOsApiException({
       code: API_ERROR_CODES.BRANCH_ACCESS_DENIED,
