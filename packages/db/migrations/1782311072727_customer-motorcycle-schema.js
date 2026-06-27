@@ -117,7 +117,7 @@ exports.up = async (pgm) => {
       normalized_engine_number text,
       chassis_number text,
       normalized_chassis_number text,
-      latest_mileage integer not null default 0,
+      mileage integer not null default 0,
       status text not null default 'active',
       deleted_at timestamptz,
       created_at timestamptz not null default now(),
@@ -138,7 +138,7 @@ exports.up = async (pgm) => {
       ),
 
       constraint chk_motorcycle_mileage check (
-        latest_mileage >= 0
+        mileage >= 0
       ),
 
       constraint chk_motorcycle_status check (

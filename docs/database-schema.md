@@ -86,7 +86,7 @@ Format: `table(columns)` plus compact constraint/index names when useful.
 - `customer_tags`(`id, tenant_id, name, normalized_name, status, created_at`) — i=ux_customer_tags_active_name
 - `customer_tag_assignments`(`tenant_id, customer_id, tag_id, created_at`) — c=pk(tenant_id,customer_id,tag_id)
 - `customer_merge_events`(`id, tenant_id, source_customer_id, surviving_customer_id, reason, created_by_user_id, created_at`)
-- `motorcycles`(`id, tenant_id, customer_id, brand, model, year, color, plate_number, normalized_plate_number, engine_number, normalized_engine_number, chassis_number, normalized_chassis_number, latest_mileage, status, deleted_at, created_at, updated_at, lock_version`) — c=chk_motorcycle_mileage,chk_motorcycle_status; i=idx_motorcycles_customer,idx_motorcycles_plate,idx_motorcycles_model_trgm
+- `motorcycles`(`id, tenant_id, customer_id, brand, model, year, color, plate_number, normalized_plate_number, engine_number, normalized_engine_number, chassis_number, normalized_chassis_number, mileage, status, deleted_at, created_at, updated_at, lock_version`) — c=chk_motorcycle_mileage,chk_motorcycle_status; i=idx_motorcycles_customer,idx_motorcycles_plate,idx_motorcycles_model_trgm
 - `motorcycle_mileage_events`(`id, tenant_id, motorcycle_id, source_type, source_id, previous_mileage, new_mileage, reason, created_by_user_id, created_at`) — c=chk_mileage_event_new; i=idx_motorcycle_mileage_events_lookup
 
 ### 9. Service Catalog, Estimates, Job Orders

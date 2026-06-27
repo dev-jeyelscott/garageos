@@ -44,7 +44,7 @@ interface MotorcycleRow extends DatabaseRow {
   readonly normalized_engine_number: string | null;
   readonly chassis_number: string | null;
   readonly normalized_chassis_number: string | null;
-  readonly latest_mileage: number;
+  readonly mileage: number;
   readonly status: 'active' | 'soft_deleted';
   readonly deleted_at: Date | string | null;
   readonly created_at: Date | string;
@@ -148,7 +148,7 @@ export class PostgresMotorcycleRepository extends MotorcycleStore {
           normalized_engine_number,
           chassis_number,
           normalized_chassis_number,
-          latest_mileage,
+          mileage,
           status,
           deleted_at,
           created_at,
@@ -207,7 +207,7 @@ export class PostgresMotorcycleRepository extends MotorcycleStore {
           normalized_engine_number,
           chassis_number,
           normalized_chassis_number,
-          latest_mileage,
+          mileage,
           status,
           deleted_at,
           created_at,
@@ -246,7 +246,7 @@ export class PostgresMotorcycleRepository extends MotorcycleStore {
           normalized_engine_number,
           chassis_number,
           normalized_chassis_number,
-          latest_mileage,
+          mileage,
           status,
           created_at,
           updated_at
@@ -284,7 +284,7 @@ export class PostgresMotorcycleRepository extends MotorcycleStore {
           normalized_engine_number,
           chassis_number,
           normalized_chassis_number,
-          latest_mileage,
+          mileage,
           status,
           deleted_at,
           created_at,
@@ -338,7 +338,7 @@ export class PostgresMotorcycleRepository extends MotorcycleStore {
           normalized_engine_number = $11,
           chassis_number = $12,
           normalized_chassis_number = $13,
-          latest_mileage = $14,
+          mileage = $14,
           updated_at = $15,
           lock_version = lock_version + 1
         where tenant_id = $1
@@ -359,7 +359,7 @@ export class PostgresMotorcycleRepository extends MotorcycleStore {
           normalized_engine_number,
           chassis_number,
           normalized_chassis_number,
-          latest_mileage,
+          mileage,
           status,
           deleted_at,
           created_at,
@@ -639,7 +639,7 @@ function toMotorcycleRecord(row: MotorcycleRow): MotorcycleRecord {
     normalizedEngineNumber: row.normalized_engine_number,
     chassisNumber: row.chassis_number,
     normalizedChassisNumber: row.normalized_chassis_number,
-    latestMileage: row.latest_mileage,
+    latestMileage: row.mileage,
     status: row.status,
     deletedAt: toNullableDate(row.deleted_at),
     createdAt: toDate(row.created_at),
