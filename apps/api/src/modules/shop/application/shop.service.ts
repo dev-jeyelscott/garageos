@@ -171,6 +171,15 @@ export class ShopService {
         ]);
       }
 
+      await this.shopStore.seedDefaultProductCategories(
+        {
+          tenantId: context.tenantId,
+          createdByUserId: context.actorUserId,
+          createdAt: now,
+        },
+        transaction,
+      );
+
       await this.shopStore.markOnboardingComplete(
         {
           tenantId: context.tenantId,

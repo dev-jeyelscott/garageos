@@ -9,7 +9,7 @@ require('dotenv').config({
 const DATABASE_URL = process.env.DATABASE_URL;
 
 const EXPECTED = {
-  migrationCount: 18,
+  migrationCount: 19,
   publicTableCount: 106,
   subscriptionPlans: 3,
   subscriptionPlanLimits: 27,
@@ -174,6 +174,66 @@ async function validateRoleManagementSchema(client) {
   assertEqual('roles tenant status index', roleTenantStatusIndexCount, 1);
 }
 
+async function validateProductCategoriesSchema(client) {
+  const columnCount = await count(
+    client,
+    `
+      select count(*)
+      from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'product_categories'
+        and column_name in (
+          'id',
+          'tenant_id',
+          'name',
+          'normalized_name',
+          'status',
+          'created_at',
+          'created_by_user_id',
+          'updated_at',
+          'updated_by_user_id',
+          'deactivated_at',
+          'reactivated_at',
+          'lock_version'
+        )
+    `,
+  );
+
+  const statusConstraintCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_constraint
+      where conname = 'chk_product_categories_status'
+    `,
+  );
+
+  const uniqueIndexCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_indexes
+      where schemaname = 'public'
+        and indexname = 'ux_product_categories_active_name'
+    `,
+  );
+
+  const tenantStatusIndexCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_indexes
+      where schemaname = 'public'
+        and indexname = 'idx_product_categories_tenant_status'
+    `,
+  );
+
+  assertEqual('product categories columns', columnCount, 12);
+  assertEqual('product categories status constraint', statusConstraintCount, 1);
+  assertEqual('product categories active name unique index', uniqueIndexCount, 1);
+  assertEqual('product categories tenant status index', tenantStatusIndexCount, 1);
+}
+
 async function validateMoneyPrecision(client) {
   const result = await client.query(`
     select table_name, column_name, numeric_precision, numeric_scale
@@ -254,6 +314,7 @@ async function main() {
     await validateBaselineCounts(client);
     await validateTenantDuplicateApprovalSchema(client);
     await validateRoleManagementSchema(client);
+    await validateProductCategoriesSchema(client);
     await validateMoneyPrecision(client);
     await validateQuantityPrecision(client);
 

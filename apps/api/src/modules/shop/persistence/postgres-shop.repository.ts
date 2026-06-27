@@ -6,6 +6,7 @@ import {
   type DatabaseRow,
 } from '../../../shared/database/database-client';
 import {
+  type SeedDefaultProductCategoriesInput,
   type ShopOnboardingStateRecord,
   ShopStore,
   type UpsertShopProfileInput,
@@ -236,6 +237,48 @@ export class PostgresShopRepository extends ShopStore {
         input.defaultInvoiceDueDays,
         input.updatedAt,
       ],
+    );
+  }
+
+  async seedDefaultProductCategories(
+    input: SeedDefaultProductCategoriesInput,
+    client: DatabaseQueryClient,
+  ): Promise<void> {
+    await client.query(
+      `
+        insert into product_categories (
+          id,
+          tenant_id,
+          name,
+          normalized_name,
+          status,
+          created_at,
+          created_by_user_id,
+          updated_at,
+          updated_by_user_id
+        )
+        select
+          gen_random_uuid(),
+          $1,
+          category.name,
+          lower(category.name),
+          'active',
+          $2,
+          $3,
+          $2,
+          $3
+        from (
+          values
+            ('Engine Oil'),
+            ('Tires'),
+            ('Accessories'),
+            ('Brake Parts'),
+            ('CVT Parts'),
+            ('Lubricants')
+        ) as category(name)
+        on conflict do nothing
+      `,
+      [input.tenantId, input.createdAt, input.createdByUserId],
     );
   }
 

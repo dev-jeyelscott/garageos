@@ -38,6 +38,12 @@ export interface UpsertShopProfileInput {
   readonly updatedAt: Date;
 }
 
+export interface SeedDefaultProductCategoriesInput {
+  readonly tenantId: string;
+  readonly createdByUserId: string;
+  readonly createdAt: Date;
+}
+
 export abstract class ShopStore {
   abstract isActiveShopOwner(input: ShopOwnerCheckInput): Promise<boolean>;
 
@@ -57,6 +63,11 @@ export abstract class ShopStore {
       readonly completedAt: Date;
       readonly lifecycleEventId: string;
     },
+    client: DatabaseQueryClient,
+  ): Promise<void>;
+
+  abstract seedDefaultProductCategories(
+    input: SeedDefaultProductCategoriesInput,
     client: DatabaseQueryClient,
   ): Promise<void>;
 
