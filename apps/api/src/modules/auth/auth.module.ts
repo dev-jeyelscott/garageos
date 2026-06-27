@@ -26,6 +26,7 @@ import {
   AccessTokenService,
   type AccessTokenSigningOptions,
 } from './security/access-token.service';
+import { AUTH_OWNER_SIGNUP_PROVIDERS } from './auth-owner-signup.providers';
 
 @Module({
   imports: [DatabaseModule, AuthorizationModule, AuditModule],
@@ -51,6 +52,7 @@ import {
     ...AUTH_USER_PROVIDERS,
     ...AUTH_PASSWORD_RESET_PROVIDERS,
     ...AUTH_EMAIL_VERIFICATION_PROVIDERS,
+    ...AUTH_OWNER_SIGNUP_PROVIDERS,
   ],
   exports: [
     AuthService,

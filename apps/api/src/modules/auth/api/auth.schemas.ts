@@ -17,6 +17,23 @@ export const loginRequestSchema = z
   })
   .strict();
 
+export const ownerSignupRequestSchema = z
+  .object({
+    business_name: z.string().trim().min(1).max(200),
+    shop_email: z.string().trim().email(),
+    owner: z
+      .object({
+        full_name: z.string().trim().min(1).max(200),
+        email: z.string().trim().email(),
+        password: garageOsPasswordSchema,
+      })
+      .strict(),
+    timezone: z.string().trim().min(1).max(100).optional(),
+    country: z.string().trim().length(2).optional(),
+    currency: z.string().trim().length(3).optional(),
+  })
+  .strict();
+
 export const emailVerificationConfirmRequestSchema = z
   .object({
     token: authTokenSchema,
@@ -44,6 +61,8 @@ export const changePasswordRequestSchema = z
   .strict();
 
 export type LoginRequest = z.infer<typeof loginRequestSchema>;
+
+export type OwnerSignupRequest = z.infer<typeof ownerSignupRequestSchema>;
 
 export type EmailVerificationConfirmRequest = z.infer<typeof emailVerificationConfirmRequestSchema>;
 

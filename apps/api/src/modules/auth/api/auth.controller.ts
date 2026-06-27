@@ -33,9 +33,12 @@ import {
   forgotPasswordRequestSchema,
   type LoginRequest,
   loginRequestSchema,
+  type OwnerSignupRequest,
+  ownerSignupRequestSchema,
   type ResetPasswordRequest,
   resetPasswordRequestSchema,
 } from './auth.schemas';
+import { OwnerSignupService, type OwnerSignupResponse } from '../application/owner-signup.service';
 import { CurrentAuthSessionResponse } from './current-auth-session-response.decorator';
 import { AccessTokenAuthGuard } from './access-token-auth.guard';
 
@@ -54,13 +57,18 @@ export class AuthController {
     private readonly authTokenTransportService: AuthTokenTransportService,
     @Inject(AuditService)
     private readonly auditService: AuditService,
+    @Inject(OwnerSignupService)
+    private readonly ownerSignupService: OwnerSignupService,
   ) {
     this.authService = authService;
   }
 
   @Post('signup-owner')
-  signupOwner(): never {
-    return this.authService.signupOwner();
+  async signupOwner(
+    @Body(new ZodValidationPipe(ownerSignupRequestSchema))
+    request: OwnerSignupRequest,
+  ): Promise<OwnerSignupResponse> {
+    return this.ownerSignupService.signupOwner(request);
   }
 
   @Post('login')
