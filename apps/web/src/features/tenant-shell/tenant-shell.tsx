@@ -2,7 +2,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 
 import { Badge, ButtonLink, Card, Container, cn } from '../../components/ui';
-import type { AuthSessionResponseData, AuthTenantStatus } from '../../lib/auth-session';
+import type { AuthSessionResponseData, AuthTenantStatus } from '../auth/types/auth-session';
 
 export type AppModule =
   | 'dashboard'

@@ -1,11 +1,11 @@
 import { Suspense } from 'react';
 
-import { PageLoading } from '../../../src/components/page-loading';
-import { LoginScreen } from '../../../src/features/auth/auth-screens';
+import { AuthLoading } from '../../../src/features/auth/components/auth.loading';
+import { LoginScreen } from '../../../src/features/auth/components/auth.server';
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<PageLoading />}>
+    <Suspense fallback={<AuthLoading />}>
       <LoginScreen />
     </Suspense>
   );

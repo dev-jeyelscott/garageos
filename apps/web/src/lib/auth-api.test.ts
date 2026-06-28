@@ -1,18 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  changePassword,
-  clearStoredAccessToken,
-  getCurrentSession,
-  login,
-  logout,
-} from './auth-api';
+import { clearStoredAccessToken, login } from '../features/auth/actions/login.action';
+import { logout } from '../features/auth/actions/logout.action';
+import { changePassword } from '../features/auth/actions/password.action';
+import { getCurrentSession } from '../features/auth/queries/get-current-session.query';
 import type {
   AuthActionResult,
   AuthLoginResponseData,
   AuthRefreshResponseData,
   AuthSessionResponseData,
-} from './auth-session';
+} from '../features/auth/types/auth-session';
 
 describe('auth-api access token cache', () => {
   beforeEach(() => {

@@ -1,11 +1,11 @@
 import { Suspense } from 'react';
 
-import { PageLoading } from '../../../../src/components/page-loading';
-import { ChangePasswordScreen } from '../../../../src/features/auth/auth-screens';
+import { AuthLoading } from '../../../../src/features/auth/components/auth.loading';
+import { ChangePasswordScreen } from '../../../../src/features/auth/components/auth.server';
 
 export default function ChangePasswordPage() {
   return (
-    <Suspense fallback={<PageLoading />}>
+    <Suspense fallback={<AuthLoading />}>
       <ChangePasswordScreen />
     </Suspense>
   );
