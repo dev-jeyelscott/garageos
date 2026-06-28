@@ -6,9 +6,11 @@ import {
   type DatabaseRow,
 } from '../../../shared/database/database-client';
 import {
+  type AppendJobOrderInternalNoteInput,
   type AssignableMechanicRecord,
   JobOrderStore,
   type CancelJobOrderLineInput,
+  type CompleteJobOrderLineInput,
   type CreateJobOrderInput,
   type CreateJobOrderLineInput,
   type JobOrderLineRecord,
@@ -575,6 +577,93 @@ export class PostgresJobOrderRepository extends JobOrderStore {
     await this.touchJobOrder(input.tenantId, input.jobOrderId, input.updatedAt, client);
 
     return toJobOrderLineRecord(updated);
+  }
+
+  async appendJobOrderInternalNote(
+    input: AppendJobOrderInternalNoteInput,
+    client: DatabaseQueryClient,
+  ): Promise<JobOrderRecord | null> {
+    const result = await client.query<JobOrderRow>(
+      `
+        update job_orders
+        set
+          internal_notes = case
+            when internal_notes is null or btrim(internal_notes) = '' then $3
+            else internal_notes || E'\n' || $3
+          end,
+          updated_at = $4,
+          lock_version = lock_version + 1
+        where tenant_id = $1
+          and id = $2
+          and status in ('pending', 'in_progress', 'waiting_for_parts', 'completed')
+        returning *
+      `,
+      [input.tenantId, input.jobOrderId, input.note, input.updatedAt],
+    );
+
+    if (result.rows[0] === undefined) {
+      return null;
+    }
+
+    return this.findJobOrderById(input.tenantId, input.jobOrderId, client);
+  }
+
+  async completeJobOrderLine(
+    input: CompleteJobOrderLineInput,
+    client: DatabaseQueryClient,
+  ): Promise<JobOrderLineRecord | null> {
+    const result = await client.query<JobOrderLineRow>(
+      `
+        update job_order_lines
+        set
+          status = 'completed',
+          completed_at = $4,
+          updated_at = $4
+        where tenant_id = $1
+          and job_order_id = $2
+          and id = $3
+          and status = 'active'
+          and line_type in ('service', 'labor')
+          and inventory_reservation_id is null
+        returning *
+      `,
+      [input.tenantId, input.jobOrderId, input.lineId, input.completedAt],
+    );
+
+    const updated = result.rows[0];
+
+    if (updated === undefined) {
+      return null;
+    }
+
+    await this.touchJobOrder(input.tenantId, input.jobOrderId, input.completedAt, client);
+
+    return toJobOrderLineRecord(updated);
+  }
+
+  async isMechanicAssignedToJobOrder(
+    input: {
+      readonly tenantId: string;
+      readonly jobOrderId: string;
+      readonly mechanicUserId: string;
+    },
+    client: DatabaseQueryClient = this.database,
+  ): Promise<boolean> {
+    const result = await client.query<{ exists: boolean }>(
+      `
+        select exists (
+          select 1
+          from job_order_mechanics
+          where tenant_id = $1
+            and job_order_id = $2
+            and user_id = $3
+            and removed_at is null
+        ) as exists
+      `,
+      [input.tenantId, input.jobOrderId, input.mechanicUserId],
+    );
+
+    return result.rows[0]?.exists ?? false;
   }
 
   async findAssignableMechanics(

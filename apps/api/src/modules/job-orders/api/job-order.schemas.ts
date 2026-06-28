@@ -99,6 +99,16 @@ export const createJobOrderServiceLineRequestSchema = jobOrderServiceLaborLineRe
 
 export const updateJobOrderLineRequestSchema = jobOrderServiceLaborLineRequestSchema;
 
+export const appendJobOrderServiceNoteRequestSchema = z.object({
+  note: z.string().trim().min(1).max(2000),
+});
+
+export const completeJobOrderLineRequestSchema = z
+  .object({
+    completion_notes: z.string().trim().max(2000).nullish(),
+  })
+  .default({});
+
 export const createJobOrderPartLineRequestSchema = z.object({
   product_id: uuidSchema,
   description: z.string().trim().min(1).max(500),
@@ -156,6 +166,10 @@ export type CreateJobOrderRequest = z.infer<typeof createJobOrderRequestSchema>;
 export type UpdateJobOrderRequest = z.infer<typeof updateJobOrderRequestSchema>;
 export type AssignJobOrderMechanicsRequest = z.infer<typeof assignJobOrderMechanicsRequestSchema>;
 export type TransitionJobOrderStatusRequest = z.infer<typeof transitionJobOrderStatusRequestSchema>;
+export type AppendJobOrderServiceNoteRequest = z.infer<
+  typeof appendJobOrderServiceNoteRequestSchema
+>;
+export type CompleteJobOrderLineRequest = z.infer<typeof completeJobOrderLineRequestSchema>;
 export type CreateJobOrderServiceLineRequest = z.infer<
   typeof createJobOrderServiceLineRequestSchema
 >;

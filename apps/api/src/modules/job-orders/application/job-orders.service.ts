@@ -24,7 +24,9 @@ import {
   type TenantContextAuthenticatedSession,
 } from '../../../shared/tenant-context/tenant-context';
 import type {
+  AppendJobOrderServiceNoteRequest,
   AssignJobOrderMechanicsRequest,
+  CompleteJobOrderLineRequest,
   CreateJobOrderPartLineRequest,
   CreateJobOrderRequest,
   CreateJobOrderServiceLineRequest,
@@ -47,6 +49,10 @@ import {
 
 const IDEMPOTENCY_RETENTION_HOURS = 24;
 const DEFAULT_TENANT_TIMEZONE = 'Asia/Manila';
+const LINE_COMPLETION_OVERRIDE_PERMISSIONS = [
+  'job_orders.change_status',
+  'job_orders.correct_status',
+];
 
 export interface JobOrderLineResponse {
   readonly id: string;
@@ -165,6 +171,14 @@ interface NormalizedJobOrderStatusTransitionInput {
   readonly toStatus: JobOrderStatus;
   readonly reason: string | null;
   readonly expectedLockVersion: number;
+}
+
+interface NormalizedJobOrderServiceNoteInput {
+  readonly note: string;
+}
+
+interface NormalizedCompleteJobOrderLineInput {
+  readonly completionNotes: string | null;
 }
 
 @Injectable()
@@ -526,6 +540,80 @@ export class JobOrdersService {
     });
   }
 
+  async appendServiceNote(
+    jobOrderId: string,
+    request: AppendJobOrderServiceNoteRequest,
+    session: TenantContextAuthenticatedSession,
+  ): Promise<JobOrderMutationResponse> {
+    const context = resolveTenantContextFromAuthenticatedSession(session);
+    const isShopOwner = await this.jobOrderStore.isActiveShopOwner({
+      tenantId: context.tenantId,
+      userId: context.actorUserId,
+    });
+
+    assertTenantLifecycleAccess({
+      context,
+      isShopOwner,
+      action: TENANT_ACCESS_ACTIONS.OPERATIONAL_WRITE,
+    });
+    assertJobOrderPermission(context, isShopOwner, 'job_orders.update');
+
+    const input = normalizeJobOrderServiceNoteInput(request);
+
+    return this.transactionRunner.runInTransaction(async (transaction) => {
+      const existing = await this.jobOrderStore.findJobOrderByIdForUpdate(
+        context.tenantId,
+        jobOrderId.trim(),
+        transaction,
+      );
+
+      if (existing === null) {
+        throw GarageOsApiException.resourceNotFound('Job order was not found.');
+      }
+
+      assertJobOrderBranchAccess(context, existing.branchId);
+      assertCanAddJobOrderServiceNote(existing);
+
+      const notedAt = new Date();
+      const updated = await this.jobOrderStore.appendJobOrderInternalNote(
+        {
+          tenantId: context.tenantId,
+          jobOrderId: existing.id,
+          note: formatJobOrderServiceNote({
+            note: input.note,
+            notedAt,
+          }),
+          updatedAt: notedAt,
+        },
+        transaction,
+      );
+
+      if (updated === null) {
+        throw GarageOsApiException.workflowTransitionBlocked(
+          'Service notes can only be added before a job order is released or cancelled.',
+        );
+      }
+
+      await this.auditService.record({
+        tenantId: context.tenantId,
+        actorUserId: context.actorUserId,
+        actorType: AUDIT_ACTOR_TYPES.TENANT_USER,
+        action: 'job_orders.service_note_added',
+        entityType: 'job_order',
+        entityId: updated.id,
+        branchId: updated.branchId,
+        beforeJson: toJobOrderResponse(existing),
+        afterJson: toJobOrderResponse(updated),
+        reason: 'job_order_service_note_added',
+        client: transaction,
+      });
+
+      return {
+        job_order: toJobOrderResponse(updated),
+      };
+    });
+  }
+
   async transitionStatus(
     jobOrderId: string,
     request: TransitionJobOrderStatusRequest,
@@ -818,6 +906,135 @@ export class JobOrdersService {
     });
   }
 
+  async completeJobOrderLine(
+    jobOrderId: string,
+    lineId: string,
+    request: CompleteJobOrderLineRequest,
+    session: TenantContextAuthenticatedSession,
+  ): Promise<JobOrderLineMutationResponse> {
+    const context = resolveTenantContextFromAuthenticatedSession(session);
+    const isShopOwner = await this.jobOrderStore.isActiveShopOwner({
+      tenantId: context.tenantId,
+      userId: context.actorUserId,
+    });
+
+    assertTenantLifecycleAccess({
+      context,
+      isShopOwner,
+      action: TENANT_ACCESS_ACTIONS.OPERATIONAL_WRITE,
+    });
+    assertJobOrderPermission(context, isShopOwner, 'job_orders.update');
+
+    const input = normalizeCompleteJobOrderLineInput(request);
+
+    return this.transactionRunner.runInTransaction(async (transaction) => {
+      const existingJobOrder = await this.jobOrderStore.findJobOrderByIdForUpdate(
+        context.tenantId,
+        jobOrderId.trim(),
+        transaction,
+      );
+
+      if (existingJobOrder === null) {
+        throw GarageOsApiException.resourceNotFound('Job order was not found.');
+      }
+
+      assertJobOrderBranchAccess(context, existingJobOrder.branchId);
+      assertCanCompleteJobOrderLineForJobOrder(existingJobOrder);
+
+      const existingLine = await this.jobOrderStore.findJobOrderLineByIdForUpdate(
+        context.tenantId,
+        existingJobOrder.id,
+        lineId.trim(),
+        transaction,
+      );
+
+      if (existingLine === null) {
+        throw GarageOsApiException.resourceNotFound('Job order line was not found.');
+      }
+
+      assertCanCompleteServiceOrLaborLine(existingLine);
+
+      const isAssignedMechanic = await this.jobOrderStore.isMechanicAssignedToJobOrder(
+        {
+          tenantId: context.tenantId,
+          jobOrderId: existingJobOrder.id,
+          mechanicUserId: context.actorUserId,
+        },
+        transaction,
+      );
+
+      assertCanCompleteJobOrderLineActor({
+        context,
+        isShopOwner,
+        isAssignedMechanic,
+      });
+
+      const completedAt = new Date();
+      const line = await this.jobOrderStore.completeJobOrderLine(
+        {
+          tenantId: context.tenantId,
+          jobOrderId: existingJobOrder.id,
+          lineId: existingLine.id,
+          completedAt,
+        },
+        transaction,
+      );
+
+      if (line === null) {
+        throw GarageOsApiException.workflowTransitionBlocked(
+          'Job order line could not be completed because it is no longer active.',
+        );
+      }
+
+      if (input.completionNotes !== null) {
+        await this.jobOrderStore.appendJobOrderInternalNote(
+          {
+            tenantId: context.tenantId,
+            jobOrderId: existingJobOrder.id,
+            note: formatJobOrderLineCompletionNote({
+              line: existingLine,
+              completionNotes: input.completionNotes,
+              completedAt,
+            }),
+            updatedAt: completedAt,
+          },
+          transaction,
+        );
+      }
+
+      const updatedJobOrder = await this.reloadJobOrderOrThrow(
+        context.tenantId,
+        existingJobOrder.id,
+        transaction,
+      );
+
+      await this.auditService.record({
+        tenantId: context.tenantId,
+        actorUserId: context.actorUserId,
+        actorType: AUDIT_ACTOR_TYPES.TENANT_USER,
+        action: 'job_order_lines.completed',
+        entityType: 'job_order_line',
+        entityId: line.id,
+        branchId: updatedJobOrder.branchId,
+        beforeJson: {
+          job_order: toJobOrderResponse(existingJobOrder),
+          line: toJobOrderLineResponse(existingLine),
+        },
+        afterJson: {
+          job_order: toJobOrderResponse(updatedJobOrder),
+          line: toJobOrderLineResponse(line),
+        },
+        reason: 'job_order_line_completed',
+        client: transaction,
+      });
+
+      return {
+        job_order: toJobOrderResponse(updatedJobOrder),
+        line: toJobOrderLineResponse(line),
+      };
+    });
+  }
+
   async removeJobOrderLine(
     jobOrderId: string,
     lineId: string,
@@ -1004,6 +1221,61 @@ export function assertCanAssignJobOrderMechanics(jobOrder: Pick<JobOrderRecord, 
           'Mechanics can only be assigned while the job order is pending, in progress, or waiting for parts.',
       },
     ]);
+  }
+}
+
+export function assertCanAddJobOrderServiceNote(jobOrder: Pick<JobOrderRecord, 'status'>): void {
+  if (jobOrder.status === 'released' || jobOrder.status === 'cancelled') {
+    throw GarageOsApiException.workflowTransitionBlocked(
+      'Service notes can only be added before a job order is released or cancelled.',
+      [
+        {
+          field: 'status',
+          code: 'job_order_service_note_blocked_by_status',
+          message: 'Released and cancelled job orders do not accept new service notes.',
+        },
+      ],
+    );
+  }
+}
+
+export function assertCanCompleteJobOrderLineForJobOrder(
+  jobOrder: Pick<JobOrderRecord, 'status'>,
+): void {
+  if (jobOrder.status === 'in_progress' || jobOrder.status === 'waiting_for_parts') {
+    return;
+  }
+
+  throw GarageOsApiException.workflowTransitionBlocked(
+    'Labor tasks can only be completed while a job order is in progress or waiting for parts.',
+    [
+      {
+        field: 'status',
+        code: 'job_order_line_completion_blocked_by_status',
+        message: 'Move the job order to in progress before completing service or labor lines.',
+      },
+    ],
+  );
+}
+
+export function assertCanCompleteServiceOrLaborLine(
+  line: Pick<JobOrderLineRecord, 'status' | 'lineType' | 'inventoryReservationId'>,
+): void {
+  if (line.status !== 'active') {
+    throw GarageOsApiException.workflowTransitionBlocked(
+      'Only active job order lines can be completed.',
+      [
+        {
+          field: 'line_id',
+          code: 'job_order_line_not_active',
+          message: 'Only active job order lines can be completed.',
+        },
+      ],
+    );
+  }
+
+  if (line.lineType === 'part' || line.inventoryReservationId !== null) {
+    assertBaselinePartLinesBlocked();
   }
 }
 
@@ -1381,6 +1653,22 @@ function normalizeJobOrderLineInput(
   };
 }
 
+function normalizeJobOrderServiceNoteInput(
+  request: AppendJobOrderServiceNoteRequest,
+): NormalizedJobOrderServiceNoteInput {
+  return {
+    note: normalizeWhitespace(request.note),
+  };
+}
+
+function normalizeCompleteJobOrderLineInput(
+  request: CompleteJobOrderLineRequest,
+): NormalizedCompleteJobOrderLineInput {
+  return {
+    completionNotes: normalizeNullableText(request.completion_notes),
+  };
+}
+
 function normalizeMechanicAssignmentInput(
   request: AssignJobOrderMechanicsRequest,
 ): NormalizedMechanicAssignmentInput {
@@ -1437,6 +1725,45 @@ function normalizeUpdateJobOrderInput(
       ? normalizeNullableText(request.internal_notes)
       : existing.internalNotes,
   };
+}
+
+function assertCanCompleteJobOrderLineActor(input: {
+  readonly context: ResolvedTenantContext;
+  readonly isShopOwner: boolean;
+  readonly isAssignedMechanic: boolean;
+}): void {
+  if (input.isAssignedMechanic || hasLineCompletionOverride(input.context, input.isShopOwner)) {
+    return;
+  }
+
+  throw GarageOsApiException.forbidden(
+    LINE_COMPLETION_OVERRIDE_PERMISSIONS.join('|'),
+    'Only an assigned mechanic or authorized manager can complete service or labor lines.',
+  );
+}
+
+function hasLineCompletionOverride(context: ResolvedTenantContext, isShopOwner: boolean): boolean {
+  return (
+    isShopOwner ||
+    LINE_COMPLETION_OVERRIDE_PERMISSIONS.some((permission) =>
+      context.effectivePermissions.includes(permission),
+    )
+  );
+}
+
+function formatJobOrderServiceNote(input: {
+  readonly note: string;
+  readonly notedAt: Date;
+}): string {
+  return `[${input.notedAt.toISOString()}] ${input.note}`;
+}
+
+function formatJobOrderLineCompletionNote(input: {
+  readonly line: Pick<JobOrderLineRecord, 'lineType' | 'description'>;
+  readonly completionNotes: string;
+  readonly completedAt: Date;
+}): string {
+  return `[${input.completedAt.toISOString()}] Completed ${input.line.lineType} line "${input.line.description}". ${input.completionNotes}`;
 }
 
 function toJobOrderResponse(jobOrder: JobOrderRecord): JobOrderResponse {

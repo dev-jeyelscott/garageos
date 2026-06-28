@@ -6,7 +6,10 @@ import {
 } from '../../../shared/numbering/document-numbering';
 import {
   assertBaselinePartLinesBlocked,
+  assertCanAddJobOrderServiceNote,
   assertCanAssignJobOrderMechanics,
+  assertCanCompleteJobOrderLineForJobOrder,
+  assertCanCompleteServiceOrLaborLine,
   assertCanEditJobOrderLines,
   assertCanTransitionJobOrderStatus,
   assertCanUpdateJobOrderBaseline,
@@ -353,5 +356,95 @@ describe('job order line scaffolding validators', () => {
 
   it('blocks part lines until inventory reservation support exists', () => {
     expect(() => assertBaselinePartLinesBlocked()).toThrow('One or more fields are invalid.');
+  });
+});
+
+describe('job order service notes validators', () => {
+  it.each(['pending', 'in_progress', 'waiting_for_parts', 'completed'] as const)(
+    'allows service notes while job order is %s',
+    (status) => {
+      expect(() =>
+        assertCanAddJobOrderServiceNote({
+          status,
+        }),
+      ).not.toThrow();
+    },
+  );
+
+  it.each(['released', 'cancelled'] as const)(
+    'blocks service notes while job order is %s',
+    (status) => {
+      expect(() =>
+        assertCanAddJobOrderServiceNote({
+          status,
+        }),
+      ).toThrow('Service notes can only be added before a job order is released or cancelled.');
+    },
+  );
+});
+
+describe('job order labor task completion validators', () => {
+  it.each(['in_progress', 'waiting_for_parts'] as const)(
+    'allows completing service/labor lines while job order is %s',
+    (status) => {
+      expect(() =>
+        assertCanCompleteJobOrderLineForJobOrder({
+          status,
+        }),
+      ).not.toThrow();
+    },
+  );
+
+  it.each(['pending', 'completed', 'released', 'cancelled'] as const)(
+    'blocks completing service/labor lines while job order is %s',
+    (status) => {
+      expect(() =>
+        assertCanCompleteJobOrderLineForJobOrder({
+          status,
+        }),
+      ).toThrow(
+        'Labor tasks can only be completed while a job order is in progress or waiting for parts.',
+      );
+    },
+  );
+
+  it.each(['service', 'labor'] as const)('allows completing active %s lines', (lineType) => {
+    expect(() =>
+      assertCanCompleteServiceOrLaborLine({
+        status: 'active',
+        lineType,
+        inventoryReservationId: null,
+      }),
+    ).not.toThrow();
+  });
+
+  it.each(['completed', 'cancelled'] as const)('blocks completing %s lines', (status) => {
+    expect(() =>
+      assertCanCompleteServiceOrLaborLine({
+        status,
+        lineType: 'labor',
+        inventoryReservationId: null,
+      }),
+    ).toThrow('Only active job order lines can be completed.');
+  });
+
+  it('blocks completing part lines until inventory reservation support exists', () => {
+    expect(() =>
+      assertCanCompleteServiceOrLaborLine({
+        status: 'active',
+        lineType: 'part',
+        inventoryReservationId: null,
+      }),
+    ).toThrow('One or more fields are invalid.');
+  });
+
+  it('blocks completing inventory-reserved lines until inventory reservation support exists', () => {
+    expect(() =>
+      assertCanCompleteServiceOrLaborLine({
+        status: 'active',
+        lineType: 'service',
+        inventoryReservationId: 'reservation-1',
+      }),
+    ).toThrow('One or more fields are invalid.');
   });
 });
