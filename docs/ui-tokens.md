@@ -262,7 +262,188 @@ Required blocked states: `forbidden`, `branch_access_denied`, `subscription_acce
 
 ---
 
-## 8. Type, Spacing, Radius, Elevation
+## 8. Motion Tokens
+
+Motion tokens define consistent timing, easing, transform distance, and reduced-motion behavior for GarageOS UI.
+
+These tokens are visual and interaction guidance only. They do not introduce product modules, routes, roles, workflows, permissions, business behavior, product states, offline writes, or unsupported capabilities.
+
+Motion must support the documented mobile-first PWA experience, permission-aware UI, tenant lifecycle UI, offline read-only behavior, explicit workflow actions, immutable/correction-only record treatment, and source-aligned public marketing surfaces.
+
+### 8.1 Motion Principles
+
+| Principle                | Guidance                                                                                                                                                                        |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Productivity first       | Operational screens should use minimal motion that preserves scanability and speed.                                                                                             |
+| State clarity            | Motion must reinforce documented UI state, not obscure it.                                                                                                                      |
+| Server-confirmed success | Critical workflow success motion may render only after confirmed API success.                                                                                                   |
+| Reduced motion           | All motion tokens must have reduced-motion behavior.                                                                                                                            |
+| Semantic usage           | Components should reference semantic motion tokens rather than hard-coded durations/easing.                                                                                     |
+| Mobile-first             | Motion must feel fast on small screens and unstable mobile networks.                                                                                                            |
+| Scope-safe               | Motion must not imply native apps, offline writes, customer portal, standalone POS, payroll, full accounting, automatic subscription collection, 2FA, or unsupported workflows. |
+
+### 8.2 Duration Tokens
+
+| Token                      |   Value | Use                                                                    |
+| -------------------------- | ------: | ---------------------------------------------------------------------- |
+| `motion-duration-none`     |   `0ms` | Reduced-motion final state, no animation                               |
+| `motion-duration-instant`  |  `80ms` | Very small feedback where animation is nearly immediate                |
+| `motion-duration-fast`     | `120ms` | Hover, focus, press, badge, chip, tab, simple feedback                 |
+| `motion-duration-standard` | `180ms` | Card reveal, alert reveal, small panel transition                      |
+| `motion-duration-measured` | `240ms` | Dialog/sheet entrance, workflow summary reveal                         |
+| `motion-duration-rich`     | `420ms` | Public marketing section reveal or staged non-critical storytelling    |
+| `motion-duration-max`      | `700ms` | Upper bound for rare marketing sequences; avoid on operational screens |
+
+Rules:
+
+- Dense operational screens should usually use `motion-duration-none`, `motion-duration-instant`, or `motion-duration-fast`.
+- Workflow dialogs should usually use `motion-duration-standard` or `motion-duration-measured`.
+- Public marketing pages may use `motion-duration-rich` when it improves storytelling.
+- Avoid long chained delays on task screens.
+
+### 8.3 Easing Tokens
+
+| Token                    | CSS Value                        | Use                                                      |
+| ------------------------ | -------------------------------- | -------------------------------------------------------- |
+| `motion-ease-standard`   | `cubic-bezier(0.2, 0, 0, 1)`     | Default UI motion                                        |
+| `motion-ease-enter`      | `cubic-bezier(0.16, 1, 0.3, 1)`  | Reveals, dialogs, sheets, cards                          |
+| `motion-ease-exit`       | `cubic-bezier(0.4, 0, 1, 1)`     | Dismissals and exits                                     |
+| `motion-ease-emphasized` | `cubic-bezier(0.2, 0.8, 0.2, 1)` | Public marketing emphasis only                           |
+| `motion-ease-linear`     | `linear`                         | Progress indicators and non-decorative continuous motion |
+
+Rules:
+
+- Use `motion-ease-standard` for most UI transitions.
+- Use `motion-ease-emphasized` sparingly and primarily on public marketing surfaces.
+- Avoid bounce/spring effects on operational workflows unless a future ADR explicitly approves them.
+
+### 8.4 Distance and Transform Tokens
+
+| Token                     |  Value | Use                                                  |
+| ------------------------- | -----: | ---------------------------------------------------- |
+| `motion-distance-none`    |  `0px` | Reduced-motion and no movement                       |
+| `motion-distance-micro-y` |  `2px` | Button press or tiny hover lift                      |
+| `motion-distance-xs-y`    |  `4px` | Small chip/card feedback                             |
+| `motion-distance-sm-y`    |  `8px` | Alert/card reveal                                    |
+| `motion-distance-md-y`    | `12px` | Dialog/sheet content reveal                          |
+| `motion-distance-lg-y`    | `24px` | Public marketing reveal; avoid on operational tables |
+| `motion-scale-press`      | `0.98` | Pressed button/card feedback                         |
+| `motion-scale-reveal`     | `0.98` | Subtle reveal start state                            |
+| `motion-opacity-hidden`   |    `0` | Hidden reveal state                                  |
+| `motion-opacity-visible`  |    `1` | Visible final state                                  |
+
+Rules:
+
+- Avoid horizontal movement for critical workflow feedback unless it improves spatial orientation.
+- Avoid parallax or large transforms on operational screens.
+- Public marketing parallax, if later implemented, should stay subtle and capped by documented transform tokens.
+
+### 8.5 Semantic Motion Tokens
+
+| Token                         |                                Recommended Duration | Recommended Transform             | Use                                                                           |
+| ----------------------------- | --------------------------------------------------: | --------------------------------- | ----------------------------------------------------------------------------- |
+| `motion-operational-feedback` |                              `motion-duration-fast` | `motion-distance-micro-y` or none | Hover, focus, active states                                                   |
+| `motion-operational-reveal`   |                          `motion-duration-standard` | `motion-distance-sm-y`            | Non-dense card or alert reveal                                                |
+| `motion-workflow-dialog`      |                          `motion-duration-measured` | `motion-distance-md-y`            | Workflow action dialog/sheet entrance                                         |
+| `motion-workflow-success`     |                          `motion-duration-standard` | none or `motion-scale-reveal`     | Server-confirmed success feedback                                             |
+| `motion-blocked-state`        |                           `motion-duration-instant` | none                              | Permission, branch, plan, tenant, read-only, suspended, offline blockers      |
+| `motion-dense-data`           | `motion-duration-none` or `motion-duration-instant` | none                              | Tables, ledgers, audit logs, financial records, inventory records, FIFO views |
+| `motion-marketing-reveal`     |                              `motion-duration-rich` | `motion-distance-lg-y`            | Public marketing page section reveal                                          |
+| `motion-marketing-sequence`   |     `motion-duration-rich` to `motion-duration-max` | tokenized transform only          | Public homepage storytelling sequences                                        |
+
+### 8.6 Reduced-Motion Token Behavior
+
+When `prefers-reduced-motion: reduce` is active:
+
+| Token Category     | Reduced-Motion Behavior                                                             |
+| ------------------ | ----------------------------------------------------------------------------------- |
+| Duration           | Use `motion-duration-none` or near-instant completion.                              |
+| Distance/transform | Use `motion-distance-none`; avoid scale, parallax, and scroll-linked transforms.    |
+| Opacity            | Content may appear immediately without delayed fade.                                |
+| GSAP timelines     | Skip timeline playback and set final visible state.                                 |
+| Workflow feedback  | Preserve messages, banners, validation errors, and server-confirmed result content. |
+| Skeletons/loading  | Prefer static loading placeholders.                                                 |
+
+### 8.7 Critical Workflow Motion Rules
+
+Motion must not fake successful completion of critical workflows.
+
+The following action categories may show final success animation only after a successful server response:
+
+- Inventory reservation, release, transfer, adjustment, FIFO consumption, and stock-changing operations.
+- Job order workflow transitions and completion.
+- Invoice issue, void, billing allocation, payment, receipt, refund, and AR/AP changes.
+- Purchase receiving, supplier return posting, and supplier payment operations.
+- Tenant lifecycle changes, support access, exports, deletion jobs, and platform-admin actions.
+- Any action requiring idempotency, optimistic locking, audit logging, or workflow status history.
+
+Before server confirmation, the UI may show loading, submitting, validating, queued, or pending states only when those states are documented and backed by API behavior.
+
+### 8.8 CSS Variable Guidance
+
+Future implementation may expose motion tokens as CSS custom properties:
+
+```css
+:root {
+  --motion-duration-none: 0ms;
+  --motion-duration-instant: 80ms;
+  --motion-duration-fast: 120ms;
+  --motion-duration-standard: 180ms;
+  --motion-duration-measured: 240ms;
+  --motion-duration-rich: 420ms;
+  --motion-duration-max: 700ms;
+
+  --motion-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --motion-ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
+  --motion-ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --motion-ease-emphasized: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --motion-ease-linear: linear;
+
+  --motion-distance-none: 0px;
+  --motion-distance-micro-y: 2px;
+  --motion-distance-xs-y: 4px;
+  --motion-distance-sm-y: 8px;
+  --motion-distance-md-y: 12px;
+  --motion-distance-lg-y: 24px;
+  --motion-scale-press: 0.98;
+  --motion-scale-reveal: 0.98;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-duration-instant: 0ms;
+    --motion-duration-fast: 0ms;
+    --motion-duration-standard: 0ms;
+    --motion-duration-measured: 0ms;
+    --motion-duration-rich: 0ms;
+    --motion-duration-max: 0ms;
+
+    --motion-distance-micro-y: 0px;
+    --motion-distance-xs-y: 0px;
+    --motion-distance-sm-y: 0px;
+    --motion-distance-md-y: 0px;
+    --motion-distance-lg-y: 0px;
+    --motion-scale-press: 1;
+    --motion-scale-reveal: 1;
+  }
+}
+```
+
+### 8.9 Tailwind Motion Mapping Guidance
+
+Future Tailwind configuration may map semantic motion tokens to transition duration, timing function, animation distance, and transform utilities.
+
+Rules:
+
+- Keep token names semantic.
+- Avoid component-specific hard-coded timing values.
+- Do not create tokens for undocumented workflow states.
+- Prefer CSS/Tailwind-only transitions for hover, focus, active, and simple component state.
+- Use GSAP only where timeline orchestration or scroll/staged animation is justified by `ui-registry.md`.
+
+---
+
+## 9. Type, Spacing, Radius, Elevation
 
 Typography:
 
@@ -308,7 +489,7 @@ Elevation: prefer border + subtle shadow. `shadow-sm` for cards, `shadow-md` for
 
 ---
 
-## 9. Component Usage
+## 10. Component Usage
 
 Buttons:
 
@@ -355,7 +536,7 @@ Icons:
 
 ---
 
-## 10. Accessibility and Responsive Rules
+## 11. Accessibility and Responsive Rules
 
 Accessibility:
 
@@ -382,7 +563,7 @@ Design at `360px` minimum first. Use single-column mobile forms, sticky bottom a
 
 ---
 
-## 11. Tailwind and shadcn Mapping
+## 12. Tailwind and shadcn Mapping
 
 Use CSS variables as the single source for Tailwind and shadcn/ui.
 
@@ -427,7 +608,7 @@ Extend variants only for documented UI needs: `readonly`, `offline`, `warning`, 
 
 ---
 
-## 12. Governance and Acceptance Criteria
+## 13. Governance and Acceptance Criteria
 
 New tokens are allowed only when existing semantic tokens cannot represent a reusable need, both light/dark values are defined, accessibility is checked, and the token does not introduce undocumented behavior.
 

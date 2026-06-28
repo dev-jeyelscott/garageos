@@ -624,7 +624,113 @@ Key UI:
 
 ---
 
-## 11. Mobile-First Layout Rules
+## 11. Motion Components / Motion Patterns
+
+This section documents proposed motion components and hooks for future implementation. It is planning guidance only. This documentation step does not install GSAP, does not implement animation code, and does not modify frontend components.
+
+Motion patterns must support documented GarageOS screens, workflow states, permission-aware UI, tenant lifecycle UI, offline read-only behavior, immutable/correction-only records, and mobile-first PWA usability. Motion must not add product scope or imply excluded capabilities.
+
+### 11.1 Motion Implementation Status
+
+| Item                        | Status                           | Notes                                                                        |
+| --------------------------- | -------------------------------- | ---------------------------------------------------------------------------- |
+| Motion governance           | Documentation baseline           | Defined in `ui-registry.md`.                                                 |
+| Motion tokens               | Documentation baseline           | Defined in `ui-tokens.md`.                                                   |
+| GSAP dependency             | Not installed in Phase 1         | Future implementation phase only.                                            |
+| Motion components/hooks     | Planning guidance only           | Implement later after dependency and client-component strategy are approved. |
+| Public marketing animation  | Best first implementation target | Lower operational risk and higher brand/storytelling value.                  |
+| Dense operational animation | Minimal-motion only              | Productivity, scanability, and blocked-state clarity remain higher priority. |
+
+### 11.2 Proposed Reusable Motion Components and Hooks
+
+| Component / Hook        | Type                | Intended use                                                                         | Guardrails                                                                                    |
+| ----------------------- | ------------------- | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| `MotionProvider`        | Foundation provider | Centralize reduced-motion detection and motion configuration for client components.  | Must not run server-only animation logic; must not override OS reduced-motion preference.     |
+| `MotionSafe`            | Foundation wrapper  | Render animated or non-animated variants based on reduced-motion preference.         | Must preserve the same content and state in both modes.                                       |
+| `useReducedMotion`      | Hook                | Read `prefers-reduced-motion` and expose a stable boolean for motion decisions.      | Must default safely during hydration and avoid layout-breaking mismatches.                    |
+| `useRevealMotion`       | Hook                | Reusable one-time reveal for non-dense cards, panels, alerts, and empty states.      | Must use semantic motion tokens and support no-motion final state.                            |
+| `useScrollRevealMotion` | Hook                | Marketing/page storytelling reveal where scroll sequencing is justified.             | Prefer public marketing pages; avoid operational tables, ledgers, and histories.              |
+| `useCounterMotion`      | Hook                | Optional metric count-up after confirmed dashboard/report data loads.                | Must not imply unverified data; disable or snap to final value in reduced-motion mode.        |
+| `AnimatedMetricCard`    | Pattern component   | Dashboard and marketing metric reveal after data is available.                       | Dashboard values must come from confirmed API data.                                           |
+| `AnimatedStatusBadge`   | Pattern component   | Subtle state-change emphasis for documented status enum changes.                     | Must not invent statuses or obscure blocked/error states.                                     |
+| `AnimatedProgressStep`  | Pattern component   | Onboarding or workflow progress steps.                                               | Must not imply completed setup/action before backend confirms the documented state.           |
+| `AnimatedEmptyState`    | Pattern component   | Gentle reveal for empty states with allowed action.                                  | Action must still respect permission, tenant status, branch access, plan, and offline guards. |
+| `WorkflowActionMotion`  | Pattern component   | Dialog/sheet entry, impact summary reveal, and server-confirmed completion feedback. | Critical workflow success animation only after server confirmation.                           |
+
+### 11.3 Motion Pattern Inventory
+
+| Surface                                      | Recommended motion level | Preferred technique                           | Notes                                                                                                            |
+| -------------------------------------------- | ------------------------ | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Public marketing homepage                    | Rich but purposeful      | Future GSAP allowed                           | Best first target for scroll reveal, staged sections, hero polish, and CTA emphasis.                             |
+| Public marketing CTA/footer                  | Moderate                 | CSS or future GSAP                            | Motion may highlight conversion paths without loud distraction.                                                  |
+| Auth pages                                   | Restrained               | CSS first; GSAP only if justified             | Forms must stay fast, readable, and accessible.                                                                  |
+| Onboarding                                   | Restrained               | CSS or reusable reveal hooks                  | Progress motion must not imply setup completion before backend state confirms it.                                |
+| Tenant app shell                             | Minimal                  | CSS-only preferred                            | Navigation, branch context, tenant banners, support marker, and offline indicator must remain immediately clear. |
+| Dashboard                                    | Light                    | CSS/reveal hooks                              | Metric animation only after confirmed data load.                                                                 |
+| Lists and tables                             | Minimal                  | CSS hover/focus only                          | Dense data surfaces remain productivity-first.                                                                   |
+| Detail pages                                 | Minimal to restrained    | CSS/reveal hooks                              | Immutable/read-only notices must be visible without delay.                                                       |
+| Workflow action dialogs                      | Restrained               | CSS or future GSAP via `WorkflowActionMotion` | Impact summary and blockers must remain clear; success after server confirmation only.                           |
+| Audit logs, ledgers, FIFO, financial records | Minimal                  | CSS-only or none                              | Do not animate rows or critical historical data in a way that harms scanability.                                 |
+| Offline/read-only/blocked states             | Immediate and clear      | CSS-only or none                              | Do not delay blockers. Do not imply offline writes or sync queues.                                               |
+
+### 11.4 Reduced-Motion Requirements
+
+- Respect `prefers-reduced-motion`.
+- Provide equivalent content and state without animation.
+- Skip GSAP timelines or set final state immediately when reduced motion is active.
+- Avoid parallax, scroll hijacking, large transforms, long stagger chains, and decorative loops for reduced-motion users.
+- Keep validation errors, permission blockers, plan blockers, tenant blockers, offline banners, and workflow conflict messages immediately visible.
+
+### 11.5 Server-Confirmed Workflow Motion Rule
+
+Motion must not fake successful completion of critical workflows.
+
+The following action categories may show final success animation only after a successful server response:
+
+- Inventory reservation, release, transfer, adjustment, FIFO consumption, and stock-changing operations.
+- Job order workflow transitions and completion.
+- Invoice issue, void, billing allocation, payment, receipt, refund, and AR/AP changes.
+- Purchase receiving, supplier return posting, and supplier payment operations.
+- Tenant lifecycle changes, support access, exports, deletion jobs, and platform-admin actions.
+- Any action requiring idempotency, optimistic locking, audit logging, or workflow status history.
+
+Before server confirmation, the UI may show loading, submitting, validating, queued, or pending states only when those states are documented and backed by API behavior.
+
+### 11.6 Excluded Motion Implications
+
+Motion patterns must not imply:
+
+- Native iOS or Android apps.
+- Offline transaction creation, editing, submission, mutation queues, sync retry, or conflict resolution.
+- Customer portal or customer login.
+- Standalone retail POS/cart checkout.
+- Payroll.
+- Full accounting/general ledger.
+- Direct tax filing.
+- E-commerce marketplace or checkout.
+- Loyalty/rewards.
+- Service packages.
+- Automatic subscription payment collection.
+- Two-factor authentication.
+- AI forecasting or custom BI beyond documented reports.
+
+### 11.7 First Implementation Target Recommendation
+
+The best first implementation target for a later motion phase is the public marketing homepage because it has the highest brand/storytelling value and the lowest risk of interfering with operational workflows.
+
+Recommended first motion implementation order:
+
+1. Public marketing homepage hero and section reveals.
+2. Marketing workflow/storytelling highlights.
+3. CTA/footer emphasis.
+4. Auth/onboarding restrained reveals.
+5. Dashboard metric reveal after confirmed API data.
+6. Workflow dialog motion after action patterns are stable.
+7. Dense operational screens only after reduced-motion and productivity rules are proven.
+
+---
+
+## 12. Mobile-First Layout Rules
 
 | Workflow                     | Mobile pattern                                                     |
 | ---------------------------- | ------------------------------------------------------------------ |
@@ -643,7 +749,7 @@ Minimum UX validation should cover 360px width, touch-friendly actions, blocked-
 
 ---
 
-## 12. Required Error / State Coverage
+## 13. Required Error / State Coverage
 
 Every applicable screen should define:
 
@@ -666,7 +772,7 @@ Every applicable screen should define:
 
 ---
 
-## 13. Risks and Open Questions
+## 14. Risks and Open Questions
 
 | Risk / question                                                     | Impact                                        | Recommendation                                                        |
 | ------------------------------------------------------------------- | --------------------------------------------- | --------------------------------------------------------------------- |
@@ -680,7 +786,7 @@ Every applicable screen should define:
 
 ---
 
-## 14. Recommended Next Steps
+## 15. Recommended Next Steps
 
 1. Create low-fidelity mobile wireframes for login/onboarding, dashboard, customer lookup, motorcycle lookup, job order creation, mechanic session, inventory lookup, payment recording, and receipt viewing.
 2. Create frontend route map ADR.

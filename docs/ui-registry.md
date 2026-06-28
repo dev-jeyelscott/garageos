@@ -315,3 +315,105 @@ A new or modified component is acceptable only when it:
 | Deprecate component | Mark deprecated when replaced, duplicated, source-misaligned, or encouraging undocumented behavior. Deprecated components are not used for new pages. |
 
 Final guidance: build GarageOS UI from a small reliable set of auth, app shell, platform shell, list, detail, form, workflow action, blocked-state, and mobile card/table patterns. Prefer consistency over novelty. Every page should make tenant, branch, permission, workflow, offline, and read-only state clear before action.
+
+## 14. Motion and Animation Governance
+
+GarageOS motion exists to improve comprehension, orientation, feedback, and professional polish. Motion must not create undocumented product scope, imply unsupported capabilities, hide important operational state, or make critical workflows appear complete before backend/API confirmation.
+
+This section is documentation and planning guidance only. It does not install GSAP, does not require animation implementation in this step, and does not change any documented product workflow.
+
+### 14.1 Motion Scope Rules
+
+| Motion Area                     | Rule                                                                                                                                                                                            |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Product scope                   | Motion must only support documented pages, workflows, states, permissions, tenant lifecycle rules, and API behavior.                                                                            |
+| Backend authority               | UI animation must never override, preempt, or fake backend/API/database authorization or workflow state.                                                                                        |
+| Critical workflows              | Success animation for inventory, financial, billing, refund, receipt, export, support-access, tenant lifecycle, and workflow-transition actions may render only after confirmed server success. |
+| Offline mode                    | Offline motion must reinforce read-only behavior and must not imply queued writes, sync retries, conflict resolution, or offline mutation support.                                              |
+| Permission/plan/tenant blockers | Motion must not obscure blocked states. Disabled or blocked actions must remain explicit and readable.                                                                                          |
+| Dense operational surfaces      | Tables, ledgers, audit logs, inventory records, financial records, workflow histories, report tables, and FIFO views must remain productivity-first with minimal motion.                        |
+| Accessibility                   | Reduced-motion preferences must be respected across CSS and JavaScript-driven motion.                                                                                                           |
+
+### 14.2 When GSAP Is Allowed
+
+GSAP is allowed only when the animation benefits from timeline control, scroll orchestration, staged sequencing, or reusable motion context management that is difficult to maintain with CSS/Tailwind alone.
+
+| Allowed GSAP Use               | Guidance                                                                                                                |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| Public marketing homepage      | Richer reveal sequences, hero polish, product storytelling, scroll-linked highlights, and non-critical visual emphasis. |
+| Public marketing sections      | Sequential card reveals, workflow storytelling, trust indicators, and CTA emphasis.                                     |
+| Auth and onboarding            | Restrained entrance/reveal motion that supports orientation without slowing form completion.                            |
+| Dashboard summary cards        | Light, non-blocking metric reveals after confirmed data is loaded.                                                      |
+| Workflow action dialogs/sheets | Focused entry/exit, impact summary reveal, and server-confirmed completion states.                                      |
+| Empty states                   | Gentle reveal of source-aligned empty-state guidance and allowed primary action.                                        |
+| Progress or status indicators  | Only when backed by documented workflow state or async job status.                                                      |
+
+Future implementation should prefer scoped client-side animation patterns such as `@gsap/react` / `useGSAP`, cleanup-safe animation contexts, and reusable motion hooks. GSAP must be isolated to client components and must not run during server rendering.
+
+### 14.3 When CSS/Tailwind-Only Motion Is Preferred
+
+Use CSS/Tailwind transitions for simple interaction feedback.
+
+| CSS-Only Use                         | Guidance                                                                                             |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| Hover states                         | Buttons, links, cards, nav items, menus, and simple affordance feedback.                             |
+| Focus states                         | Keyboard-visible focus rings and input focus treatments.                                             |
+| Active/pressed states                | Button press, chip selection, tab selection, and toggle state.                                       |
+| Simple opacity/transform transitions | Lightweight component entry where no sequencing or timeline coordination is required.                |
+| Sheet/dialog default transitions     | Use shadcn/ui or existing primitive behavior unless a workflow-specific motion pattern is justified. |
+| Loading skeletons                    | Prefer static or subtle CSS skeletons over complex animation.                                        |
+| Dense data rows                      | Avoid row choreography; use simple hover/focus styles only.                                          |
+
+### 14.4 Motion Anti-Patterns
+
+Do **not** use motion to:
+
+- Add native app-like behavior or imply iOS/Android native apps.
+- Suggest offline writes, offline queues, conflict resolution, or background sync for operational mutations.
+- Suggest customer portal, standalone POS, payroll, full accounting, automatic subscription payment collection, 2FA, unsupported AI/custom BI, or other excluded capabilities.
+- Hide permission, branch, plan, tenant lifecycle, suspended, read-only, or offline blockers.
+- Animate around validation errors so aggressively that the user misses the corrective message.
+- Show success before the API confirms a critical write.
+- Animate financial, receipt, refund, inventory ledger, FIFO, audit, or workflow history rows in a way that harms scanability.
+- Use parallax, scroll hijacking, long delays, autoplay loops, or decorative motion on operational task screens.
+- Create one-off animation behavior that should be governed by shared motion tokens or reusable motion patterns.
+
+### 14.5 Reduced-Motion Requirements
+
+GarageOS must respect `prefers-reduced-motion`.
+
+| Requirement   | Rule                                                                                                                   |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Detection     | Motion utilities must detect reduced-motion preference before running JavaScript timelines.                            |
+| CSS behavior  | CSS motion tokens must collapse to no-motion or near-instant transitions when reduced motion is enabled.               |
+| GSAP behavior | GSAP timelines must be skipped, disabled, or replaced with immediate final states when reduced motion is enabled.      |
+| Critical UX   | Reduced motion must not remove important content, state, validation messages, workflow blockers, or workflow feedback. |
+| Testing       | Motion-enabled components should include reduced-motion validation where practical.                                    |
+
+### 14.6 Page-Pattern Motion Guidance
+
+| Page / Pattern          | Motion Guidance                                                                                                                                     |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public marketing pages  | Best first GSAP implementation target. Richer but still purposeful motion is allowed for storytelling, trust, product highlights, and CTA focus.    |
+| Auth pages              | Use restrained CSS or GSAP reveal motion. Forms must remain fast, readable, and accessible.                                                         |
+| Onboarding              | Use restrained progress/reveal motion to clarify setup steps. Do not imply operational access before onboarding completion.                         |
+| Tenant app shell        | Keep motion minimal. Navigation, status banners, branch context, support marker, and offline indicator should prioritize clarity over decoration.   |
+| Dashboard               | Use light metric/card reveals after successful data load. Do not animate numbers in a way that implies unverified data.                             |
+| Lists                   | Prefer minimal motion. Use hover/focus states only for dense lists, tables, ledgers, audit logs, inventory records, financial records, and reports. |
+| Detail pages            | Use subtle section reveal only when it improves orientation. Immutable/read-only notices must be immediately visible.                               |
+| Workflow action dialogs | Use restrained entrance/exit and impact-summary reveal. Server-confirmed success states only.                                                       |
+| Blocked states          | Permission, plan, branch, tenant, suspended, read-only, and offline blockers must appear clearly without delayed animation.                         |
+
+### 14.7 Future Implementation Guardrails
+
+- Do not install GSAP until a later implementation phase explicitly approves dependency changes.
+- Keep motion implementation isolated from business logic.
+- Keep backend/API/database state authoritative.
+- Use reusable hooks/components for repeated animation behavior.
+- Clean up animation contexts on unmount.
+- Avoid global selectors that can affect unrelated screens.
+- Prefer semantic motion tokens from `ui-tokens.md`.
+- Validate mobile viewport behavior first.
+- Validate reduced-motion behavior before shipping.
+
+---
