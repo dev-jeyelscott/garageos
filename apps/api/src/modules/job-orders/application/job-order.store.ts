@@ -110,6 +110,12 @@ export interface ServiceSnapshotRecord {
   readonly priceDisclaimer: string | null;
 }
 
+export interface ProductSnapshotRecord {
+  readonly id: string;
+  readonly name: string;
+  readonly sellingPrice: string;
+}
+
 export interface JobOrderLineSnapshotInput {
   readonly sourceName: string;
   readonly sourcePrice: string;
@@ -166,6 +172,20 @@ export interface CreateJobOrderLineInput extends JobOrderLineSnapshotInput {
   readonly quantity: string;
   readonly unitPrice: string;
   readonly authorizedAmount: string;
+  readonly lineOrder: number | null;
+  readonly createdAt: Date;
+}
+
+export interface CreateJobOrderPartLineInput extends JobOrderLineSnapshotInput {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly jobOrderId: string;
+  readonly productId: string;
+  readonly description: string;
+  readonly quantity: string;
+  readonly unitPrice: string;
+  readonly authorizedAmount: string;
+  readonly inventoryReservationId: string;
   readonly lineOrder: number | null;
   readonly createdAt: Date;
 }
@@ -281,6 +301,11 @@ export abstract class JobOrderStore {
     client: DatabaseQueryClient,
   ): Promise<JobOrderLineRecord>;
 
+  abstract createJobOrderPartLine(
+    input: CreateJobOrderPartLineInput,
+    client: DatabaseQueryClient,
+  ): Promise<JobOrderLineRecord>;
+
   abstract updateJobOrderLine(
     input: UpdateJobOrderLineInput,
     client: DatabaseQueryClient,
@@ -372,4 +397,10 @@ export abstract class JobOrderStore {
     serviceId: string,
     client?: DatabaseQueryClient,
   ): Promise<ServiceSnapshotRecord | null>;
+
+  abstract findActiveProductSnapshot(
+    tenantId: string,
+    productId: string,
+    client?: DatabaseQueryClient,
+  ): Promise<ProductSnapshotRecord | null>;
 }

@@ -13,6 +13,7 @@ import {
   type CompleteJobOrderLineInput,
   type CreateJobOrderInput,
   type CreateJobOrderLineInput,
+  type CreateJobOrderPartLineInput,
   type JobOrderAuditActorType,
   type JobOrderAuditEventRecord,
   type JobOrderLineRecord,
@@ -24,6 +25,7 @@ import {
   type JobOrderStatus,
   type JobOrderStatusEventRecord,
   type ListJobOrdersInput,
+  type ProductSnapshotRecord,
   type ReplaceJobOrderMechanicsInput,
   type ServiceSnapshotRecord,
   type TransitionJobOrderStatusInput,
@@ -122,6 +124,12 @@ interface ServiceSnapshotRow extends DatabaseRow {
   readonly name: string;
   readonly starting_price: string;
   readonly price_disclaimer: string | null;
+}
+
+interface ProductSnapshotRow extends DatabaseRow {
+  readonly id: string;
+  readonly name: string;
+  readonly selling_price: string;
 }
 
 @Injectable()
@@ -485,6 +493,94 @@ export class PostgresJobOrderRepository extends JobOrderStore {
 
     if (created === undefined) {
       throw new Error('Created job order line could not be loaded.');
+    }
+
+    await this.upsertJobOrderLineSnapshot(
+      {
+        tenantId: input.tenantId,
+        lineId: input.id,
+        sourceName: input.sourceName,
+        sourcePrice: input.sourcePrice,
+        sourceDisclaimer: input.sourceDisclaimer,
+        capturedAt: input.createdAt,
+      },
+      client,
+    );
+
+    await this.touchJobOrder(input.tenantId, input.jobOrderId, input.createdAt, client);
+
+    return toJobOrderLineRecord(created);
+  }
+
+  async createJobOrderPartLine(
+    input: CreateJobOrderPartLineInput,
+    client: DatabaseQueryClient,
+  ): Promise<JobOrderLineRecord> {
+    const result = await client.query<JobOrderLineRow>(
+      `
+        insert into job_order_lines (
+          id,
+          tenant_id,
+          job_order_id,
+          line_type,
+          service_id,
+          product_id,
+          description,
+          quantity,
+          unit_price,
+          authorized_amount,
+          status,
+          inventory_reservation_id,
+          line_order,
+          created_at,
+          updated_at
+        )
+        values (
+          $1,
+          $2,
+          $3,
+          'part',
+          null,
+          $4,
+          $5,
+          $6,
+          $7,
+          $8,
+          'active',
+          $9,
+          coalesce(
+            $10::integer,
+            (
+              select coalesce(max(line_order) + 1, 0)
+              from job_order_lines
+              where tenant_id = $2
+                and job_order_id = $3
+            )
+          ),
+          $11,
+          $11
+        )
+        returning *
+      `,
+      [
+        input.id,
+        input.tenantId,
+        input.jobOrderId,
+        input.productId,
+        input.description,
+        input.quantity,
+        input.unitPrice,
+        input.authorizedAmount,
+        input.inventoryReservationId,
+        input.lineOrder,
+        input.createdAt,
+      ],
+    );
+
+    const created = result.rows[0];
+
+    if (created === undefined) {
+      throw new Error('Created job order part line could not be loaded.');
     }
 
     await this.upsertJobOrderLineSnapshot(
@@ -1116,6 +1212,37 @@ export class PostgresJobOrderRepository extends JobOrderStore {
       name: row.name,
       startingPrice: normalizeDecimalString(row.starting_price),
       priceDisclaimer: row.price_disclaimer,
+    };
+  }
+
+  async findActiveProductSnapshot(
+    tenantId: string,
+    productId: string,
+    client?: DatabaseQueryClient,
+  ): Promise<ProductSnapshotRecord | null> {
+    const queryClient = client ?? this.database;
+    const result = await queryClient.query<ProductSnapshotRow>(
+      `
+        select id, name, selling_price
+        from products
+        where tenant_id = $1
+          and id = $2
+          and status = 'active'
+        limit 1
+      `,
+      [tenantId, productId],
+    );
+
+    const row = result.rows[0];
+
+    if (row === undefined) {
+      return null;
+    }
+
+    return {
+      id: row.id,
+      name: row.name,
+      sellingPrice: normalizeDecimalString(row.selling_price),
     };
   }
 

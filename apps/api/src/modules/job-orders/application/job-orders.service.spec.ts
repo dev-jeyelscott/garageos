@@ -5,7 +5,7 @@ import {
   formatTenantBusinessDate,
 } from '../../../shared/numbering/document-numbering';
 import {
-  assertBaselinePartLinesBlocked,
+  assertDedicatedPartLineWorkflowRequired,
   assertJobOrderAttachmentsFileModuleBlocked,
   assertCanAddJobOrderServiceNote,
   assertCanAssignJobOrderMechanics,
@@ -358,7 +358,9 @@ describe('job order line scaffolding validators', () => {
   });
 
   it('blocks part lines until inventory reservation support exists', () => {
-    expect(() => assertBaselinePartLinesBlocked()).toThrow('One or more fields are invalid.');
+    expect(() => assertDedicatedPartLineWorkflowRequired()).toThrow(
+      'One or more fields are invalid.',
+    );
   });
 });
 

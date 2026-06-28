@@ -127,7 +127,8 @@ export const createJobOrderPartLineRequestSchema = z.object({
   product_id: uuidSchema,
   description: z.string().trim().min(1).max(500),
   quantity: quantitySchema.default('1.000'),
-  unit_price: moneySchema.default('0.00'),
+  unit_price: moneySchema.optional(),
+  line_order: z.number().int().min(0).max(999).optional(),
 });
 
 export const assignJobOrderMechanicsRequestSchema = z

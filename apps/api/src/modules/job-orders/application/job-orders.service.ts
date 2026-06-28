@@ -14,6 +14,8 @@ import {
   type DatabaseTransactionRunner,
 } from '../../../shared/database/database-transaction';
 import { normalizeLockVersion } from '../../../shared/locking/optimistic-locking';
+import { InventoryReservationService } from '../../inventory/application/inventory-reservation.service';
+import { INVENTORY_TRANSACTION_TYPES } from '../../inventory/application/inventory-ledger.store';
 import {
   buildNextJobOrderNumber,
   formatTenantBusinessDate,
@@ -47,6 +49,7 @@ import {
   type JobOrderRecord,
   type JobOrderStatus,
   type JobOrderStatusEventRecord,
+  type ProductSnapshotRecord,
 } from './job-order.store';
 
 const IDEMPOTENCY_RETENTION_HOURS = 24;
@@ -191,6 +194,14 @@ interface NormalizedJobOrderLineInput {
   readonly lineOrder: number | null;
 }
 
+interface NormalizedJobOrderPartLineInput {
+  readonly productId: string;
+  readonly description: string;
+  readonly quantity: string;
+  readonly unitPrice: string | null;
+  readonly lineOrder: number | null;
+}
+
 interface NormalizedMechanicAssignmentInput {
   readonly primaryMechanicUserId: string;
   readonly additionalMechanicUserIds: readonly string[];
@@ -216,6 +227,7 @@ export class JobOrdersService {
   constructor(
     @Inject(JobOrderStore)
     private readonly jobOrderStore: JobOrderStore,
+    private readonly inventoryReservationService: InventoryReservationService,
     @Inject(API_TRANSACTION_RUNNER)
     private readonly transactionRunner: DatabaseTransactionRunner,
     @Inject(AuditService)
@@ -1254,9 +1266,9 @@ export class JobOrdersService {
 
   async createPartLine(
     jobOrderId: string,
-    _request: CreateJobOrderPartLineRequest,
+    request: CreateJobOrderPartLineRequest,
     session: TenantContextAuthenticatedSession,
-  ): Promise<never> {
+  ): Promise<JobOrderLineMutationResponse> {
     const context = resolveTenantContextFromAuthenticatedSession(session);
     const isShopOwner = await this.jobOrderStore.isActiveShopOwner({
       tenantId: context.tenantId,
@@ -1269,6 +1281,8 @@ export class JobOrdersService {
       action: TENANT_ACCESS_ACTIONS.OPERATIONAL_WRITE,
     });
     assertJobOrderPermission(context, isShopOwner, 'job_orders.update');
+
+    const input = normalizeJobOrderPartLineInput(request);
 
     return this.transactionRunner.runInTransaction(async (transaction) => {
       const existing = await this.jobOrderStore.findJobOrderByIdForUpdate(
@@ -1283,7 +1297,87 @@ export class JobOrdersService {
 
       assertJobOrderBranchAccess(context, existing.branchId);
       assertCanEditJobOrderLines(existing);
-      assertBaselinePartLinesBlocked();
+
+      const product = await findActiveProductSnapshotForPartLine({
+        jobOrderStore: this.jobOrderStore,
+        tenantId: context.tenantId,
+        productId: input.productId,
+        transaction,
+      });
+
+      const lineId = randomUUID();
+      const createdAt = new Date();
+      const unitPrice = input.unitPrice ?? product.sellingPrice;
+      const authorizedAmount = calculateJobOrderLineAuthorizedAmount(input.quantity, unitPrice);
+
+      const reservationResult =
+        await this.inventoryReservationService.reserveInventoryInTransaction(
+          {
+            tenantId: context.tenantId,
+            branchId: existing.branchId,
+            productId: product.id,
+            sourceType: 'job_order_line',
+            sourceId: lineId,
+            requestedQuantity: input.quantity,
+            transactionType: INVENTORY_TRANSACTION_TYPES.JOB_ORDER_RESERVATION,
+            reservedAt: createdAt,
+            createdByUserId: context.actorUserId,
+          },
+          transaction,
+        );
+
+      const line = await this.jobOrderStore.createJobOrderPartLine(
+        {
+          id: lineId,
+          tenantId: context.tenantId,
+          jobOrderId: existing.id,
+          productId: product.id,
+          description: input.description,
+          quantity: input.quantity,
+          unitPrice,
+          authorizedAmount,
+          inventoryReservationId: reservationResult.reservation.id,
+          lineOrder: input.lineOrder,
+          sourceName: product.name,
+          sourcePrice: product.sellingPrice,
+          sourceDisclaimer: null,
+          createdAt,
+        },
+        transaction,
+      );
+
+      const updatedJobOrder = await this.reloadJobOrderOrThrow(
+        context.tenantId,
+        existing.id,
+        transaction,
+      );
+
+      await this.auditService.record({
+        tenantId: context.tenantId,
+        actorUserId: context.actorUserId,
+        actorType: AUDIT_ACTOR_TYPES.TENANT_USER,
+        action: 'job_order_part_lines.reserved',
+        entityType: 'job_order_line',
+        entityId: line.id,
+        branchId: updatedJobOrder.branchId,
+        beforeJson: toJobOrderResponse(existing),
+        afterJson: {
+          job_order: toJobOrderResponse(updatedJobOrder),
+          line: toJobOrderLineResponse(line),
+        },
+        metadataJson: {
+          inventory_reservation_id: reservationResult.reservation.id,
+          fifo_allocation_ids: reservationResult.fifoAllocations.map((allocation) => allocation.id),
+          stock_availability: reservationResult.stockAvailability,
+        },
+        reason: 'job_order_part_line_reserved',
+        client: transaction,
+      });
+
+      return {
+        job_order: toJobOrderResponse(updatedJobOrder),
+        line: toJobOrderLineResponse(line),
+      };
     });
   }
 
@@ -1609,15 +1703,19 @@ function assertStatusTransitionReason(
   }
 }
 
-export function assertBaselinePartLinesBlocked(): never {
+export function assertDedicatedPartLineWorkflowRequired(): never {
   throw GarageOsApiException.validationFailed([
     {
       field: 'part_lines',
-      code: 'job_order_part_lines_not_supported_until_inventory_reservation',
+      code: 'job_order_part_line_requires_dedicated_inventory_workflow',
       message:
-        'Job order part lines are blocked until inventory reservation and FIFO allocation support is implemented.',
+        'Part lines must be changed through the dedicated job order part reservation workflow.',
     },
   ]);
+}
+
+export function assertBaselinePartLinesBlocked(): never {
+  return assertDedicatedPartLineWorkflowRequired();
 }
 
 function assertEditableServiceOrLaborLine(line: JobOrderLineRecord): void {
@@ -1632,7 +1730,7 @@ function assertEditableServiceOrLaborLine(line: JobOrderLineRecord): void {
   }
 
   if (line.lineType === 'part' || line.inventoryReservationId !== null) {
-    assertBaselinePartLinesBlocked();
+    assertDedicatedPartLineWorkflowRequired();
   }
 }
 
@@ -1784,6 +1882,32 @@ async function buildJobOrderLineSnapshot(input: {
   };
 }
 
+async function findActiveProductSnapshotForPartLine(input: {
+  readonly jobOrderStore: JobOrderStore;
+  readonly tenantId: string;
+  readonly productId: string;
+  readonly transaction: DatabaseQueryClient;
+}): Promise<ProductSnapshotRecord> {
+  const product = await input.jobOrderStore.findActiveProductSnapshot(
+    input.tenantId,
+    input.productId,
+    input.transaction,
+  );
+
+  if (product === null) {
+    throw GarageOsApiException.validationFailed([
+      {
+        field: 'product_id',
+        code: 'product_not_active',
+        message:
+          'Referenced job order part product must be active and belong to the current tenant.',
+      },
+    ]);
+  }
+
+  return product;
+}
+
 function normalizeJobOrderLineInput(
   request: CreateJobOrderServiceLineRequest | UpdateJobOrderLineRequest,
 ): NormalizedJobOrderLineInput {
@@ -1797,6 +1921,21 @@ function normalizeJobOrderLineInput(
     quantity,
     unitPrice,
     authorizedAmount: calculateJobOrderLineAuthorizedAmount(quantity, unitPrice),
+    lineOrder: request.line_order ?? null,
+  };
+}
+
+function normalizeJobOrderPartLineInput(
+  request: CreateJobOrderPartLineRequest,
+): NormalizedJobOrderPartLineInput {
+  return {
+    productId: request.product_id.trim(),
+    description: normalizeWhitespace(request.description),
+    quantity: normalizeQuantityString(request.quantity),
+    unitPrice:
+      request.unit_price === undefined || request.unit_price === null
+        ? null
+        : normalizeMoneyString(request.unit_price),
     lineOrder: request.line_order ?? null,
   };
 }
