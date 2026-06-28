@@ -47,11 +47,11 @@ export function FeatureGrid() {
           className="mt-16"
         />
 
-        <div className="mt-10 grid gap-4 lg:grid-cols-6">
+        <div className="mt-10 grid gap-4 lg:grid-cols-8">
           {featuredFeatures.map((feature) => (
             <Card
               key={feature.title}
-              className="group rounded-[1.75rem] p-7 shadow-[0_22px_70px_rgb(24_24_27_/_0.07)] transition hover:-translate-y-1 hover:border-primary/30 hover:shadow-[0_28px_80px_rgb(249_115_0_/_0.14)] lg:col-span-3"
+              className="group rounded-[1.75rem] p-7 shadow-[0_22px_70px_rgb(24_24_27_/_0.07)] transition hover:-translate-y-1 hover:border-primary/30 hover:shadow-[0_28px_80px_rgb(249_115_0_/_0.14)] lg:col-span-4"
             >
               <div className="flex items-start gap-5">
                 <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-accent text-primary shadow-inner">
@@ -73,7 +73,7 @@ export function FeatureGrid() {
           {supportingFeatures.map((feature) => (
             <Card
               key={feature.title}
-              className="group rounded-[1.5rem] p-6 shadow-[0_18px_60px_rgb(24_24_27_/_0.06)] transition hover:-translate-y-1 hover:border-primary/30 hover:shadow-[0_24px_70px_rgb(249_115_0_/_0.12)] md:col-span-3 lg:col-span-2"
+              className="group rounded-[1.5rem] p-6 shadow-[0_18px_60px_rgb(24_24_27_/_0.06)] transition hover:-translate-y-1 hover:border-primary/30 hover:shadow-[0_24px_70px_rgb(249_115_0_/_0.12)] md:col-span-2 lg:col-span-2"
             >
               <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent text-primary shadow-inner">
                 <MarketingIcon name={feature.icon} className="h-6 w-6" />
