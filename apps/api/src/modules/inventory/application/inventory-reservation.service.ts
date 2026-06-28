@@ -7,6 +7,14 @@ import {
   API_TRANSACTION_RUNNER,
   type DatabaseTransactionRunner,
 } from '../../../shared/database/database-transaction';
+import { FifoLayerService } from './fifo-layer.service';
+import type { FifoLayerAllocationCandidateRecord } from './fifo-layer.store';
+import {
+  FIFO_ALLOCATION_STATUSES,
+  FifoReservationAllocationStore,
+  type CreateFifoReservationAllocationInput,
+  type FifoReservationAllocationRecord,
+} from './fifo-reservation-allocation.store';
 import {
   calculateAvailableQuantity,
   InventoryStockBalancesService,
@@ -51,6 +59,7 @@ export interface ReserveInventoryCommand {
 
 export interface InventoryReservationCommandResult {
   readonly reservation: InventoryReservationRecord;
+  readonly fifoAllocations: readonly FifoReservationAllocationRecord[];
   readonly stockAvailability: StockAvailabilitySnapshot;
   readonly ledgerEntry: InventoryLedgerEntryRecord;
 }
@@ -67,12 +76,23 @@ interface NormalizedReserveInventoryCommand {
   readonly createdByUserId: string | null;
 }
 
+interface BuildFifoReservationAllocationsInput {
+  readonly tenantId: string;
+  readonly reservationId: string;
+  readonly requestedQuantity: string;
+  readonly allocatedAt: Date;
+  readonly candidates: readonly FifoLayerAllocationCandidateRecord[];
+}
+
 @Injectable()
 export class InventoryReservationService {
   constructor(
     @Inject(InventoryReservationStore)
     private readonly inventoryReservationStore: InventoryReservationStore,
     private readonly inventoryStockBalancesService: InventoryStockBalancesService,
+    private readonly fifoLayerService: FifoLayerService,
+    @Inject(FifoReservationAllocationStore)
+    private readonly fifoReservationAllocationStore: FifoReservationAllocationStore,
     @Inject(StockBalanceStore)
     private readonly stockBalanceStore: StockBalanceStore,
     private readonly inventoryLedgerService: InventoryLedgerService,
@@ -113,9 +133,27 @@ export class InventoryReservationService {
       client,
     );
 
+    const fifoLayerCandidates = await this.fifoLayerService.lockOpenLayersForAllocation(
+      {
+        tenantId: input.tenantId,
+        branchId: input.branchId,
+        productId: input.productId,
+      },
+      client,
+    );
+
+    const reservationId = randomUUID();
+    const fifoAllocationInputs = buildFifoReservationAllocations({
+      tenantId: input.tenantId,
+      reservationId,
+      requestedQuantity: input.requestedQuantity,
+      allocatedAt: input.reservedAt,
+      candidates: fifoLayerCandidates,
+    });
+
     const reservation = await this.inventoryReservationStore.createReservation(
       {
-        id: randomUUID(),
+        id: reservationId,
         tenantId: input.tenantId,
         branchId: input.branchId,
         productId: input.productId,
@@ -128,6 +166,11 @@ export class InventoryReservationService {
         releasedAt: null,
         consumedAt: null,
       },
+      client,
+    );
+
+    const fifoAllocations = await this.fifoReservationAllocationStore.createAllocations(
+      fifoAllocationInputs,
       client,
     );
 
@@ -171,6 +214,7 @@ export class InventoryReservationService {
 
     return {
       reservation,
+      fifoAllocations,
       stockAvailability: toStockAvailabilitySnapshot(updatedStockAvailability),
       ledgerEntry,
     };
@@ -194,6 +238,60 @@ function normalizeReserveInventoryCommand(
         ? null
         : normalizeUuid(command.createdByUserId, 'created_by_user_id'),
   };
+}
+
+function buildFifoReservationAllocations(
+  input: BuildFifoReservationAllocationsInput,
+): readonly CreateFifoReservationAllocationInput[] {
+  let remainingQuantityUnits = parseQuantityUnits(input.requestedQuantity, 'requested_qty');
+  const allocations: CreateFifoReservationAllocationInput[] = [];
+
+  for (const candidate of input.candidates) {
+    if (remainingQuantityUnits === 0n) {
+      break;
+    }
+
+    const allocatableQuantityUnits = parseQuantityUnits(
+      candidate.allocatableQuantity,
+      'allocatable_quantity',
+    );
+
+    if (allocatableQuantityUnits <= 0n) {
+      continue;
+    }
+
+    const reservedQuantityUnits =
+      allocatableQuantityUnits < remainingQuantityUnits
+        ? allocatableQuantityUnits
+        : remainingQuantityUnits;
+
+    allocations.push({
+      id: randomUUID(),
+      tenantId: input.tenantId,
+      reservationId: input.reservationId,
+      fifoLayerId: candidate.id,
+      reservedQuantity: formatQuantityUnits(reservedQuantityUnits),
+      unitCostSnapshot: candidate.unitCost,
+      status: FIFO_ALLOCATION_STATUSES.ACTIVE,
+      allocatedAt: input.allocatedAt,
+      releasedAt: null,
+      consumedAt: null,
+    });
+
+    remainingQuantityUnits -= reservedQuantityUnits;
+  }
+
+  if (remainingQuantityUnits > 0n) {
+    throw GarageOsApiException.fifoAllocationConflict([
+      {
+        field: 'requested_qty',
+        code: 'insufficient_fifo_allocatable_quantity',
+        message: 'Requested quantity exceeds FIFO allocatable quantity.',
+      },
+    ]);
+  }
+
+  return allocations;
 }
 
 function normalizeUuid(value: string, field: string): string {
@@ -329,6 +427,33 @@ function isDecimalZero(value: string): boolean {
     .replace('.', '')
     .split('')
     .every((character) => character === '0');
+}
+
+function parseQuantityUnits(value: string, field: string): bigint {
+  const normalizedValue = normalizeRequiredText(value, field);
+
+  if (!POSITIVE_QUANTITY_PATTERN.test(normalizedValue)) {
+    throw GarageOsApiException.validationFailed([
+      {
+        field,
+        code: 'invalid_quantity',
+        message: 'Quantity must be a positive decimal with up to 3 decimals.',
+      },
+    ]);
+  }
+
+  const [wholePart = '0', decimalPart = ''] = normalizedValue.split('.');
+  const normalizedWholePart = wholePart.replace(/^0+(?=\d)/, '') || '0';
+  const normalizedDecimalPart = decimalPart.padEnd(3, '0');
+
+  return BigInt(normalizedWholePart) * 1000n + BigInt(normalizedDecimalPart);
+}
+
+function formatQuantityUnits(value: bigint): string {
+  const wholePart = value / 1000n;
+  const decimalPart = value % 1000n;
+
+  return `${wholePart.toString()}.${decimalPart.toString().padStart(3, '0')}`;
 }
 
 function toStockAvailabilitySnapshot(record: StockAvailabilityRecord): StockAvailabilitySnapshot {

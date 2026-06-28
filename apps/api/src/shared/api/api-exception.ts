@@ -155,6 +155,15 @@ export class GarageOsApiException extends HttpException {
     });
   }
 
+  static fifoAllocationConflict(details: ApiErrorDetail[] = []): GarageOsApiException {
+    return new GarageOsApiException({
+      code: API_ERROR_CODES.FIFO_ALLOCATION_CONFLICT,
+      message: 'FIFO allocation conflicts with currently allocatable stock.',
+      status: HttpStatus.CONFLICT,
+      details,
+    });
+  }
+
   static rateLimited(): GarageOsApiException {
     return new GarageOsApiException({
       code: API_ERROR_CODES.RATE_LIMITED,
