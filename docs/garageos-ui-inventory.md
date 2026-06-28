@@ -632,14 +632,15 @@ Motion patterns must support documented GarageOS screens, workflow states, permi
 
 ### 11.1 Motion Implementation Status
 
-| Item                        | Status                           | Notes                                                                        |
-| --------------------------- | -------------------------------- | ---------------------------------------------------------------------------- |
-| Motion governance           | Documentation baseline           | Defined in `ui-registry.md`.                                                 |
-| Motion tokens               | Documentation baseline           | Defined in `ui-tokens.md`.                                                   |
-| GSAP dependency             | Not installed in Phase 1         | Future implementation phase only.                                            |
-| Motion components/hooks     | Planning guidance only           | Implement later after dependency and client-component strategy are approved. |
-| Public marketing animation  | Best first implementation target | Lower operational risk and higher brand/storytelling value.                  |
-| Dense operational animation | Minimal-motion only              | Productivity, scanability, and blocked-state clarity remain higher priority. |
+| Item                         | Status                 | Notes                                                                      |
+| ---------------------------- | ---------------------- | -------------------------------------------------------------------------- |
+| Motion governance            | Documentation baseline | Defined in `ui-registry.md`.                                               |
+| Motion tokens                | Documentation baseline | Defined in `ui-tokens.md`.                                                 |
+| Motion architecture planning | Documentation baseline | Future utility location, client-only boundaries, and contracts below.      |
+| GSAP dependency              | Not installed          | Future implementation phase only; no dependency change in this step.       |
+| Motion components/hooks      | Planning guidance only | Implement later after dependency and client-component strategy review.     |
+| Public marketing animation   | First safe target      | Lower operational risk and higher brand/storytelling value.                |
+| Dense operational animation  | Minimal-motion only    | Productivity, scanability, and blocked-state clarity stay higher priority. |
 
 ### 11.2 Proposed Reusable Motion Components and Hooks
 
@@ -727,6 +728,171 @@ Recommended first motion implementation order:
 5. Dashboard metric reveal after confirmed API data.
 6. Workflow dialog motion after action patterns are stable.
 7. Dense operational screens only after reduced-motion and productivity rules are proven.
+
+---
+
+### 11.8 Motion Architecture Plan
+
+Phase 2 motion architecture remains documentation-only. It defines future frontend motion structure before any GSAP installation or animation implementation.
+
+| Area                        | Decision                                                                                                                                       |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Scope                       | Planning only; no dependency installation, runtime animation, operational screen animation, API change, database change, or permission change. |
+| Utility ownership           | Motion utilities belong in the web app because they are frontend-only and browser-dependent.                                                   |
+| First implementation target | Public marketing homepage only.                                                                                                                |
+| Backend authority           | Backend/API/database state remains authoritative for permissions, workflow status, inventory, finance, audit, and tenant lifecycle behavior.   |
+| Reduced motion              | Reduced-motion users must receive final readable UI states without transform-based movement.                                                   |
+| Critical workflows          | Success feedback for critical writes remains server-confirmed only.                                                                            |
+
+Recommended future location:
+
+```text
+apps/web/src/shared/motion/
+  index.ts
+  motion-provider.tsx
+  motion-safe.tsx
+  workflow-action-motion.tsx
+  hooks/
+    use-reduced-motion.ts
+    use-reveal-motion.ts
+    use-scroll-reveal-motion.ts
+    use-counter-motion.ts
+```
+
+Rules:
+
+- Do not place GSAP, browser animation utilities, `window`, `document`, `matchMedia`, `IntersectionObserver`, or `requestAnimationFrame` usage in shared backend/domain packages.
+- Do not place motion business logic inside module-specific domain folders.
+- Keep motion implementation replaceable behind GarageOS motion contracts.
+- Motion may enhance presentation only after source-aligned content and state are available.
+- Components must remain readable and usable without JavaScript animation.
+
+### 11.9 Client-Only Boundary Plan
+
+| Boundary          | Required rule                                                                                               |
+| ----------------- | ----------------------------------------------------------------------------------------------------------- |
+| GSAP imports      | Allowed only inside client-side modules after implementation approval.                                      |
+| Server components | Must not import GSAP or browser-only motion utilities.                                                      |
+| Browser APIs      | Read after mount only.                                                                                      |
+| Hydration         | Server-rendered markup must remain visible and meaningful before animation runs.                            |
+| Cleanup           | Timelines, observers, event listeners, and animation frames must be cleaned up on unmount.                  |
+| Dynamic imports   | Preferred for non-critical marketing animation.                                                             |
+| Reduced motion    | Must bypass transform-based animation and render final readable state.                                      |
+| Blocked states    | Permission, plan, tenant, branch, validation, offline, and read-only blockers must not depend on animation. |
+
+### 11.10 Motion Contract Plan
+
+| Contract                | Responsibility                                                         | First use                                  | Notes                                                     |
+| ----------------------- | ---------------------------------------------------------------------- | ------------------------------------------ | --------------------------------------------------------- |
+| `MotionProvider`        | Provides mounted state and reduced-motion preference.                  | Public homepage shell or marketing layout. | Must not store sensitive state or product access state.   |
+| `MotionSafe`            | Wraps content that may animate but must remain visible without motion. | Marketing sections.                        | Must render final readable state when motion is disabled. |
+| `useReducedMotion`      | Safely resolves `prefers-reduced-motion`.                              | Motion provider and tests.                 | Must be SSR-safe.                                         |
+| `useRevealMotion`       | Provides one-time reveal behavior.                                     | Homepage hero and feature cards.           | CSS-first until GSAP implementation is approved.          |
+| `useScrollRevealMotion` | Provides viewport-based reveal behavior.                               | Homepage sections.                         | Must avoid hiding content before hydration.               |
+| `useCounterMotion`      | Provides presentational count-up behavior.                             | Marketing-only metrics if used.            | Must not compute authoritative business values.           |
+| `WorkflowActionMotion`  | Provides server-confirmed-only workflow feedback.                      | Later operational review only.             | Must never show fake success while a request is pending.  |
+
+Planning-only TypeScript contract sketch:
+
+```ts
+type MotionCapability = {
+  canAnimate: boolean;
+  reducedMotion: boolean;
+  mounted: boolean;
+};
+
+type MotionProviderProps = {
+  children: React.ReactNode;
+};
+
+type MotionSafeProps = {
+  children: React.ReactNode;
+  className?: string;
+  motionName?: string;
+  disabled?: boolean;
+};
+
+type RevealMotionOptions = {
+  enabled?: boolean;
+  once?: boolean;
+  delayMs?: number;
+  durationMs?: number;
+  distance?: 'none' | 'xs' | 'sm' | 'md';
+};
+
+type CounterMotionOptions = {
+  value: number;
+  durationMs?: number;
+  enabled?: boolean;
+  format?: (value: number) => string;
+};
+
+type WorkflowActionMotionProps = {
+  state: 'idle' | 'pending' | 'succeeded' | 'failed';
+  children: React.ReactNode;
+  successLabel?: string;
+};
+```
+
+### 11.11 First Safe Implementation Slice
+
+| Homepage area         | Motion type                  | Priority | Reduced-motion behavior         |
+| --------------------- | ---------------------------- | -------: | ------------------------------- |
+| Hero headline/subcopy | Subtle reveal                |        1 | Render final visible state.     |
+| Hero CTA group        | Subtle reveal/focus polish   |        1 | Static final state.             |
+| Dashboard mockup      | Entrance and small highlight |        2 | Static screenshot/mockup state. |
+| Feature cards         | Scroll reveal                |        2 | Static card grid.               |
+| Workflow preview      | Step reveal                  |        3 | Static timeline/cards.          |
+| Role value cards      | Staggered card reveal        |        3 | Static cards.                   |
+| Final CTA             | Subtle emphasis              |        4 | Static CTA panel.               |
+
+Do not include in the first slice:
+
+- Auth screens.
+- Tenant app shell.
+- Dashboard operational metrics.
+- Job order workflow actions.
+- Inventory reservation, release, or consumption.
+- FIFO, ledger, invoice, payment, receipt, refund, or audit screens.
+- Platform admin support access screens.
+- Offline cache screens.
+
+### 11.12 Reduced-Motion Test Strategy
+
+| Test type     | Coverage                                                                                         |
+| ------------- | ------------------------------------------------------------------------------------------------ |
+| Unit          | `useReducedMotion` with mocked `matchMedia`.                                                     |
+| Component     | `MotionSafe` renders children in final visible state when reduced motion is enabled.             |
+| Component     | Reveal hooks do not apply transform animation when reduced motion is enabled.                    |
+| Component     | Counter motion renders final value immediately when reduced motion is enabled.                   |
+| E2E           | Public homepage works with browser reduced-motion emulation.                                     |
+| E2E           | Public homepage at 360px width does not hide content behind animation.                           |
+| Static/review | GSAP is not imported by server components.                                                       |
+| Accessibility | Screen readers receive final readable content and do not depend on animated intermediate states. |
+
+### 11.13 Motion Planning Validation and Acceptance
+
+Documentation-only validation:
+
+```bash
+grep -n "### 11.8 Motion Architecture Plan" garageos-ui-inventory.md
+grep -n "### 11.9 Client-Only Boundary Plan" garageos-ui-inventory.md
+grep -n "### 11.10 Motion Contract Plan" garageos-ui-inventory.md
+grep -n "apps/web/src/shared/motion" garageos-ui-inventory.md
+grep -n "WorkflowActionMotion" garageos-ui-inventory.md
+```
+
+Acceptance criteria:
+
+- Motion architecture is documented in the numbered Motion Components / Motion Patterns section.
+- Future utility location is documented.
+- Client-only boundaries are documented.
+- Reusable hook/component contracts are documented.
+- Reduced-motion strategy and test coverage are explicit.
+- Public marketing homepage is identified as the first safe implementation slice.
+- No dependency installation, runtime animation code, or operational screen animation is introduced.
+- Backend/API/database authority is preserved.
+- Critical workflow success motion remains server-confirmed only.
 
 ---
 

@@ -407,6 +407,11 @@ Future implementation may expose motion tokens as CSS custom properties:
   --motion-distance-lg-y: 24px;
   --motion-scale-press: 0.98;
   --motion-scale-reveal: 0.98;
+
+  --motion-stagger-none: 0ms;
+  --motion-stagger-tight: 40ms;
+  --motion-stagger-standard: 70ms;
+  --motion-stagger-relaxed: 100ms;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -425,6 +430,10 @@ Future implementation may expose motion tokens as CSS custom properties:
     --motion-distance-lg-y: 0px;
     --motion-scale-press: 1;
     --motion-scale-reveal: 1;
+
+    --motion-stagger-tight: 0ms;
+    --motion-stagger-standard: 0ms;
+    --motion-stagger-relaxed: 0ms;
   }
 }
 ```
@@ -440,6 +449,38 @@ Rules:
 - Do not create tokens for undocumented workflow states.
 - Prefer CSS/Tailwind-only transitions for hover, focus, active, and simple component state.
 - Use GSAP only where timeline orchestration or scroll/staged animation is justified by `ui-registry.md`.
+
+### 8.10 Stagger Tokens
+
+Stagger tokens are reserved for small, non-blocking groups where sequencing improves comprehension.
+
+| Token                     |   Value | Use                                               |
+| ------------------------- | ------: | ------------------------------------------------- |
+| `motion-stagger-none`     |   `0ms` | Operational UI, reduced motion, dense data        |
+| `motion-stagger-tight`    |  `40ms` | Small public marketing groups                     |
+| `motion-stagger-standard` |  `70ms` | Public homepage feature or role-card reveal       |
+| `motion-stagger-relaxed`  | `100ms` | Public homepage hero or dashboard mockup sequence |
+
+Rules:
+
+- Do not stagger operational tables, forms, invoice lines, stock lines, payment lines, ledger rows, FIFO rows, audit rows, or report rows.
+- Stagger must never block user input, delay validation errors, or delay blocked-state visibility.
+- Reduced-motion mode must use `motion-stagger-none`.
+- Use stagger primarily on public marketing surfaces unless a later implementation review approves another use.
+
+### 8.11 Motion Token Acceptance Criteria
+
+Motion token guidance is acceptable when:
+
+- Token names remain semantic and reusable.
+- Tokens support light, dark, and system UI without requiring separate motion behavior per theme.
+- Reduced-motion behavior is explicit.
+- Tokens do not introduce product scope, product states, routes, permissions, workflows, or backend behavior.
+- Tokens do not imply offline writes, queued operational mutations, optimistic critical success, or workflow changes.
+- Dense operational screens remain productivity-first.
+- Critical workflow success motion remains server-confirmed only.
+- CSS/Tailwind-only transitions remain preferred for simple hover, focus, active, and component-state feedback.
+- Public marketing homepage remains the first approved rich-motion target.
 
 ---
 
