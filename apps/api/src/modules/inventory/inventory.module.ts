@@ -2,19 +2,22 @@ import { Module } from '@nestjs/common';
 
 import { DatabaseModule } from '../../shared/database/database.module';
 import { AuthModule } from '../auth/auth.module';
+import { InventoryReadController } from './api/inventory-read.controller';
 import { InventoryStockBalancesController } from './api/inventory-stock-balances.controller';
 import { FifoLayerService } from './application/fifo-layer.service';
 import { InventoryLedgerService } from './application/inventory-ledger.service';
+import { InventoryReadService } from './application/inventory-read.service';
 import { InventoryReservationService } from './application/inventory-reservation.service';
 import { InventoryStockBalancesService } from './application/inventory-stock-balances.service';
 import { INVENTORY_PROVIDERS } from './inventory.providers';
 
 @Module({
   imports: [AuthModule, DatabaseModule],
-  controllers: [InventoryStockBalancesController],
+  controllers: [InventoryStockBalancesController, InventoryReadController],
   providers: [
     InventoryStockBalancesService,
     InventoryLedgerService,
+    InventoryReadService,
     FifoLayerService,
     InventoryReservationService,
     ...INVENTORY_PROVIDERS,
@@ -22,6 +25,7 @@ import { INVENTORY_PROVIDERS } from './inventory.providers';
   exports: [
     InventoryStockBalancesService,
     InventoryLedgerService,
+    InventoryReadService,
     FifoLayerService,
     InventoryReservationService,
   ],
