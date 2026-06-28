@@ -20,7 +20,7 @@ import {
   type StockBalanceRecord,
 } from './stock-balance.store';
 
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SIGNED_QUANTITY_PATTERN = /^-?\d+(\.\d{1,3})?$/;
 const MAX_QUANTITY_UNITS = 999_999_999_999_999n;
 const ZERO_QUANTITY = '0.000';

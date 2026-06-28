@@ -8,6 +8,7 @@ import {
 import {
   StockBalanceStore,
   type GetStockAvailabilityInput,
+  type IncrementReservedQuantityInput,
   type ListStockBalancesInput,
   type StockAvailabilityRecord,
   type StockBalanceRecord,
@@ -166,6 +167,38 @@ export class PostgresStockBalanceRepository extends StockBalanceStore {
     client: DatabaseQueryClient = this.database,
   ): Promise<StockAvailabilityRecord | null> {
     return this.findStockAvailability(input, client, true);
+  }
+
+  async incrementReservedQuantity(
+    input: IncrementReservedQuantityInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<StockAvailabilityRecord | null> {
+    const result = await client.query<StockAvailabilityRow>(
+      `
+        update stock_balances sb
+        set
+          reserved_qty = sb.reserved_qty + $4::numeric(14,3),
+          updated_at = now(),
+          lock_version = sb.lock_version + 1
+        where sb.tenant_id = $1::uuid
+          and sb.branch_id = $2::uuid
+          and sb.product_id = $3::uuid
+          and (sb.on_hand_qty - sb.reserved_qty) >= $4::numeric(14,3)
+        returning
+          sb.tenant_id,
+          sb.branch_id,
+          sb.product_id,
+          sb.on_hand_qty::text as on_hand_qty,
+          sb.reserved_qty::text as reserved_qty,
+          (sb.on_hand_qty - sb.reserved_qty)::text as available_qty,
+          sb.lock_version
+      `,
+      [input.tenantId, input.branchId, input.productId, input.reservedQuantityDelta],
+    );
+
+    const [row] = result.rows;
+
+    return row === undefined ? null : toStockAvailabilityRecord(row);
   }
 
   private async findStockAvailability(

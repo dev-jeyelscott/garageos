@@ -25,6 +25,10 @@ export interface GetStockAvailabilityInput {
   readonly productId: string;
 }
 
+export interface IncrementReservedQuantityInput extends GetStockAvailabilityInput {
+  readonly reservedQuantityDelta: string;
+}
+
 export interface StockBalanceRecord {
   readonly tenantId: string;
   readonly branchId: string;
@@ -76,4 +80,11 @@ export abstract class StockBalanceStore {
     input: GetStockAvailabilityInput,
     client?: DatabaseQueryClient,
   ): Promise<StockAvailabilityRecord | null>;
+
+  incrementReservedQuantity(
+    _input: IncrementReservedQuantityInput,
+    _client?: DatabaseQueryClient,
+  ): Promise<StockAvailabilityRecord | null> {
+    throw new Error('StockBalanceStore.incrementReservedQuantity is not implemented.');
+  }
 }

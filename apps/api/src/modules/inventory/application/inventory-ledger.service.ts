@@ -13,7 +13,7 @@ import {
 const MAX_MONEY = 999_999_999_999.99;
 const MAX_QUANTITY = 999_999_999_999.999;
 
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SOURCE_TYPE_PATTERN = /^[a-z][a-z0-9_]{1,79}$/;
 const SIGNED_QUANTITY_PATTERN = /^-?\d+(\.\d{1,3})?$/;
 const NON_NEGATIVE_MONEY_PATTERN = /^\d+(\.\d{1,2})?$/;
