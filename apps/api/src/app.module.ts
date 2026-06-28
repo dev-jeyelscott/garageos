@@ -22,6 +22,7 @@ import { PlatformModule } from './modules/platform/platform.module';
 import { RolesModule } from './modules/roles/role.module';
 import { ShopModule } from './modules/shop/shop.module';
 import { AuditModule } from './shared/audit/audit.module';
+import { InventoryModule } from './modules/inventory/inventory.module';
 import { IdempotencyModule } from './shared/idempotency/idempotency.module';
 import { RequestContextMiddleware } from './shared/observability/request-context.middleware';
 
@@ -47,6 +48,7 @@ export class HealthController {
     EstimatesModule,
     JobOrdersModule,
     ProductsModule,
+    InventoryModule,
     MechanicSessionsModule,
     CustomersModule,
     MotorcyclesModule,

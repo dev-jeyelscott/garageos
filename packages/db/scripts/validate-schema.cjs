@@ -9,7 +9,7 @@ require('dotenv').config({
 const DATABASE_URL = process.env.DATABASE_URL;
 
 const EXPECTED = {
-  migrationCount: 22,
+  migrationCount: 23,
   publicTableCount: 106,
   subscriptionPlans: 3,
   subscriptionPlanLimits: 27,
@@ -338,6 +338,95 @@ async function validateProductsFoundationSchema(client) {
   assertEqual('products search identity index', searchIdentityIndexCount, 1);
 }
 
+async function validateStockBalancesFoundationSchema(client) {
+  const columnCount = await count(
+    client,
+    `
+      select count(*)
+      from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'stock_balances'
+        and column_name in (
+          'tenant_id',
+          'branch_id',
+          'product_id',
+          'on_hand_qty',
+          'reserved_qty',
+          'updated_at',
+          'lock_version'
+        )
+    `,
+  );
+
+  const primaryKeyCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_constraint constraint_definition
+      inner join pg_class table_class
+        on table_class.oid = constraint_definition.conrelid
+      inner join pg_namespace namespace
+        on namespace.oid = table_class.relnamespace
+      where namespace.nspname = 'public'
+        and table_class.relname = 'stock_balances'
+        and constraint_definition.contype = 'p'
+        and pg_get_constraintdef(constraint_definition.oid) ilike '%PRIMARY KEY (tenant_id, branch_id, product_id)%'
+    `,
+  );
+
+  const nonNegativeConstraintCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_constraint
+      where conname = 'chk_stock_non_negative'
+    `,
+  );
+
+  const branchForeignKeyCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_constraint constraint_definition
+      inner join pg_class table_class
+        on table_class.oid = constraint_definition.conrelid
+      inner join pg_namespace namespace
+        on namespace.oid = table_class.relnamespace
+      where namespace.nspname = 'public'
+        and table_class.relname = 'stock_balances'
+        and constraint_definition.contype = 'f'
+        and pg_get_constraintdef(constraint_definition.oid) ilike '%FOREIGN KEY (tenant_id, branch_id)%'
+    `,
+  );
+
+  const branchProductIndexCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_indexes
+      where schemaname = 'public'
+        and indexname = 'idx_stock_balances_branch_product'
+    `,
+  );
+
+  const productBranchIndexCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_indexes
+      where schemaname = 'public'
+        and indexname = 'idx_stock_balances_product_branch'
+    `,
+  );
+
+  assertEqual('stock balances foundation columns', columnCount, 7);
+  assertEqual('stock balances primary key', primaryKeyCount, 1);
+  assertEqual('stock balances non-negative constraint', nonNegativeConstraintCount, 1);
+  assertEqual('stock balances branch foreign key', branchForeignKeyCount, 1);
+  assertEqual('stock balances branch product index', branchProductIndexCount, 1);
+  assertEqual('stock balances product branch index', productBranchIndexCount, 1);
+}
+
 async function validateEstimatesBaselineSchema(client) {
   const estimateColumnCount = await count(
     client,
@@ -519,6 +608,7 @@ async function main() {
     await validateRoleManagementSchema(client);
     await validateProductCategoriesSchema(client);
     await validateProductsFoundationSchema(client);
+    await validateStockBalancesFoundationSchema(client);
     await validateEstimatesBaselineSchema(client);
     await validateMoneyPrecision(client);
     await validateQuantityPrecision(client);
