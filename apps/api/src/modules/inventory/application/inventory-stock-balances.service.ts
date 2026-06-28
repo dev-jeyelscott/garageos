@@ -6,13 +6,24 @@ import {
   assertTenantLifecycleAccess,
   TENANT_ACCESS_ACTIONS,
 } from '../../../shared/authorization/tenant-lifecycle-access.policy';
+import type { DatabaseQueryClient } from '../../../shared/database/database-client';
 import {
   resolveTenantContextFromAuthenticatedSession,
   type ResolvedTenantContext,
   type TenantContextAuthenticatedSession,
 } from '../../../shared/tenant-context/tenant-context';
 import type { ListStockBalancesQuery } from '../api/inventory-stock-balances.schemas';
-import { StockBalanceStore, type StockBalanceRecord } from './stock-balance.store';
+import {
+  StockBalanceStore,
+  type GetStockAvailabilityInput,
+  type StockAvailabilityRecord,
+  type StockBalanceRecord,
+} from './stock-balance.store';
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const SIGNED_QUANTITY_PATTERN = /^-?\d+(\.\d{1,3})?$/;
+const MAX_QUANTITY_UNITS = 999_999_999_999_999n;
+const ZERO_QUANTITY = '0.000';
 
 export interface StockBalanceBranchResponse {
   readonly id: string;
@@ -51,6 +62,26 @@ export interface StockBalanceResponse {
 
 export interface StockBalanceListResponse {
   readonly stock_balances: readonly StockBalanceResponse[];
+}
+
+export interface StockAvailabilityQueryCommand {
+  readonly tenantId: string;
+  readonly branchId: string;
+  readonly productId: string;
+}
+
+export interface AssertSufficientAvailableStockCommand extends StockAvailabilityQueryCommand {
+  readonly requestedQuantity: string;
+}
+
+export interface StockAvailabilitySnapshot {
+  readonly tenant_id: string;
+  readonly branch_id: string;
+  readonly product_id: string;
+  readonly on_hand_qty: string;
+  readonly reserved_qty: string;
+  readonly available_qty: string;
+  readonly lock_version: number | null;
 }
 
 @Injectable()
@@ -99,6 +130,58 @@ export class InventoryStockBalancesService {
       stock_balances: stockBalances.map(toStockBalanceResponse),
     };
   }
+
+  async getAvailableStock(
+    command: StockAvailabilityQueryCommand,
+    client?: DatabaseQueryClient,
+  ): Promise<StockAvailabilitySnapshot | null> {
+    const input = normalizeStockAvailabilityCommand(command);
+    const stockAvailability = await this.stockBalanceStore.getStockAvailability(input, client);
+
+    return stockAvailability === null ? null : toStockAvailabilitySnapshot(stockAvailability);
+  }
+
+  async lockAvailableStockForUpdate(
+    command: StockAvailabilityQueryCommand,
+    client?: DatabaseQueryClient,
+  ): Promise<StockAvailabilitySnapshot | null> {
+    const input = normalizeStockAvailabilityCommand(command);
+    const stockAvailability = await this.stockBalanceStore.lockStockAvailabilityForUpdate(
+      input,
+      client,
+    );
+
+    return stockAvailability === null ? null : toStockAvailabilitySnapshot(stockAvailability);
+  }
+
+  async assertSufficientAvailableStock(
+    command: AssertSufficientAvailableStockCommand,
+    client?: DatabaseQueryClient,
+  ): Promise<StockAvailabilitySnapshot> {
+    const input = normalizeStockAvailabilityCommand(command);
+    const requestedQuantity = normalizePositiveQuantity(command.requestedQuantity, 'requested_qty');
+
+    const stockAvailability = await this.stockBalanceStore.lockStockAvailabilityForUpdate(
+      input,
+      client,
+    );
+    const snapshot =
+      stockAvailability === null
+        ? createZeroStockAvailabilitySnapshot(input)
+        : toStockAvailabilitySnapshot(stockAvailability);
+
+    if (compareQuantityStrings(snapshot.available_qty, requestedQuantity) < 0) {
+      throw GarageOsApiException.inventoryInsufficientAvailableStock([
+        {
+          field: 'requested_qty',
+          code: 'insufficient_available_stock',
+          message: `Requested quantity ${requestedQuantity} exceeds available stock ${snapshot.available_qty}.`,
+        },
+      ]);
+    }
+
+    return snapshot;
+  }
 }
 
 function resolveBranchIdsForStockBalanceRead(
@@ -129,6 +212,32 @@ function resolveBranchIdsForStockBalanceRead(
   ];
 }
 
+function normalizeStockAvailabilityCommand(
+  command: StockAvailabilityQueryCommand,
+): GetStockAvailabilityInput {
+  return {
+    tenantId: normalizeUuid(command.tenantId, 'tenant_id'),
+    branchId: normalizeUuid(command.branchId, 'branch_id'),
+    productId: normalizeUuid(command.productId, 'product_id'),
+  };
+}
+
+function normalizeUuid(value: string, field: string): string {
+  const normalizedValue = normalizeRequiredText(value, field);
+
+  if (!UUID_PATTERN.test(normalizedValue)) {
+    throw GarageOsApiException.validationFailed([
+      {
+        field,
+        code: 'invalid_uuid',
+        message: `${field} must be a valid UUID.`,
+      },
+    ]);
+  }
+
+  return normalizedValue;
+}
+
 function normalizeNullableText(value: string | null | undefined): string | null {
   if (value === null || value === undefined) {
     return null;
@@ -137,6 +246,98 @@ function normalizeNullableText(value: string | null | undefined): string | null 
   const normalizedValue = value.trim().replace(/\s+/g, ' ');
 
   return normalizedValue.length > 0 ? normalizedValue.toLowerCase() : null;
+}
+
+function normalizePositiveQuantity(value: string, field: string): string {
+  const units = parseQuantityUnits(value, field);
+
+  if (units <= 0n) {
+    throw GarageOsApiException.validationFailed([
+      {
+        field,
+        code: 'quantity_must_be_positive',
+        message: 'Quantity must be greater than zero.',
+      },
+    ]);
+  }
+
+  if (units > MAX_QUANTITY_UNITS) {
+    throw GarageOsApiException.validationFailed([
+      {
+        field,
+        code: 'quantity_too_large',
+        message: 'Quantity is too large.',
+      },
+    ]);
+  }
+
+  return formatQuantityUnits(units);
+}
+
+export function calculateAvailableQuantity(onHandQty: string, reservedQty: string): string {
+  return formatQuantityUnits(
+    parseQuantityUnits(onHandQty, 'on_hand_qty') - parseQuantityUnits(reservedQty, 'reserved_qty'),
+  );
+}
+
+function compareQuantityStrings(left: string, right: string): number {
+  const leftUnits = parseQuantityUnits(left, 'left_quantity');
+  const rightUnits = parseQuantityUnits(right, 'right_quantity');
+
+  if (leftUnits === rightUnits) {
+    return 0;
+  }
+
+  return leftUnits > rightUnits ? 1 : -1;
+}
+
+function parseQuantityUnits(value: string, field: string): bigint {
+  const normalizedValue = normalizeRequiredText(value, field);
+
+  if (!SIGNED_QUANTITY_PATTERN.test(normalizedValue)) {
+    throw GarageOsApiException.validationFailed([
+      {
+        field,
+        code: 'invalid_quantity',
+        message: 'Quantity must be a decimal with up to 3 decimals.',
+      },
+    ]);
+  }
+
+  const isNegative = normalizedValue.startsWith('-');
+  const unsignedValue = isNegative ? normalizedValue.slice(1) : normalizedValue;
+  const [wholePart = '0', decimalPart = ''] = unsignedValue.split('.');
+  const normalizedWholePart = wholePart.replace(/^0+(?=\d)/, '') || '0';
+  const normalizedDecimalPart = decimalPart.padEnd(3, '0');
+
+  const units = BigInt(normalizedWholePart) * 1000n + BigInt(normalizedDecimalPart);
+
+  return isNegative ? -units : units;
+}
+
+function formatQuantityUnits(value: bigint): string {
+  const isNegative = value < 0n;
+  const absoluteValue = isNegative ? -value : value;
+  const wholePart = absoluteValue / 1000n;
+  const decimalPart = absoluteValue % 1000n;
+
+  return `${isNegative ? '-' : ''}${wholePart.toString()}.${decimalPart.toString().padStart(3, '0')}`;
+}
+
+function normalizeRequiredText(value: string, field: string): string {
+  const normalizedValue = value.trim();
+
+  if (normalizedValue.length === 0) {
+    throw GarageOsApiException.validationFailed([
+      {
+        field,
+        code: 'required',
+        message: `${field} is required.`,
+      },
+    ]);
+  }
+
+  return normalizedValue;
 }
 
 function assertInventoryPermission(
@@ -150,6 +351,8 @@ function assertInventoryPermission(
 }
 
 function toStockBalanceResponse(stockBalance: StockBalanceRecord): StockBalanceResponse {
+  const availableQty = calculateAvailableQuantity(stockBalance.onHandQty, stockBalance.reservedQty);
+
   return {
     branch: {
       id: stockBalance.branchId,
@@ -173,9 +376,40 @@ function toStockBalanceResponse(stockBalance: StockBalanceRecord): StockBalanceR
     },
     on_hand_qty: stockBalance.onHandQty,
     reserved_qty: stockBalance.reservedQty,
-    available_qty: stockBalance.availableQty,
+    available_qty: availableQty,
     is_low_stock: stockBalance.isLowStock,
     updated_at: stockBalance.updatedAt.toISOString(),
     lock_version: stockBalance.lockVersion,
+  };
+}
+
+function toStockAvailabilitySnapshot(
+  stockAvailability: StockAvailabilityRecord,
+): StockAvailabilitySnapshot {
+  return {
+    tenant_id: stockAvailability.tenantId,
+    branch_id: stockAvailability.branchId,
+    product_id: stockAvailability.productId,
+    on_hand_qty: stockAvailability.onHandQty,
+    reserved_qty: stockAvailability.reservedQty,
+    available_qty: calculateAvailableQuantity(
+      stockAvailability.onHandQty,
+      stockAvailability.reservedQty,
+    ),
+    lock_version: stockAvailability.lockVersion,
+  };
+}
+
+function createZeroStockAvailabilitySnapshot(
+  input: GetStockAvailabilityInput,
+): StockAvailabilitySnapshot {
+  return {
+    tenant_id: input.tenantId,
+    branch_id: input.branchId,
+    product_id: input.productId,
+    on_hand_qty: ZERO_QUANTITY,
+    reserved_qty: ZERO_QUANTITY,
+    available_qty: ZERO_QUANTITY,
+    lock_version: null,
   };
 }

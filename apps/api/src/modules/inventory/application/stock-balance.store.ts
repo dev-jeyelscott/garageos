@@ -19,6 +19,12 @@ export interface ListStockBalancesInput {
   readonly limit: number;
 }
 
+export interface GetStockAvailabilityInput {
+  readonly tenantId: string;
+  readonly branchId: string;
+  readonly productId: string;
+}
+
 export interface StockBalanceRecord {
   readonly tenantId: string;
   readonly branchId: string;
@@ -43,6 +49,16 @@ export interface StockBalanceRecord {
   readonly lockVersion: number;
 }
 
+export interface StockAvailabilityRecord {
+  readonly tenantId: string;
+  readonly branchId: string;
+  readonly productId: string;
+  readonly onHandQty: string;
+  readonly reservedQty: string;
+  readonly availableQty: string;
+  readonly lockVersion: number;
+}
+
 export abstract class StockBalanceStore {
   abstract isActiveShopOwner(input: ShopOwnerCheckInput): Promise<boolean>;
 
@@ -50,4 +66,14 @@ export abstract class StockBalanceStore {
     input: ListStockBalancesInput,
     client?: DatabaseQueryClient,
   ): Promise<readonly StockBalanceRecord[]>;
+
+  abstract getStockAvailability(
+    input: GetStockAvailabilityInput,
+    client?: DatabaseQueryClient,
+  ): Promise<StockAvailabilityRecord | null>;
+
+  abstract lockStockAvailabilityForUpdate(
+    input: GetStockAvailabilityInput,
+    client?: DatabaseQueryClient,
+  ): Promise<StockAvailabilityRecord | null>;
 }

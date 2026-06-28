@@ -146,6 +146,15 @@ export class GarageOsApiException extends HttpException {
     });
   }
 
+  static inventoryInsufficientAvailableStock(details: ApiErrorDetail[] = []): GarageOsApiException {
+    return new GarageOsApiException({
+      code: API_ERROR_CODES.INVENTORY_INSUFFICIENT_AVAILABLE_STOCK,
+      message: 'Available stock is insufficient.',
+      status: HttpStatus.UNPROCESSABLE_ENTITY,
+      details,
+    });
+  }
+
   static rateLimited(): GarageOsApiException {
     return new GarageOsApiException({
       code: API_ERROR_CODES.RATE_LIMITED,

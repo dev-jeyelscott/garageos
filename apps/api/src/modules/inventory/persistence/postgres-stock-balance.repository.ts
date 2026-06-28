@@ -7,7 +7,9 @@ import {
 } from '../../../shared/database/database-client';
 import {
   StockBalanceStore,
+  type GetStockAvailabilityInput,
   type ListStockBalancesInput,
+  type StockAvailabilityRecord,
   type StockBalanceRecord,
 } from '../application/stock-balance.store';
 
@@ -36,6 +38,16 @@ interface StockBalanceRow extends DatabaseRow {
   readonly available_qty: string;
   readonly is_low_stock: boolean;
   readonly updated_at: Date | string;
+  readonly lock_version: number;
+}
+
+interface StockAvailabilityRow extends DatabaseRow {
+  readonly tenant_id: string;
+  readonly branch_id: string;
+  readonly product_id: string;
+  readonly on_hand_qty: string;
+  readonly reserved_qty: string;
+  readonly available_qty: string;
   readonly lock_version: number;
 }
 
@@ -141,6 +153,50 @@ export class PostgresStockBalanceRepository extends StockBalanceStore {
 
     return result.rows.map(toStockBalanceRecord);
   }
+
+  async getStockAvailability(
+    input: GetStockAvailabilityInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<StockAvailabilityRecord | null> {
+    return this.findStockAvailability(input, client, false);
+  }
+
+  async lockStockAvailabilityForUpdate(
+    input: GetStockAvailabilityInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<StockAvailabilityRecord | null> {
+    return this.findStockAvailability(input, client, true);
+  }
+
+  private async findStockAvailability(
+    input: GetStockAvailabilityInput,
+    client: DatabaseQueryClient,
+    lockForUpdate: boolean,
+  ): Promise<StockAvailabilityRecord | null> {
+    const result = await client.query<StockAvailabilityRow>(
+      `
+        select
+          sb.tenant_id,
+          sb.branch_id,
+          sb.product_id,
+          sb.on_hand_qty::text as on_hand_qty,
+          sb.reserved_qty::text as reserved_qty,
+          (sb.on_hand_qty - sb.reserved_qty)::text as available_qty,
+          sb.lock_version
+        from stock_balances sb
+        where sb.tenant_id = $1
+          and sb.branch_id = $2
+          and sb.product_id = $3
+        limit 1
+        ${lockForUpdate ? 'for update' : ''}
+      `,
+      [input.tenantId, input.branchId, input.productId],
+    );
+
+    const [row] = result.rows;
+
+    return row === undefined ? null : toStockAvailabilityRecord(row);
+  }
 }
 
 function toStockBalanceRecord(row: StockBalanceRow): StockBalanceRecord {
@@ -165,6 +221,18 @@ function toStockBalanceRecord(row: StockBalanceRow): StockBalanceRecord {
     availableQty: row.available_qty,
     isLowStock: row.is_low_stock,
     updatedAt: toDate(row.updated_at),
+    lockVersion: row.lock_version,
+  };
+}
+
+function toStockAvailabilityRecord(row: StockAvailabilityRow): StockAvailabilityRecord {
+  return {
+    tenantId: row.tenant_id,
+    branchId: row.branch_id,
+    productId: row.product_id,
+    onHandQty: row.on_hand_qty,
+    reservedQty: row.reserved_qty,
+    availableQty: row.available_qty,
     lockVersion: row.lock_version,
   };
 }

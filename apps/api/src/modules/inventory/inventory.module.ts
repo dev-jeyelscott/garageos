@@ -17,6 +17,6 @@ import { INVENTORY_PROVIDERS } from './inventory.providers';
     FifoLayerService,
     ...INVENTORY_PROVIDERS,
   ],
-  exports: [InventoryLedgerService, FifoLayerService],
+  exports: [InventoryStockBalancesService, InventoryLedgerService, FifoLayerService],
 })
 export class InventoryModule {}
