@@ -25,7 +25,7 @@ export function MarketingCtaSection() {
                 <ButtonLink
                   href="/auth/signup-owner"
                   size="lg"
-                  className="w-full border-white bg-white px-6 font-black text-foreground shadow-[0_18px_45px_rgb(0_0_0_/_0.2)] hover:bg-white/90 sm:w-auto"
+                  className="w-full bg-gradient-to-r from-primary to-orange-500 px-6 font-black shadow-[0_18px_35px_rgb(249_115_0_/_0.28)] hover:opacity-95 sm:w-auto"
                 >
                   Create your shop account
                   <span aria-hidden="true" className="ml-2">

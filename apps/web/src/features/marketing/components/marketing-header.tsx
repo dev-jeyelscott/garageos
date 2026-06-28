@@ -63,9 +63,10 @@ export function MarketingHeader() {
           <ButtonLink
             href="/auth/signup-owner"
             size="sm"
-            className="min-h-10 bg-gradient-to-r from-primary to-orange-500 px-4 font-black shadow-[0_14px_30px_rgb(249_115_0_/_0.22)] hover:opacity-95"
+            className="min-h-10 bg-gradient-to-r from-primary to-orange-500 px-3 font-black shadow-[0_14px_30px_rgb(249_115_0_/_0.22)] hover:opacity-95 sm:px-4"
           >
-            Create account
+            <span className="sm:hidden">Create shop</span>
+            <span className="hidden sm:inline">Create shop account</span>
           </ButtonLink>
         </div>
       </Container>

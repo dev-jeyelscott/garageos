@@ -17,14 +17,12 @@ export function MarketingHero() {
             Built for motorcycle service shops
           </Badge>
 
-          <h1 className="mt-6 text-4xl font-black leading-[0.96] tracking-tight text-foreground sm:text-6xl lg:text-7xl">
-            Keep every job, part, and payment{' '}
-            <span className="block bg-gradient-to-r from-primary via-orange-400 to-amber-300 bg-clip-text text-transparent">
-              under control.
-            </span>
+          <h1 className="mt-6 text-4xl font-black leading-[0.96] tracking-tight text-zinc-950 sm:text-6xl lg:text-7xl">
+            Keep every job, part, and payment
+            <span className="block text-primary">under control.</span>
           </h1>
 
-          <p className="mt-6 max-w-2xl text-lg leading-8 text-foreground/72 sm:text-xl sm:leading-9">
+          <p className="mt-6 max-w-2xl text-lg font-bold leading-8 text-zinc-800 sm:text-xl sm:leading-9">
             GarageOS gives motorcycle repair teams one mobile-first workspace for intake, job
             orders, mechanic work, inventory, invoices, payments, reminders, and reports.
           </p>
