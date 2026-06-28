@@ -6,6 +6,7 @@ import {
   type DatabaseRow,
 } from '../../../shared/database/database-client';
 import {
+  type AssignableMechanicRecord,
   JobOrderStore,
   type CancelJobOrderLineInput,
   type CreateJobOrderInput,
@@ -13,9 +14,12 @@ import {
   type JobOrderLineRecord,
   type JobOrderLineStatus,
   type JobOrderLineType,
+  type JobOrderMechanicAssignmentRecord,
+  type JobOrderMechanicAssignmentType,
   type JobOrderRecord,
   type JobOrderStatus,
   type ListJobOrdersInput,
+  type ReplaceJobOrderMechanicsInput,
   type ServiceSnapshotRecord,
   type UpdateJobOrderLineInput,
   type UpdatePendingJobOrderInput,
@@ -61,6 +65,23 @@ interface JobOrderLineRow extends DatabaseRow {
   readonly line_order: number;
   readonly created_at: Date;
   readonly updated_at: Date;
+}
+
+interface JobOrderMechanicAssignmentRow extends DatabaseRow {
+  readonly id: string;
+  readonly tenant_id: string;
+  readonly job_order_id: string;
+  readonly user_id: string;
+  readonly assignment_type: JobOrderMechanicAssignmentType;
+  readonly assigned_at: Date;
+  readonly removed_at: Date | null;
+}
+
+interface AssignableMechanicRow extends DatabaseRow {
+  readonly user_id: string;
+  readonly employee_id: string;
+  readonly tenant_wide_branch_access: boolean;
+  readonly branch_access_allowed: boolean;
 }
 
 interface ServiceSnapshotRow extends DatabaseRow {
@@ -171,7 +192,7 @@ export class PostgresJobOrderRepository extends JobOrderStore {
       values,
     );
 
-    return this.attachLines(result.rows);
+    return this.attachLinesAndMechanics(result.rows);
   }
 
   async findJobOrderById(
@@ -198,8 +219,9 @@ export class PostgresJobOrderRepository extends JobOrderStore {
     }
 
     const lines = await this.findJobOrderLines(tenantId, jobOrder.id, queryClient);
+    const mechanics = await this.findJobOrderMechanics(tenantId, jobOrder.id, queryClient);
 
-    return toJobOrderRecord(jobOrder, lines);
+    return toJobOrderRecord(jobOrder, lines, mechanics);
   }
 
   async findJobOrderByIdForUpdate(
@@ -225,8 +247,9 @@ export class PostgresJobOrderRepository extends JobOrderStore {
     }
 
     const lines = await this.findJobOrderLines(tenantId, jobOrder.id, client);
+    const mechanics = await this.findJobOrderMechanics(tenantId, jobOrder.id, client);
 
-    return toJobOrderRecord(jobOrder, lines);
+    return toJobOrderRecord(jobOrder, lines, mechanics);
   }
 
   async createJobOrder(
@@ -333,8 +356,9 @@ export class PostgresJobOrderRepository extends JobOrderStore {
     }
 
     const lines = await this.findJobOrderLines(input.tenantId, input.jobOrderId, client);
+    const mechanics = await this.findJobOrderMechanics(input.tenantId, input.jobOrderId, client);
 
-    return toJobOrderRecord(updated, lines);
+    return toJobOrderRecord(updated, lines, mechanics);
   }
 
   async findJobOrderLineByIdForUpdate(
@@ -539,6 +563,167 @@ export class PostgresJobOrderRepository extends JobOrderStore {
     return toJobOrderLineRecord(updated);
   }
 
+  async findAssignableMechanics(
+    input: {
+      readonly tenantId: string;
+      readonly branchId: string;
+      readonly userIds: readonly string[];
+    },
+    client: DatabaseQueryClient = this.database,
+  ): Promise<readonly AssignableMechanicRecord[]> {
+    if (input.userIds.length === 0) {
+      return [];
+    }
+
+    const result = await client.query<AssignableMechanicRow>(
+      `
+        select
+          u.id as user_id,
+          ep.id as employee_id,
+          ep.tenant_wide_branch_access,
+          (
+            ep.tenant_wide_branch_access
+            or exists (
+              select 1
+              from user_branch_assignments uba
+              inner join branches b
+                on b.tenant_id = uba.tenant_id
+               and b.id = uba.branch_id
+               and b.status = 'active'
+              where uba.tenant_id = ep.tenant_id
+                and uba.user_id = ep.user_id
+                and uba.branch_id = $3
+                and uba.removed_at is null
+            )
+          ) as branch_access_allowed
+        from users u
+        inner join employee_profiles ep
+          on ep.tenant_id = u.tenant_id
+         and ep.user_id = u.id
+         and ep.status = 'active'
+        where u.tenant_id = $1
+          and u.id = any($2::uuid[])
+          and u.user_type = 'tenant_user'
+          and u.status = 'active'
+        order by u.id asc
+      `,
+      [input.tenantId, input.userIds, input.branchId],
+    );
+
+    return result.rows.map((row) => ({
+      userId: row.user_id,
+      employeeId: row.employee_id,
+      tenantWideBranchAccess: row.tenant_wide_branch_access,
+      branchAccessAllowed: row.branch_access_allowed,
+    }));
+  }
+
+  async replaceJobOrderMechanics(
+    input: ReplaceJobOrderMechanicsInput,
+    client: DatabaseQueryClient,
+  ): Promise<JobOrderRecord> {
+    const additionalMechanicUserIds = [...new Set(input.additionalMechanicUserIds)];
+
+    await client.query(
+      `
+        update job_order_mechanics
+        set removed_at = $4
+        where tenant_id = $1
+          and job_order_id = $2
+          and removed_at is null
+          and (
+            (assignment_type = 'primary' and user_id <> $3::uuid)
+            or (
+              assignment_type = 'additional'
+              and (
+                user_id = $3::uuid
+                or not (user_id = any($5::uuid[]))
+              )
+            )
+          )
+      `,
+      [
+        input.tenantId,
+        input.jobOrderId,
+        input.primaryMechanicUserId,
+        input.assignedAt,
+        additionalMechanicUserIds,
+      ],
+    );
+
+    await client.query(
+      `
+        insert into job_order_mechanics (
+          id,
+          tenant_id,
+          job_order_id,
+          user_id,
+          assignment_type,
+          assigned_at,
+          removed_at
+        )
+        select gen_random_uuid(), $1, $2, $3, 'primary', $4, null
+        where not exists (
+          select 1
+          from job_order_mechanics
+          where tenant_id = $1
+            and job_order_id = $2
+            and user_id = $3
+            and assignment_type = 'primary'
+            and removed_at is null
+        )
+      `,
+      [input.tenantId, input.jobOrderId, input.primaryMechanicUserId, input.assignedAt],
+    );
+
+    await client.query(
+      `
+        insert into job_order_mechanics (
+          id,
+          tenant_id,
+          job_order_id,
+          user_id,
+          assignment_type,
+          assigned_at,
+          removed_at
+        )
+        select gen_random_uuid(), $1, $2, mechanic_user_id, 'additional', $4, null
+        from unnest($3::uuid[]) as mechanic_user_id
+        where not exists (
+          select 1
+          from job_order_mechanics existing
+          where existing.tenant_id = $1
+            and existing.job_order_id = $2
+            and existing.user_id = mechanic_user_id
+            and existing.assignment_type = 'additional'
+            and existing.removed_at is null
+        )
+      `,
+      [input.tenantId, input.jobOrderId, additionalMechanicUserIds, input.assignedAt],
+    );
+
+    await client.query(
+      `
+        update job_orders
+        set
+          primary_mechanic_user_id = $3,
+          updated_at = $4,
+          lock_version = lock_version + 1
+        where tenant_id = $1
+          and id = $2
+      `,
+      [input.tenantId, input.jobOrderId, input.primaryMechanicUserId, input.assignedAt],
+    );
+
+    const updated = await this.findJobOrderById(input.tenantId, input.jobOrderId, client);
+
+    if (updated === null) {
+      throw new Error('Updated job order mechanic assignments could not be loaded.');
+    }
+
+    return updated;
+  }
+
   async isActiveShopOwner(input: {
     readonly tenantId: string;
     readonly userId: string;
@@ -664,12 +849,16 @@ export class PostgresJobOrderRepository extends JobOrderStore {
     };
   }
 
-  private async attachLines(rows: readonly JobOrderRow[]): Promise<readonly JobOrderRecord[]> {
+  private async attachLinesAndMechanics(
+    rows: readonly JobOrderRow[],
+  ): Promise<readonly JobOrderRecord[]> {
     const jobOrders: JobOrderRecord[] = [];
 
     for (const row of rows) {
       const lines = await this.findJobOrderLines(row.tenant_id, row.id, this.database);
-      jobOrders.push(toJobOrderRecord(row, lines));
+      const mechanics = await this.findJobOrderMechanics(row.tenant_id, row.id, this.database);
+
+      jobOrders.push(toJobOrderRecord(row, lines, mechanics));
     }
 
     return jobOrders;
@@ -692,6 +881,32 @@ export class PostgresJobOrderRepository extends JobOrderStore {
     );
 
     return result.rows.map(toJobOrderLineRecord);
+  }
+
+  private async findJobOrderMechanics(
+    tenantId: string,
+    jobOrderId: string,
+    client: DatabaseQueryClient,
+  ): Promise<readonly JobOrderMechanicAssignmentRecord[]> {
+    const result = await client.query<JobOrderMechanicAssignmentRow>(
+      `
+        select *
+        from job_order_mechanics
+        where tenant_id = $1
+          and job_order_id = $2
+          and removed_at is null
+        order by
+          case assignment_type
+            when 'primary' then 0
+            else 1
+          end,
+          assigned_at asc,
+          user_id asc
+      `,
+      [tenantId, jobOrderId],
+    );
+
+    return result.rows.map(toJobOrderMechanicAssignmentRecord);
   }
 
   private async upsertJobOrderLineSnapshot(
@@ -755,7 +970,11 @@ export class PostgresJobOrderRepository extends JobOrderStore {
   }
 }
 
-function toJobOrderRecord(row: JobOrderRow, lines: readonly JobOrderLineRecord[]): JobOrderRecord {
+function toJobOrderRecord(
+  row: JobOrderRow,
+  lines: readonly JobOrderLineRecord[],
+  mechanics: readonly JobOrderMechanicAssignmentRecord[],
+): JobOrderRecord {
   return {
     id: row.id,
     tenantId: row.tenant_id,
@@ -778,6 +997,7 @@ function toJobOrderRecord(row: JobOrderRow, lines: readonly JobOrderLineRecord[]
     updatedAt: row.updated_at,
     lockVersion: row.lock_version,
     lines,
+    mechanics,
   };
 }
 
@@ -799,6 +1019,20 @@ function toJobOrderLineRecord(row: JobOrderLineRow): JobOrderLineRecord {
     lineOrder: row.line_order,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+function toJobOrderMechanicAssignmentRecord(
+  row: JobOrderMechanicAssignmentRow,
+): JobOrderMechanicAssignmentRecord {
+  return {
+    id: row.id,
+    tenantId: row.tenant_id,
+    jobOrderId: row.job_order_id,
+    userId: row.user_id,
+    assignmentType: row.assignment_type,
+    assignedAt: row.assigned_at,
+    removedAt: row.removed_at,
   };
 }
 

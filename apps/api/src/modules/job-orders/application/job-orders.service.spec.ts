@@ -6,6 +6,7 @@ import {
 } from '../../../shared/numbering/document-numbering';
 import {
   assertBaselinePartLinesBlocked,
+  assertCanAssignJobOrderMechanics,
   assertCanEditJobOrderLines,
   assertCanUpdateJobOrderBaseline,
   calculateJobOrderLineAuthorizedAmount,
@@ -43,6 +44,30 @@ describe('job order baseline validators', () => {
       }),
     ).toThrow('One or more fields are invalid.');
   });
+});
+
+describe('job order mechanic assignment validators', () => {
+  it.each(['pending', 'in_progress', 'waiting_for_parts'] as const)(
+    'allows mechanic assignment while job order is %s',
+    (status) => {
+      expect(() =>
+        assertCanAssignJobOrderMechanics({
+          status,
+        }),
+      ).not.toThrow();
+    },
+  );
+
+  it.each(['completed', 'released', 'cancelled'] as const)(
+    'blocks mechanic assignment while job order is %s',
+    (status) => {
+      expect(() =>
+        assertCanAssignJobOrderMechanics({
+          status,
+        }),
+      ).toThrow('One or more fields are invalid.');
+    },
+  );
 });
 
 describe('job order line scaffolding validators', () => {

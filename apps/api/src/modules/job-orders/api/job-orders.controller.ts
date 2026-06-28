@@ -17,6 +17,8 @@ import { AccessTokenAuthGuard } from '../../auth/api/access-token-auth.guard';
 import { AuthService } from '../../auth/application/auth.service';
 import { JobOrdersService } from '../application/job-orders.service';
 import {
+  assignJobOrderMechanicsRequestSchema,
+  type AssignJobOrderMechanicsRequest,
   createJobOrderPartLineRequestSchema,
   type CreateJobOrderPartLineRequest,
   createJobOrderRequestSchema,
@@ -121,6 +123,18 @@ export class JobOrdersController {
     const session = await this.authService.getAuthenticatedRouteSession(authorizationHeader);
 
     return this.jobOrdersService.updateJobOrder(jobOrderId, request, session.tenantContextSession);
+  }
+
+  @Post(':job_order_id/assign-mechanics')
+  async assignMechanics(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('job_order_id') jobOrderId: string,
+    @Body(new ZodValidationPipe(assignJobOrderMechanicsRequestSchema))
+    request: AssignJobOrderMechanicsRequest,
+  ): ReturnType<JobOrdersService['assignMechanics']> {
+    const session = await this.authService.getAuthenticatedRouteSession(authorizationHeader);
+
+    return this.jobOrdersService.assignMechanics(jobOrderId, request, session.tenantContextSession);
   }
 
   @Post(':job_order_id/service-lines')

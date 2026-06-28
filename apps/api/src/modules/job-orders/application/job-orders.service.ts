@@ -24,6 +24,7 @@ import {
   type TenantContextAuthenticatedSession,
 } from '../../../shared/tenant-context/tenant-context';
 import type {
+  AssignJobOrderMechanicsRequest,
   CreateJobOrderPartLineRequest,
   CreateJobOrderRequest,
   CreateJobOrderServiceLineRequest,
@@ -37,6 +38,7 @@ import {
   type JobOrderLineSnapshotInput,
   type JobOrderLineStatus,
   type JobOrderLineType,
+  type JobOrderMechanicAssignmentRecord,
   type JobOrderRecord,
   type JobOrderStatus,
 } from './job-order.store';
@@ -61,6 +63,13 @@ export interface JobOrderLineResponse {
   readonly updated_at: string;
 }
 
+export interface JobOrderMechanicAssignmentResponse {
+  readonly id: string;
+  readonly user_id: string;
+  readonly assignment_type: 'primary' | 'additional';
+  readonly assigned_at: string;
+}
+
 export interface JobOrderResponse {
   readonly id: string;
   readonly branch_id: string;
@@ -81,6 +90,7 @@ export interface JobOrderResponse {
   readonly created_at: string;
   readonly updated_at: string;
   readonly lines: readonly JobOrderLineResponse[];
+  readonly mechanics: readonly JobOrderMechanicAssignmentResponse[];
 }
 
 export interface JobOrderListResponse {
@@ -123,6 +133,12 @@ interface NormalizedJobOrderLineInput {
   readonly unitPrice: string;
   readonly authorizedAmount: string;
   readonly lineOrder: number | null;
+}
+
+interface NormalizedMechanicAssignmentInput {
+  readonly primaryMechanicUserId: string;
+  readonly additionalMechanicUserIds: readonly string[];
+  readonly allMechanicUserIds: readonly string[];
 }
 
 @Injectable()
@@ -366,6 +382,80 @@ export class JobOrdersService {
         beforeJson: toJobOrderResponse(existing),
         afterJson: toJobOrderResponse(updated),
         reason: 'job_order_updated',
+        client: transaction,
+      });
+
+      return {
+        job_order: toJobOrderResponse(updated),
+      };
+    });
+  }
+
+  async assignMechanics(
+    jobOrderId: string,
+    request: AssignJobOrderMechanicsRequest,
+    session: TenantContextAuthenticatedSession,
+  ): Promise<JobOrderMutationResponse> {
+    const context = resolveTenantContextFromAuthenticatedSession(session);
+    const isShopOwner = await this.jobOrderStore.isActiveShopOwner({
+      tenantId: context.tenantId,
+      userId: context.actorUserId,
+    });
+
+    assertTenantLifecycleAccess({
+      context,
+      isShopOwner,
+      action: TENANT_ACCESS_ACTIONS.OPERATIONAL_WRITE,
+    });
+    assertJobOrderPermission(context, isShopOwner, 'job_orders.update');
+
+    const input = normalizeMechanicAssignmentInput(request);
+
+    return this.transactionRunner.runInTransaction(async (transaction) => {
+      const existing = await this.jobOrderStore.findJobOrderByIdForUpdate(
+        context.tenantId,
+        jobOrderId.trim(),
+        transaction,
+      );
+
+      if (existing === null) {
+        throw GarageOsApiException.resourceNotFound('Job order was not found.');
+      }
+
+      assertJobOrderBranchAccess(context, existing.branchId);
+      assertCanAssignJobOrderMechanics(existing);
+
+      await assertAssignableMechanics({
+        jobOrderStore: this.jobOrderStore,
+        tenantId: context.tenantId,
+        branchId: existing.branchId,
+        mechanicUserIds: input.allMechanicUserIds,
+        transaction,
+      });
+
+      const assignedAt = new Date();
+      const updated = await this.jobOrderStore.replaceJobOrderMechanics(
+        {
+          tenantId: context.tenantId,
+          jobOrderId: existing.id,
+          primaryMechanicUserId: input.primaryMechanicUserId,
+          additionalMechanicUserIds: input.additionalMechanicUserIds,
+          assignedAt,
+        },
+        transaction,
+      );
+
+      await this.auditService.record({
+        tenantId: context.tenantId,
+        actorUserId: context.actorUserId,
+        actorType: AUDIT_ACTOR_TYPES.TENANT_USER,
+        action: 'job_order_mechanics.assigned',
+        entityType: 'job_order',
+        entityId: updated.id,
+        branchId: updated.branchId,
+        beforeJson: toJobOrderResponse(existing),
+        afterJson: toJobOrderResponse(updated),
+        reason: 'job_order_mechanics_assigned',
         client: transaction,
       });
 
@@ -745,6 +835,23 @@ export function assertCanEditJobOrderLines(jobOrder: Pick<JobOrderRecord, 'statu
   }
 }
 
+export function assertCanAssignJobOrderMechanics(jobOrder: Pick<JobOrderRecord, 'status'>): void {
+  if (
+    jobOrder.status !== 'pending' &&
+    jobOrder.status !== 'in_progress' &&
+    jobOrder.status !== 'waiting_for_parts'
+  ) {
+    throw GarageOsApiException.validationFailed([
+      {
+        field: 'status',
+        code: 'job_order_mechanic_assignment_blocked_by_status',
+        message:
+          'Mechanics can only be assigned while the job order is pending, in progress, or waiting for parts.',
+      },
+    ]);
+  }
+}
+
 export function assertBaselinePartLinesBlocked(): never {
   throw GarageOsApiException.validationFailed([
     {
@@ -832,6 +939,57 @@ async function assertJobOrderReferences(input: {
   }
 }
 
+async function assertAssignableMechanics(input: {
+  readonly jobOrderStore: JobOrderStore;
+  readonly tenantId: string;
+  readonly branchId: string;
+  readonly mechanicUserIds: readonly string[];
+  readonly transaction: DatabaseQueryClient;
+}): Promise<void> {
+  const mechanics = await input.jobOrderStore.findAssignableMechanics(
+    {
+      tenantId: input.tenantId,
+      branchId: input.branchId,
+      userIds: input.mechanicUserIds,
+    },
+    input.transaction,
+  );
+
+  const mechanicsByUserId = new Map(mechanics.map((mechanic) => [mechanic.userId, mechanic]));
+
+  const inactiveOrMissingMechanicIds = input.mechanicUserIds.filter(
+    (mechanicUserId) => !mechanicsByUserId.has(mechanicUserId),
+  );
+
+  if (inactiveOrMissingMechanicIds.length > 0) {
+    throw GarageOsApiException.validationFailed([
+      {
+        field: 'mechanic_user_ids',
+        code: 'mechanic_not_active_employee',
+        message:
+          'Assigned mechanics must be active tenant users with active employee profiles in the current tenant.',
+      },
+    ]);
+  }
+
+  const branchDeniedMechanicIds = input.mechanicUserIds.filter((mechanicUserId) => {
+    const mechanic = mechanicsByUserId.get(mechanicUserId);
+
+    return mechanic !== undefined && !mechanic.branchAccessAllowed;
+  });
+
+  if (branchDeniedMechanicIds.length > 0) {
+    throw GarageOsApiException.validationFailed([
+      {
+        field: 'mechanic_user_ids',
+        code: 'mechanic_branch_access_denied',
+        message:
+          'Assigned mechanics must have access to the job order branch or tenant-wide branch access.',
+      },
+    ]);
+  }
+}
+
 async function buildJobOrderLineSnapshot(input: {
   readonly jobOrderStore: JobOrderStore;
   readonly tenantId: string;
@@ -886,6 +1044,25 @@ function normalizeJobOrderLineInput(
   };
 }
 
+function normalizeMechanicAssignmentInput(
+  request: AssignJobOrderMechanicsRequest,
+): NormalizedMechanicAssignmentInput {
+  const primaryMechanicUserId = request.primary_mechanic_user_id.trim();
+  const additionalMechanicUserIds = [
+    ...new Set(
+      request.additional_mechanic_user_ids
+        .map((mechanicUserId) => mechanicUserId.trim())
+        .filter((mechanicUserId) => mechanicUserId !== primaryMechanicUserId),
+    ),
+  ];
+
+  return {
+    primaryMechanicUserId,
+    additionalMechanicUserIds,
+    allMechanicUserIds: [primaryMechanicUserId, ...additionalMechanicUserIds],
+  };
+}
+
 function normalizeCreateJobOrderInput(
   request: CreateJobOrderRequest,
 ): NormalizedCreateJobOrderInput {
@@ -936,6 +1113,7 @@ function toJobOrderResponse(jobOrder: JobOrderRecord): JobOrderResponse {
     created_at: jobOrder.createdAt.toISOString(),
     updated_at: jobOrder.updatedAt.toISOString(),
     lines: jobOrder.lines.map(toJobOrderLineResponse),
+    mechanics: jobOrder.mechanics.map(toJobOrderMechanicAssignmentResponse),
   };
 }
 
@@ -955,6 +1133,17 @@ function toJobOrderLineResponse(line: JobOrderLineRecord): JobOrderLineResponse 
     line_order: line.lineOrder,
     created_at: line.createdAt.toISOString(),
     updated_at: line.updatedAt.toISOString(),
+  };
+}
+
+function toJobOrderMechanicAssignmentResponse(
+  mechanic: JobOrderMechanicAssignmentRecord,
+): JobOrderMechanicAssignmentResponse {
+  return {
+    id: mechanic.id,
+    user_id: mechanic.userId,
+    assignment_type: mechanic.assignmentType,
+    assigned_at: mechanic.assignedAt.toISOString(),
   };
 }
 

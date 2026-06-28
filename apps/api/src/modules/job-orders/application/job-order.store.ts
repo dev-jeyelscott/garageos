@@ -12,6 +12,25 @@ export type JobOrderLineType = 'service' | 'labor' | 'part';
 
 export type JobOrderLineStatus = 'active' | 'completed' | 'cancelled';
 
+export type JobOrderMechanicAssignmentType = 'primary' | 'additional';
+
+export interface JobOrderMechanicAssignmentRecord {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly jobOrderId: string;
+  readonly userId: string;
+  readonly assignmentType: JobOrderMechanicAssignmentType;
+  readonly assignedAt: Date;
+  readonly removedAt: Date | null;
+}
+
+export interface AssignableMechanicRecord {
+  readonly userId: string;
+  readonly employeeId: string;
+  readonly tenantWideBranchAccess: boolean;
+  readonly branchAccessAllowed: boolean;
+}
+
 export interface JobOrderLineRecord {
   readonly id: string;
   readonly tenantId: string;
@@ -53,6 +72,7 @@ export interface JobOrderRecord {
   readonly updatedAt: Date;
   readonly lockVersion: number;
   readonly lines: readonly JobOrderLineRecord[];
+  readonly mechanics: readonly JobOrderMechanicAssignmentRecord[];
 }
 
 export interface ServiceSnapshotRecord {
@@ -142,6 +162,14 @@ export interface CancelJobOrderLineInput {
   readonly updatedAt: Date;
 }
 
+export interface ReplaceJobOrderMechanicsInput {
+  readonly tenantId: string;
+  readonly jobOrderId: string;
+  readonly primaryMechanicUserId: string;
+  readonly additionalMechanicUserIds: readonly string[];
+  readonly assignedAt: Date;
+}
+
 export abstract class JobOrderStore {
   abstract getTenantTimezone(
     tenantId: string,
@@ -203,6 +231,20 @@ export abstract class JobOrderStore {
     input: CancelJobOrderLineInput,
     client: DatabaseQueryClient,
   ): Promise<JobOrderLineRecord | null>;
+
+  abstract findAssignableMechanics(
+    input: {
+      readonly tenantId: string;
+      readonly branchId: string;
+      readonly userIds: readonly string[];
+    },
+    client?: DatabaseQueryClient,
+  ): Promise<readonly AssignableMechanicRecord[]>;
+
+  abstract replaceJobOrderMechanics(
+    input: ReplaceJobOrderMechanicsInput,
+    client: DatabaseQueryClient,
+  ): Promise<JobOrderRecord>;
 
   abstract isActiveShopOwner(input: {
     readonly tenantId: string;

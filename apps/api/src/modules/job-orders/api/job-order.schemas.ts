@@ -21,6 +21,8 @@ export const jobOrderStatusSchema = z.enum([
 
 export const jobOrderServiceLaborLineTypeSchema = z.enum(['service', 'labor']);
 
+const MAX_ADDITIONAL_MECHANICS = 50;
+
 const jobOrderServiceLaborLineRequestSchema = z
   .object({
     line_type: jobOrderServiceLaborLineTypeSchema,
@@ -104,10 +106,36 @@ export const createJobOrderPartLineRequestSchema = z.object({
   unit_price: moneySchema.default('0.00'),
 });
 
+export const assignJobOrderMechanicsRequestSchema = z
+  .object({
+    primary_mechanic_user_id: uuidSchema,
+    additional_mechanic_user_ids: z.array(uuidSchema).max(MAX_ADDITIONAL_MECHANICS).default([]),
+  })
+  .superRefine((value, context) => {
+    const uniqueAdditionalMechanicIds = new Set(value.additional_mechanic_user_ids);
+
+    if (uniqueAdditionalMechanicIds.size !== value.additional_mechanic_user_ids.length) {
+      context.addIssue({
+        code: 'custom',
+        path: ['additional_mechanic_user_ids'],
+        message: 'Additional mechanic assignments must not contain duplicate users.',
+      });
+    }
+
+    if (uniqueAdditionalMechanicIds.has(value.primary_mechanic_user_id)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['additional_mechanic_user_ids'],
+        message: 'Primary mechanic must not also be assigned as an additional mechanic.',
+      });
+    }
+  });
+
 export type JobOrderStatusRequest = z.infer<typeof jobOrderStatusSchema>;
 export type ListJobOrdersQuery = z.infer<typeof listJobOrdersQuerySchema>;
 export type CreateJobOrderRequest = z.infer<typeof createJobOrderRequestSchema>;
 export type UpdateJobOrderRequest = z.infer<typeof updateJobOrderRequestSchema>;
+export type AssignJobOrderMechanicsRequest = z.infer<typeof assignJobOrderMechanicsRequestSchema>;
 export type CreateJobOrderServiceLineRequest = z.infer<
   typeof createJobOrderServiceLineRequestSchema
 >;
