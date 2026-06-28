@@ -9,7 +9,7 @@ require('dotenv').config({
 const DATABASE_URL = process.env.DATABASE_URL;
 
 const EXPECTED = {
-  migrationCount: 23,
+  migrationCount: 24,
   publicTableCount: 106,
   subscriptionPlans: 3,
   subscriptionPlanLimits: 27,
@@ -427,6 +427,121 @@ async function validateStockBalancesFoundationSchema(client) {
   assertEqual('stock balances product branch index', productBranchIndexCount, 1);
 }
 
+async function validateInventoryLedgerFoundationSchema(client) {
+  const columnCount = await count(
+    client,
+    `
+      select count(*)
+      from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'inventory_ledger_entries'
+        and column_name in (
+          'id',
+          'tenant_id',
+          'branch_id',
+          'product_id',
+          'transaction_type',
+          'quantity_delta_on_hand',
+          'quantity_delta_reserved',
+          'unit_cost',
+          'total_cost',
+          'source_type',
+          'source_id',
+          'occurred_at',
+          'created_by_user_id'
+        )
+    `,
+  );
+
+  const transactionTypeConstraintCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_constraint
+      where conname = 'chk_inventory_ledger_transaction_type'
+    `,
+  );
+
+  const nonzeroDeltaConstraintCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_constraint
+      where conname = 'chk_inventory_ledger_nonzero_delta'
+    `,
+  );
+
+  const costConstraintCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_constraint
+      where conname = 'chk_inventory_ledger_cost_non_negative'
+    `,
+  );
+
+  const branchForeignKeyCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_constraint constraint_definition
+      inner join pg_class table_class
+        on table_class.oid = constraint_definition.conrelid
+      inner join pg_namespace namespace
+        on namespace.oid = table_class.relnamespace
+      where namespace.nspname = 'public'
+        and table_class.relname = 'inventory_ledger_entries'
+        and constraint_definition.contype = 'f'
+        and pg_get_constraintdef(constraint_definition.oid) ilike '%FOREIGN KEY (tenant_id, branch_id)%'
+    `,
+  );
+
+  const productDateIndexCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_indexes
+      where schemaname = 'public'
+        and indexname = 'idx_inventory_ledger_product_date'
+    `,
+  );
+
+  const sourceIndexCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_indexes
+      where schemaname = 'public'
+        and indexname = 'idx_inventory_ledger_source'
+    `,
+  );
+
+  const appendOnlyTriggerCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_trigger trigger_definition
+      inner join pg_class table_class
+        on table_class.oid = trigger_definition.tgrelid
+      inner join pg_namespace namespace
+        on namespace.oid = table_class.relnamespace
+      where namespace.nspname = 'public'
+        and table_class.relname = 'inventory_ledger_entries'
+        and trigger_definition.tgname = 'trg_inventory_ledger_entries_append_only'
+        and not trigger_definition.tgisinternal
+    `,
+  );
+
+  assertEqual('inventory ledger foundation columns', columnCount, 13);
+  assertEqual('inventory ledger transaction type constraint', transactionTypeConstraintCount, 1);
+  assertEqual('inventory ledger nonzero delta constraint', nonzeroDeltaConstraintCount, 1);
+  assertEqual('inventory ledger cost constraint', costConstraintCount, 1);
+  assertEqual('inventory ledger branch foreign key', branchForeignKeyCount, 1);
+  assertEqual('inventory ledger product date index', productDateIndexCount, 1);
+  assertEqual('inventory ledger source index', sourceIndexCount, 1);
+  assertEqual('inventory ledger append-only trigger', appendOnlyTriggerCount, 1);
+}
+
 async function validateEstimatesBaselineSchema(client) {
   const estimateColumnCount = await count(
     client,
@@ -609,6 +724,7 @@ async function main() {
     await validateProductCategoriesSchema(client);
     await validateProductsFoundationSchema(client);
     await validateStockBalancesFoundationSchema(client);
+    await validateInventoryLedgerFoundationSchema(client);
     await validateEstimatesBaselineSchema(client);
     await validateMoneyPrecision(client);
     await validateQuantityPrecision(client);
