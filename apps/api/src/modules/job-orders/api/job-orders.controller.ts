@@ -21,6 +21,8 @@ import {
   appendJobOrderServiceNoteRequestSchema,
   type AppendJobOrderServiceNoteRequest,
   assignJobOrderMechanicsRequestSchema,
+  createJobOrderAttachmentPlaceholderRequestSchema,
+  type CreateJobOrderAttachmentPlaceholderRequest,
   type AssignJobOrderMechanicsRequest,
   completeJobOrderLineRequestSchema,
   type CompleteJobOrderLineRequest,
@@ -128,6 +130,74 @@ export class JobOrdersController {
     const session = await this.authService.getAuthenticatedRouteSession(authorizationHeader);
 
     return this.jobOrdersService.listStatusEvents(jobOrderId, session.tenantContextSession);
+  }
+
+  @Get(':job_order_id/attachments')
+  async listAttachmentPlaceholders(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('job_order_id') jobOrderId: string,
+  ): ReturnType<JobOrdersService['listAttachmentPlaceholders']> {
+    const session = await this.authService.getAuthenticatedRouteSession(authorizationHeader);
+
+    return this.jobOrdersService.listAttachmentPlaceholders(
+      jobOrderId,
+      session.tenantContextSession,
+    );
+  }
+
+  @Post(':job_order_id/attachments')
+  async createAttachmentPlaceholder(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Param('job_order_id') jobOrderId: string,
+    @Body(new ZodValidationPipe(createJobOrderAttachmentPlaceholderRequestSchema))
+    request: CreateJobOrderAttachmentPlaceholderRequest,
+  ): ReturnType<JobOrdersService['createAttachmentPlaceholder']> {
+    const session = await this.authService.getAuthenticatedRouteSession(authorizationHeader);
+    const now = new Date();
+
+    const idempotency = await this.idempotencyService.begin({
+      tenantId: session.tenantContextSession.actor.tenant_id,
+      userId: session.tenantContextSession.actor.user_id,
+      endpoint: 'POST /api/v1/job-orders/:job_order_id/attachments',
+      idempotencyKey,
+      requestIntent: {
+        job_order_id: jobOrderId,
+        ...request,
+      },
+      now,
+      expiresAt: this.jobOrdersService.getIdempotencyExpiresAt(now),
+    });
+
+    if (idempotency.type === 'replayed') {
+      return idempotency.responseBodyJson as Awaited<
+        ReturnType<JobOrdersService['createAttachmentPlaceholder']>
+      >;
+    }
+
+    try {
+      const response = await this.jobOrdersService.createAttachmentPlaceholder(
+        jobOrderId,
+        request,
+        session.tenantContextSession,
+      );
+
+      await this.idempotencyService.completeSucceeded({
+        id: idempotency.record.id,
+        responseStatusCode: 201,
+        responseBodyJson: response,
+        now: new Date(),
+      });
+
+      return response;
+    } catch (error) {
+      await this.idempotencyService.completeFailed({
+        id: idempotency.record.id,
+        now: new Date(),
+      });
+
+      throw error;
+    }
   }
 
   @Patch(':job_order_id')

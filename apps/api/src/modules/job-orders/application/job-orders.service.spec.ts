@@ -6,6 +6,7 @@ import {
 } from '../../../shared/numbering/document-numbering';
 import {
   assertBaselinePartLinesBlocked,
+  assertJobOrderAttachmentsFileModuleBlocked,
   assertCanAddJobOrderServiceNote,
   assertCanAssignJobOrderMechanics,
   assertCanCompleteJobOrderLineForJobOrder,
@@ -13,6 +14,7 @@ import {
   assertCanEditJobOrderLines,
   assertCanTransitionJobOrderStatus,
   assertCanUpdateJobOrderBaseline,
+  buildJobOrderAttachmentPlaceholderResponse,
   calculateJobOrderLineAuthorizedAmount,
   getJobOrderStatusTransitionAuditAction,
   getRequiredJobOrderStatusTransitionPermission,
@@ -381,6 +383,25 @@ describe('job order service notes validators', () => {
       ).toThrow('Service notes can only be added before a job order is released or cancelled.');
     },
   );
+});
+
+describe('job order attachment placeholders', () => {
+  it('returns an empty placeholder attachment list until the Files module is implemented', () => {
+    expect(buildJobOrderAttachmentPlaceholderResponse('job-order-1')).toEqual({
+      job_order_id: 'job-order-1',
+      attachments: [],
+      file_module_status: 'not_implemented',
+      upload_intent_endpoint: '/api/v1/files/upload-intents',
+      message:
+        'Job order attachment listing is reserved for the Files module. Upload intents, signed URLs, file metadata, and file linking are implemented in Milestone 11.',
+    });
+  });
+
+  it('blocks job order attachment mutation until the Files module is implemented', () => {
+    expect(() => assertJobOrderAttachmentsFileModuleBlocked()).toThrow(
+      'One or more fields are invalid.',
+    );
+  });
 });
 
 describe('job order labor task completion validators', () => {

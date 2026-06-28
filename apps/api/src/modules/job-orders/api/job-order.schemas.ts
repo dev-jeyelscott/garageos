@@ -109,6 +109,20 @@ export const completeJobOrderLineRequestSchema = z
   })
   .default({});
 
+export const createJobOrderAttachmentPlaceholderRequestSchema = z
+  .object({
+    file_id: uuidSchema.optional(),
+    original_filename: z.string().trim().min(1).max(255).optional(),
+    content_type: z.string().trim().min(1).max(100).optional(),
+    size_bytes: z
+      .number()
+      .int()
+      .min(1)
+      .max(20 * 1024 * 1024)
+      .optional(),
+  })
+  .default({});
+
 export const createJobOrderPartLineRequestSchema = z.object({
   product_id: uuidSchema,
   description: z.string().trim().min(1).max(500),
@@ -170,6 +184,9 @@ export type AppendJobOrderServiceNoteRequest = z.infer<
   typeof appendJobOrderServiceNoteRequestSchema
 >;
 export type CompleteJobOrderLineRequest = z.infer<typeof completeJobOrderLineRequestSchema>;
+export type CreateJobOrderAttachmentPlaceholderRequest = z.infer<
+  typeof createJobOrderAttachmentPlaceholderRequestSchema
+>;
 export type CreateJobOrderServiceLineRequest = z.infer<
   typeof createJobOrderServiceLineRequestSchema
 >;

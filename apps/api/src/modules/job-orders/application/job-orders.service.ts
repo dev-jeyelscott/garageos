@@ -27,6 +27,7 @@ import type {
   AppendJobOrderServiceNoteRequest,
   AssignJobOrderMechanicsRequest,
   CompleteJobOrderLineRequest,
+  CreateJobOrderAttachmentPlaceholderRequest,
   CreateJobOrderPartLineRequest,
   CreateJobOrderRequest,
   CreateJobOrderServiceLineRequest,
@@ -121,6 +122,14 @@ export interface JobOrderDetailResponse {
 
 export interface JobOrderStatusEventsResponse {
   readonly status_events: readonly JobOrderStatusEventResponse[];
+}
+
+export interface JobOrderAttachmentsPlaceholderResponse {
+  readonly job_order_id: string;
+  readonly attachments: readonly never[];
+  readonly file_module_status: 'not_implemented';
+  readonly upload_intent_endpoint: '/api/v1/files/upload-intents';
+  readonly message: string;
 }
 
 export interface JobOrderMutationResponse {
@@ -292,6 +301,62 @@ export class JobOrdersService {
     return {
       status_events: statusEvents.map(toJobOrderStatusEventResponse),
     };
+  }
+
+  async listAttachmentPlaceholders(
+    jobOrderId: string,
+    session: TenantContextAuthenticatedSession,
+  ): Promise<JobOrderAttachmentsPlaceholderResponse> {
+    const context = resolveTenantContextFromAuthenticatedSession(session);
+    const isShopOwner = await this.jobOrderStore.isActiveShopOwner({
+      tenantId: context.tenantId,
+      userId: context.actorUserId,
+    });
+
+    assertTenantLifecycleAccess({
+      context,
+      isShopOwner,
+      action: TENANT_ACCESS_ACTIONS.OPERATIONAL_READ,
+    });
+    assertJobOrderPermission(context, isShopOwner, 'job_orders.read');
+
+    const jobOrder = await this.jobOrderStore.findJobOrderById(context.tenantId, jobOrderId.trim());
+
+    if (jobOrder === null) {
+      throw GarageOsApiException.resourceNotFound('Job order was not found.');
+    }
+
+    assertJobOrderBranchAccess(context, jobOrder.branchId);
+
+    return buildJobOrderAttachmentPlaceholderResponse(jobOrder.id);
+  }
+
+  async createAttachmentPlaceholder(
+    jobOrderId: string,
+    _request: CreateJobOrderAttachmentPlaceholderRequest,
+    session: TenantContextAuthenticatedSession,
+  ): Promise<never> {
+    const context = resolveTenantContextFromAuthenticatedSession(session);
+    const isShopOwner = await this.jobOrderStore.isActiveShopOwner({
+      tenantId: context.tenantId,
+      userId: context.actorUserId,
+    });
+
+    assertTenantLifecycleAccess({
+      context,
+      isShopOwner,
+      action: TENANT_ACCESS_ACTIONS.OPERATIONAL_WRITE,
+    });
+    assertJobOrderPermission(context, isShopOwner, 'job_orders.update');
+
+    const jobOrder = await this.jobOrderStore.findJobOrderById(context.tenantId, jobOrderId.trim());
+
+    if (jobOrder === null) {
+      throw GarageOsApiException.resourceNotFound('Job order was not found.');
+    }
+
+    assertJobOrderBranchAccess(context, jobOrder.branchId);
+    assertJobOrderAttachmentsFileModuleBlocked();
   }
 
   async createJobOrder(
@@ -1176,6 +1241,30 @@ export class JobOrdersService {
 
     return jobOrder;
   }
+}
+
+export function buildJobOrderAttachmentPlaceholderResponse(
+  jobOrderId: string,
+): JobOrderAttachmentsPlaceholderResponse {
+  return {
+    job_order_id: jobOrderId,
+    attachments: [],
+    file_module_status: 'not_implemented',
+    upload_intent_endpoint: '/api/v1/files/upload-intents',
+    message:
+      'Job order attachment listing is reserved for the Files module. Upload intents, signed URLs, file metadata, and file linking are implemented in Milestone 11.',
+  };
+}
+
+export function assertJobOrderAttachmentsFileModuleBlocked(): never {
+  throw GarageOsApiException.validationFailed([
+    {
+      field: 'attachments',
+      code: 'job_order_attachments_require_file_module',
+      message:
+        'Job order attachments require the Files module. Use /api/v1/files upload intents when Milestone 11 is implemented.',
+    },
+  ]);
 }
 
 export function assertCanUpdateJobOrderBaseline(jobOrder: Pick<JobOrderRecord, 'status'>): void {
