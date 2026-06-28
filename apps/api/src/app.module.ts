@@ -13,6 +13,7 @@ import { CustomersModule } from './modules/customers/customers.module';
 import { EmployeesModule } from './modules/employees/employees.module';
 import { EstimatesModule } from './modules/estimates/estimates.module';
 import { JobOrdersModule } from './modules/job-orders/job-orders.module';
+import { MechanicSessionsModule } from './modules/mechanic-sessions/mechanic-sessions.module';
 import { MotorcyclesModule } from './modules/motorcycles/motorcycles.module';
 import { ProductCategoriesModule } from './modules/product-categories/product-categories.module';
 import { ServicesModule } from './modules/services/services.module';
@@ -44,6 +45,7 @@ export class HealthController {
     EmployeesModule,
     EstimatesModule,
     JobOrdersModule,
+    MechanicSessionsModule,
     CustomersModule,
     MotorcyclesModule,
     ServicesModule,
