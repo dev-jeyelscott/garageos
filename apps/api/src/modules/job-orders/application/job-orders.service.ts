@@ -42,6 +42,7 @@ import {
   type JobOrderMechanicAssignmentRecord,
   type JobOrderRecord,
   type JobOrderStatus,
+  type JobOrderStatusEventRecord,
 } from './job-order.store';
 
 const IDEMPOTENCY_RETENTION_HOURS = 24;
@@ -69,6 +70,16 @@ export interface JobOrderMechanicAssignmentResponse {
   readonly user_id: string;
   readonly assignment_type: 'primary' | 'additional';
   readonly assigned_at: string;
+}
+
+export interface JobOrderStatusEventResponse {
+  readonly id: string;
+  readonly job_order_id: string;
+  readonly from_status: JobOrderStatus | null;
+  readonly to_status: JobOrderStatus;
+  readonly reason: string | null;
+  readonly created_by_user_id: string | null;
+  readonly created_at: string;
 }
 
 export interface JobOrderResponse {
@@ -102,8 +113,16 @@ export interface JobOrderDetailResponse {
   readonly job_order: JobOrderResponse;
 }
 
+export interface JobOrderStatusEventsResponse {
+  readonly status_events: readonly JobOrderStatusEventResponse[];
+}
+
 export interface JobOrderMutationResponse {
   readonly job_order: JobOrderResponse;
+}
+
+export interface JobOrderStatusTransitionMutationResponse extends JobOrderMutationResponse {
+  readonly status_event: JobOrderStatusEventResponse;
 }
 
 export interface JobOrderLineMutationResponse {
@@ -223,6 +242,41 @@ export class JobOrdersService {
 
     return {
       job_order: toJobOrderResponse(jobOrder),
+    };
+  }
+
+  async listStatusEvents(
+    jobOrderId: string,
+    session: TenantContextAuthenticatedSession,
+  ): Promise<JobOrderStatusEventsResponse> {
+    const context = resolveTenantContextFromAuthenticatedSession(session);
+    const isShopOwner = await this.jobOrderStore.isActiveShopOwner({
+      tenantId: context.tenantId,
+      userId: context.actorUserId,
+    });
+
+    assertTenantLifecycleAccess({
+      context,
+      isShopOwner,
+      action: TENANT_ACCESS_ACTIONS.OPERATIONAL_READ,
+    });
+    assertJobOrderPermission(context, isShopOwner, 'job_orders.read');
+
+    const jobOrder = await this.jobOrderStore.findJobOrderById(context.tenantId, jobOrderId.trim());
+
+    if (jobOrder === null) {
+      throw GarageOsApiException.resourceNotFound('Job order was not found.');
+    }
+
+    assertJobOrderBranchAccess(context, jobOrder.branchId);
+
+    const statusEvents = await this.jobOrderStore.listJobOrderStatusEvents(
+      context.tenantId,
+      jobOrder.id,
+    );
+
+    return {
+      status_events: statusEvents.map(toJobOrderStatusEventResponse),
     };
   }
 
@@ -476,7 +530,7 @@ export class JobOrdersService {
     jobOrderId: string,
     request: TransitionJobOrderStatusRequest,
     session: TenantContextAuthenticatedSession,
-  ): Promise<JobOrderMutationResponse> {
+  ): Promise<JobOrderStatusTransitionMutationResponse> {
     const context = resolveTenantContextFromAuthenticatedSession(session);
     const isShopOwner = await this.jobOrderStore.isActiveShopOwner({
       tenantId: context.tenantId,
@@ -521,7 +575,7 @@ export class JobOrdersService {
       });
 
       const transitionedAt = new Date();
-      const transitioned = await this.jobOrderStore.transitionJobOrderStatus(
+      const transitionResult = await this.jobOrderStore.transitionJobOrderStatus(
         {
           tenantId: context.tenantId,
           jobOrderId: existing.id,
@@ -535,7 +589,7 @@ export class JobOrdersService {
         transaction,
       );
 
-      if (transitioned === null) {
+      if (transitionResult === null) {
         throw GarageOsApiException.versionConflict();
       }
 
@@ -545,13 +599,14 @@ export class JobOrdersService {
         actorType: AUDIT_ACTOR_TYPES.TENANT_USER,
         action: getJobOrderStatusTransitionAuditAction(existing.status, input.toStatus),
         entityType: 'job_order',
-        entityId: transitioned.id,
-        branchId: transitioned.branchId,
+        entityId: transitionResult.jobOrder.id,
+        branchId: transitionResult.jobOrder.branchId,
         beforeJson: toJobOrderResponse(existing),
-        afterJson: toJobOrderResponse(transitioned),
+        afterJson: toJobOrderResponse(transitionResult.jobOrder),
         metadataJson: {
           from_status: existing.status,
           to_status: input.toStatus,
+          status_event_id: transitionResult.statusEvent.id,
           required_permission: requiredPermission,
         },
         reason: input.reason ?? 'job_order_status_changed',
@@ -559,7 +614,8 @@ export class JobOrdersService {
       });
 
       return {
-        job_order: toJobOrderResponse(transitioned),
+        job_order: toJobOrderResponse(transitionResult.jobOrder),
+        status_event: toJobOrderStatusEventResponse(transitionResult.statusEvent),
       };
     });
   }
@@ -1438,6 +1494,20 @@ function toJobOrderMechanicAssignmentResponse(
   };
 }
 
+function toJobOrderStatusEventResponse(
+  statusEvent: JobOrderStatusEventRecord,
+): JobOrderStatusEventResponse {
+  return {
+    id: statusEvent.id,
+    job_order_id: statusEvent.jobOrderId,
+    from_status: statusEvent.fromStatus,
+    to_status: statusEvent.toStatus,
+    reason: statusEvent.reason,
+    created_by_user_id: statusEvent.createdByUserId,
+    created_at: statusEvent.createdAt.toISOString(),
+  };
+}
+
 export function calculateJobOrderLineAuthorizedAmount(quantity: string, unitPrice: string): string {
   const total = Number(quantity) * Number(unitPrice);
 
@@ -1466,7 +1536,7 @@ function assertAnyJobOrderPermission(
   }
 }
 
-function getJobOrderStatusTransitionAuditAction(
+export function getJobOrderStatusTransitionAuditAction(
   fromStatus: JobOrderStatus,
   toStatus: JobOrderStatus,
 ): string {

@@ -18,10 +18,12 @@ import {
   type JobOrderMechanicAssignmentType,
   type JobOrderRecord,
   type JobOrderStatus,
+  type JobOrderStatusEventRecord,
   type ListJobOrdersInput,
   type ReplaceJobOrderMechanicsInput,
   type ServiceSnapshotRecord,
   type TransitionJobOrderStatusInput,
+  type TransitionJobOrderStatusResult,
   type UpdateJobOrderLineInput,
   type UpdatePendingJobOrderInput,
 } from '../application/job-order.store';
@@ -76,6 +78,17 @@ interface JobOrderMechanicAssignmentRow extends DatabaseRow {
   readonly assignment_type: JobOrderMechanicAssignmentType;
   readonly assigned_at: Date;
   readonly removed_at: Date | null;
+}
+
+interface JobOrderStatusEventRow extends DatabaseRow {
+  readonly id: string;
+  readonly tenant_id: string;
+  readonly job_order_id: string;
+  readonly from_status: JobOrderStatus | null;
+  readonly to_status: JobOrderStatus;
+  readonly reason: string | null;
+  readonly created_by_user_id: string | null;
+  readonly created_at: Date;
 }
 
 interface AssignableMechanicRow extends DatabaseRow {
@@ -728,7 +741,7 @@ export class PostgresJobOrderRepository extends JobOrderStore {
   async transitionJobOrderStatus(
     input: TransitionJobOrderStatusInput,
     client: DatabaseQueryClient,
-  ): Promise<JobOrderRecord | null> {
+  ): Promise<TransitionJobOrderStatusResult | null> {
     const result = await client.query<JobOrderRow>(
       `
         update job_orders
@@ -763,7 +776,7 @@ export class PostgresJobOrderRepository extends JobOrderStore {
       return null;
     }
 
-    await client.query(
+    const statusEventResult = await client.query<JobOrderStatusEventRow>(
       `
         insert into job_order_status_events (
           id,
@@ -776,6 +789,7 @@ export class PostgresJobOrderRepository extends JobOrderStore {
           created_at
         )
         values (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7)
+        returning *
       `,
       [
         input.tenantId,
@@ -788,13 +802,42 @@ export class PostgresJobOrderRepository extends JobOrderStore {
       ],
     );
 
+    const statusEvent = statusEventResult.rows[0];
+
+    if (statusEvent === undefined) {
+      throw new Error('Job order status event could not be created.');
+    }
+
     const reloaded = await this.findJobOrderById(input.tenantId, input.jobOrderId, client);
 
     if (reloaded === null) {
       throw new Error('Updated job order status could not be loaded.');
     }
 
-    return reloaded;
+    return {
+      jobOrder: reloaded,
+      statusEvent: toJobOrderStatusEventRecord(statusEvent),
+    };
+  }
+
+  async listJobOrderStatusEvents(
+    tenantId: string,
+    jobOrderId: string,
+    client?: DatabaseQueryClient,
+  ): Promise<readonly JobOrderStatusEventRecord[]> {
+    const queryClient = client ?? this.database;
+    const result = await queryClient.query<JobOrderStatusEventRow>(
+      `
+        select *
+        from job_order_status_events
+        where tenant_id = $1
+          and job_order_id = $2
+        order by created_at asc, id asc
+      `,
+      [tenantId, jobOrderId],
+    );
+
+    return result.rows.map(toJobOrderStatusEventRecord);
   }
 
   async isActiveShopOwner(input: {
@@ -1106,6 +1149,19 @@ function toJobOrderMechanicAssignmentRecord(
     assignmentType: row.assignment_type,
     assignedAt: row.assigned_at,
     removedAt: row.removed_at,
+  };
+}
+
+function toJobOrderStatusEventRecord(row: JobOrderStatusEventRow): JobOrderStatusEventRecord {
+  return {
+    id: row.id,
+    tenantId: row.tenant_id,
+    jobOrderId: row.job_order_id,
+    fromStatus: row.from_status,
+    toStatus: row.to_status,
+    reason: row.reason,
+    createdByUserId: row.created_by_user_id,
+    createdAt: row.created_at,
   };
 }
 

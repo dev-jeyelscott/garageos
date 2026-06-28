@@ -11,6 +11,7 @@ import {
   assertCanTransitionJobOrderStatus,
   assertCanUpdateJobOrderBaseline,
   calculateJobOrderLineAuthorizedAmount,
+  getJobOrderStatusTransitionAuditAction,
   getRequiredJobOrderStatusTransitionPermission,
 } from './job-orders.service';
 
@@ -214,6 +215,22 @@ describe('job order status transition validators', () => {
     ).toThrow('One or more fields are invalid.');
   });
 
+  it('allows completed job order correction back to in progress with a reason', () => {
+    expect(() =>
+      assertCanTransitionJobOrderStatus(
+        {
+          status: 'completed',
+          primaryMechanicUserId: 'mechanic-1',
+          lines: [completedLine],
+        },
+        {
+          toStatus: 'in_progress',
+          reason: 'Customer reported rework after completion inspection.',
+        },
+      ),
+    ).not.toThrow();
+  });
+
   it('blocks released and cancelled job orders from further transitions', () => {
     expect(() =>
       assertCanTransitionJobOrderStatus(
@@ -287,6 +304,12 @@ describe('job order status transition validators', () => {
         'in_progress',
       ),
     ).toBe('job_orders.correct_status');
+  });
+
+  it('uses correction audit action for completed to in progress rollback', () => {
+    expect(getJobOrderStatusTransitionAuditAction('completed', 'in_progress')).toBe(
+      'job_orders.status_corrected',
+    );
   });
 
   it('uses change-status permission for normal operational status changes', () => {

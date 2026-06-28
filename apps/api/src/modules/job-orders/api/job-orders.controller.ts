@@ -115,6 +115,16 @@ export class JobOrdersController {
     return this.jobOrdersService.getJobOrder(jobOrderId, session.tenantContextSession);
   }
 
+  @Get(':job_order_id/status-events')
+  async listStatusEvents(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('job_order_id') jobOrderId: string,
+  ): ReturnType<JobOrdersService['listStatusEvents']> {
+    const session = await this.authService.getAuthenticatedRouteSession(authorizationHeader);
+
+    return this.jobOrdersService.listStatusEvents(jobOrderId, session.tenantContextSession);
+  }
+
   @Patch(':job_order_id')
   async updateJobOrder(
     @Headers('authorization') authorizationHeader: string | undefined,
