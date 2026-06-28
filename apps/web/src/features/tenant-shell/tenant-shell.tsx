@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 
-import { Badge, ButtonLink, Card, Container, cn } from '../../components/ui';
+import { Badge, ButtonLink, Card, cn } from '../../components/ui';
 import type { AuthSessionResponseData, AuthTenantStatus } from '../auth/types/auth-session';
 
 export type AppModule =
@@ -54,73 +54,22 @@ const navItems: readonly NavItem[] = [
 
 export function TenantAppShell({
   children,
-  currentModule,
   primaryAction,
-  shellSession = createMockShellSession(),
 }: {
   readonly children: ReactNode;
   readonly currentModule: AppModule;
   readonly primaryAction?: ReactNode;
   readonly shellSession?: TenantShellSession;
 }) {
-  const allowedNavItems = navItems.filter((item) =>
-    item.requiredPermission === null
-      ? true
-      : shellSession.session.effective_permissions.includes(item.requiredPermission),
-  );
-
   return (
-    <div className="min-h-screen bg-background pb-24 text-foreground md:pb-0">
-      <header className="sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur">
-        <Container className="flex min-h-16 items-center justify-between gap-3 py-3">
-          <div className="min-w-0">
-            <Link href="/dashboard" className="block text-lg font-bold text-foreground">
-              GarageOS
-            </Link>
-            <p className="truncate text-xs text-muted-foreground">
-              {shellSession.session.tenant?.business_name ?? 'Tenant workspace'}
-            </p>
-          </div>
-          <div className="flex min-w-0 items-center gap-2">
-            <BranchContextIndicator shellSession={shellSession} />
-            <Badge>{shellSession.session.user.full_name}</Badge>
-          </div>
-        </Container>
-      </header>
-
-      <Container className="grid gap-4 py-4 md:grid-cols-[15rem_1fr] md:py-6">
-        <aside className="hidden md:block">
-          <nav className="sticky top-24 grid gap-1" aria-label="Tenant modules">
-            {allowedNavItems.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  'rounded-xl px-3 py-2 text-sm font-semibold text-muted-foreground hover:bg-secondary hover:text-foreground',
-                  item.module === currentModule && 'bg-accent text-accent-foreground',
-                )}
-              >
-                {item.label}
-              </Link>
-            ))}
-          </nav>
-        </aside>
-
-        <main className="min-w-0 space-y-4">
-          <TenantStatusBanner status={shellSession.session.tenant?.status ?? 'active'} />
-          <OfflineIndicator isOffline={shellSession.isOffline} />
-          {children}
-        </main>
-      </Container>
-
+    <>
+      {children}
       {primaryAction !== undefined ? (
         <div className="fixed inset-x-0 bottom-16 z-30 border-t border-border bg-card p-3 shadow-md md:hidden">
           {primaryAction}
         </div>
       ) : null}
-
-      <MobileBottomNav currentModule={currentModule} navItems={allowedNavItems} />
-    </div>
+    </>
   );
 }
 
