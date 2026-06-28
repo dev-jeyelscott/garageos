@@ -13,7 +13,7 @@
     "format:check": "prettier --check .",
     "prepare": "husky",
     "audit:deps": "pnpm audit --audit-level high",
-    "prepare-commit": "pnpm format && pnpm lint && pnpm  typecheck && pnpm test",
+    "prepare-commit": "pnpm format && pnpm lint && pnpm  typecheck && pnpm test && pnpm db:migrate && pnpm db:validate",
     "db:migrate": "node packages/db/scripts/validate-migration-order.cjs && node-pg-migrate up --migrations-dir packages/db/migrations --migrations-table schema_migrations",
     "db:migrate:down": "node-pg-migrate down --migrations-dir packages/db/migrations --migrations-table schema_migrations",
     "db:migration:new": "node packages/db/scripts/create-migration.cjs",

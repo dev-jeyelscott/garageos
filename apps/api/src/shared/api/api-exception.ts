@@ -102,6 +102,18 @@ export class GarageOsApiException extends HttpException {
     });
   }
 
+  static workflowTransitionBlocked(
+    message = 'The requested workflow transition is not allowed.',
+    details: ApiErrorDetail[] = [],
+  ): GarageOsApiException {
+    return new GarageOsApiException({
+      code: API_ERROR_CODES.WORKFLOW_TRANSITION_BLOCKED,
+      message,
+      status: HttpStatus.UNPROCESSABLE_ENTITY,
+      details,
+    });
+  }
+
   static resourceNotFound(message = 'Resource not found.'): GarageOsApiException {
     return new GarageOsApiException({
       code: API_ERROR_CODES.RESOURCE_NOT_FOUND,

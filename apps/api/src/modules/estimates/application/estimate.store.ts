@@ -8,6 +8,8 @@ export type EstimateStatus =
   | 'cancelled'
   | 'expired';
 
+export type EstimateApprovalMethod = 'verbal' | 'sms' | 'email' | 'signed_document' | 'other';
+
 export type EstimateLineType = 'service' | 'labor' | 'part';
 
 export interface EstimateLineRecord {
@@ -33,7 +35,7 @@ export interface EstimateRecord {
   readonly estimateNumber: string;
   readonly status: EstimateStatus;
   readonly validUntilDate: string | null;
-  readonly approvalMethod: string | null;
+  readonly approvalMethod: EstimateApprovalMethod | null;
   readonly approvedByCustomerName: string | null;
   readonly approvedAt: Date | null;
   readonly convertedJobOrderId: string | null;
@@ -79,6 +81,25 @@ export interface UpdateEstimateInput {
   readonly updatedByUserId: string;
   readonly updatedAt: Date;
   readonly lines: readonly Omit<EstimateLineInput, 'tenantId' | 'estimateId'>[];
+}
+
+export interface PresentEstimateInput {
+  readonly tenantId: string;
+  readonly estimateId: string;
+  readonly expectedLockVersion: number;
+  readonly updatedByUserId: string;
+  readonly updatedAt: Date;
+}
+
+export interface ApproveEstimateInput {
+  readonly tenantId: string;
+  readonly estimateId: string;
+  readonly expectedLockVersion: number;
+  readonly approvalMethod: EstimateApprovalMethod;
+  readonly approvedByCustomerName: string;
+  readonly approvedAt: Date;
+  readonly updatedByUserId: string;
+  readonly updatedAt: Date;
 }
 
 export interface ListEstimatesInput {
@@ -133,6 +154,16 @@ export abstract class EstimateStore {
 
   abstract updateDraftEstimate(
     input: UpdateEstimateInput,
+    client: DatabaseQueryClient,
+  ): Promise<EstimateRecord | null>;
+
+  abstract presentEstimate(
+    input: PresentEstimateInput,
+    client: DatabaseQueryClient,
+  ): Promise<EstimateRecord | null>;
+
+  abstract approveEstimate(
+    input: ApproveEstimateInput,
     client: DatabaseQueryClient,
   ): Promise<EstimateRecord | null>;
 

@@ -14,6 +14,14 @@ const quantitySchema = z
 
 const estimateBaselineLineTypeSchema = z.enum(['service', 'labor']);
 
+export const estimateApprovalMethodSchema = z.enum([
+  'verbal',
+  'sms',
+  'email',
+  'signed_document',
+  'other',
+]);
+
 export const estimateLineRequestSchema = z
   .object({
     line_type: estimateBaselineLineTypeSchema,
@@ -62,7 +70,20 @@ export const updateEstimateRequestSchema = z.object({
   lock_version: z.number().int().min(0),
 });
 
+export const presentEstimateRequestSchema = z.object({
+  lock_version: z.number().int().min(0),
+});
+
+export const approveEstimateRequestSchema = z.object({
+  approval_method: estimateApprovalMethodSchema,
+  approved_by_customer_name: z.string().trim().min(1).max(150),
+  lock_version: z.number().int().min(0),
+});
+
 export type ListEstimatesQuery = z.infer<typeof listEstimatesQuerySchema>;
 export type CreateEstimateRequest = z.infer<typeof createEstimateRequestSchema>;
 export type UpdateEstimateRequest = z.infer<typeof updateEstimateRequestSchema>;
+export type PresentEstimateRequest = z.infer<typeof presentEstimateRequestSchema>;
+export type ApproveEstimateRequest = z.infer<typeof approveEstimateRequestSchema>;
 export type EstimateLineRequest = z.infer<typeof estimateLineRequestSchema>;
+export type EstimateApprovalMethodRequest = z.infer<typeof estimateApprovalMethodSchema>;

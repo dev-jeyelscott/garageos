@@ -7,12 +7,15 @@ import {
 } from '../../../shared/database/database-client';
 import {
   EstimateStore,
+  type ApproveEstimateInput,
   type CreateEstimateInput,
+  type EstimateApprovalMethod,
   type EstimateLineInput,
   type EstimateLineRecord,
   type EstimateRecord,
   type EstimateStatus,
   type ListEstimatesInput,
+  type PresentEstimateInput,
   type UpdateEstimateInput,
 } from '../application/estimate.store';
 
@@ -25,7 +28,7 @@ interface EstimateRow extends DatabaseRow {
   readonly estimate_number: string;
   readonly status: EstimateStatus;
   readonly valid_until_date: string | Date | null;
-  readonly approval_method: string | null;
+  readonly approval_method: EstimateApprovalMethod | null;
   readonly approved_by_customer_name: string | null;
   readonly approved_at: Date | null;
   readonly converted_job_order_id: string | null;
@@ -336,6 +339,122 @@ export class PostgresEstimateRepository extends EstimateStore {
         estimateId: input.estimateId,
       })),
       client,
+    );
+
+    const lines = await this.findEstimateLines(input.tenantId, input.estimateId, client);
+
+    return toEstimateRecord(updated, lines);
+  }
+
+  async presentEstimate(
+    input: PresentEstimateInput,
+    client: DatabaseQueryClient,
+  ): Promise<EstimateRecord | null> {
+    const result = await client.query<EstimateRow>(
+      `
+        update estimates
+        set
+          status = 'presented',
+          updated_by_user_id = $4,
+          updated_at = $5,
+          lock_version = lock_version + 1
+        where tenant_id = $1
+          and id = $2
+          and status = 'draft'
+          and lock_version = $3
+        returning *
+      `,
+      [
+        input.tenantId,
+        input.estimateId,
+        input.expectedLockVersion,
+        input.updatedByUserId,
+        input.updatedAt,
+      ],
+    );
+
+    const updated = result.rows[0];
+
+    if (updated === undefined) {
+      return null;
+    }
+
+    await client.query(
+      `
+        insert into estimate_status_events (
+          id,
+          tenant_id,
+          estimate_id,
+          from_status,
+          to_status,
+          reason,
+          created_by_user_id,
+          created_at
+        )
+        values (gen_random_uuid(), $1, $2, 'draft', 'presented', 'estimate_presented', $3, $4)
+      `,
+      [input.tenantId, input.estimateId, input.updatedByUserId, input.updatedAt],
+    );
+
+    const lines = await this.findEstimateLines(input.tenantId, input.estimateId, client);
+
+    return toEstimateRecord(updated, lines);
+  }
+
+  async approveEstimate(
+    input: ApproveEstimateInput,
+    client: DatabaseQueryClient,
+  ): Promise<EstimateRecord | null> {
+    const result = await client.query<EstimateRow>(
+      `
+        update estimates
+        set
+          status = 'approved',
+          approval_method = $4,
+          approved_by_customer_name = $5,
+          approved_at = $6,
+          updated_by_user_id = $7,
+          updated_at = $8,
+          lock_version = lock_version + 1
+        where tenant_id = $1
+          and id = $2
+          and status = 'presented'
+          and lock_version = $3
+        returning *
+      `,
+      [
+        input.tenantId,
+        input.estimateId,
+        input.expectedLockVersion,
+        input.approvalMethod,
+        input.approvedByCustomerName,
+        input.approvedAt,
+        input.updatedByUserId,
+        input.updatedAt,
+      ],
+    );
+
+    const updated = result.rows[0];
+
+    if (updated === undefined) {
+      return null;
+    }
+
+    await client.query(
+      `
+        insert into estimate_status_events (
+          id,
+          tenant_id,
+          estimate_id,
+          from_status,
+          to_status,
+          reason,
+          created_by_user_id,
+          created_at
+        )
+        values (gen_random_uuid(), $1, $2, 'presented', 'approved', 'estimate_approved', $3, $4)
+      `,
+      [input.tenantId, input.estimateId, input.updatedByUserId, input.approvedAt],
     );
 
     const lines = await this.findEstimateLines(input.tenantId, input.estimateId, client);

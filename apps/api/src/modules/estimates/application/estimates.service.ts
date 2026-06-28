@@ -19,13 +19,16 @@ import {
   type TenantContextAuthenticatedSession,
 } from '../../../shared/tenant-context/tenant-context';
 import type {
+  ApproveEstimateRequest,
   CreateEstimateRequest,
   EstimateLineRequest,
   ListEstimatesQuery,
+  PresentEstimateRequest,
   UpdateEstimateRequest,
 } from '../api/estimate.schemas';
 import {
   EstimateStore,
+  type EstimateApprovalMethod,
   type EstimateLineRecord,
   type EstimateLineType,
   type EstimateRecord,
@@ -55,7 +58,7 @@ export interface EstimateResponse {
   readonly estimate_number: string;
   readonly status: EstimateStatus;
   readonly valid_until_date: string | null;
-  readonly approval_method: string | null;
+  readonly approval_method: EstimateApprovalMethod | null;
   readonly approved_by_customer_name: string | null;
   readonly approved_at: string | null;
   readonly converted_job_order_id: string | null;
@@ -356,6 +359,147 @@ export class EstimatesService {
       };
     });
   }
+  async presentEstimate(
+    estimateId: string,
+    request: PresentEstimateRequest,
+    session: TenantContextAuthenticatedSession,
+  ): Promise<EstimateMutationResponse> {
+    const context = resolveTenantContextFromAuthenticatedSession(session);
+    const isShopOwner = await this.estimateStore.isActiveShopOwner({
+      tenantId: context.tenantId,
+      userId: context.actorUserId,
+    });
+
+    assertTenantLifecycleAccess({
+      context,
+      isShopOwner,
+      action: TENANT_ACCESS_ACTIONS.OPERATIONAL_WRITE,
+    });
+    assertEstimatePermission(context, isShopOwner, 'estimates.present');
+
+    const updatedAt = new Date();
+
+    return this.transactionRunner.runInTransaction(async (transaction) => {
+      const existing = await this.estimateStore.findEstimateByIdForUpdate(
+        context.tenantId,
+        estimateId.trim(),
+        transaction,
+      );
+
+      if (existing === null) {
+        throw GarageOsApiException.resourceNotFound('Estimate was not found.');
+      }
+
+      assertEstimateBranchAccess(context, existing.branchId);
+      assertCanPresentEstimate(existing);
+
+      const presented = await this.estimateStore.presentEstimate(
+        {
+          tenantId: context.tenantId,
+          estimateId: existing.id,
+          expectedLockVersion: normalizeLockVersion(request.lock_version),
+          updatedByUserId: context.actorUserId,
+          updatedAt,
+        },
+        transaction,
+      );
+
+      if (presented === null) {
+        throw GarageOsApiException.versionConflict();
+      }
+
+      await this.auditService.record({
+        tenantId: context.tenantId,
+        actorUserId: context.actorUserId,
+        actorType: AUDIT_ACTOR_TYPES.TENANT_USER,
+        action: 'estimates.presented',
+        entityType: 'estimate',
+        entityId: presented.id,
+        branchId: presented.branchId,
+        beforeJson: toEstimateResponse(existing),
+        afterJson: toEstimateResponse(presented),
+        reason: 'estimate_presented',
+        client: transaction,
+      });
+
+      return {
+        estimate: toEstimateResponse(presented),
+      };
+    });
+  }
+
+  async approveEstimate(
+    estimateId: string,
+    request: ApproveEstimateRequest,
+    session: TenantContextAuthenticatedSession,
+  ): Promise<EstimateMutationResponse> {
+    const context = resolveTenantContextFromAuthenticatedSession(session);
+    const isShopOwner = await this.estimateStore.isActiveShopOwner({
+      tenantId: context.tenantId,
+      userId: context.actorUserId,
+    });
+
+    assertTenantLifecycleAccess({
+      context,
+      isShopOwner,
+      action: TENANT_ACCESS_ACTIONS.OPERATIONAL_WRITE,
+    });
+    assertEstimatePermission(context, isShopOwner, 'estimates.approve');
+
+    const approvedAt = new Date();
+    const approvedByCustomerName = normalizeWhitespace(request.approved_by_customer_name);
+
+    return this.transactionRunner.runInTransaction(async (transaction) => {
+      const existing = await this.estimateStore.findEstimateByIdForUpdate(
+        context.tenantId,
+        estimateId.trim(),
+        transaction,
+      );
+
+      if (existing === null) {
+        throw GarageOsApiException.resourceNotFound('Estimate was not found.');
+      }
+
+      assertEstimateBranchAccess(context, existing.branchId);
+      assertCanApproveEstimate(existing);
+
+      const approved = await this.estimateStore.approveEstimate(
+        {
+          tenantId: context.tenantId,
+          estimateId: existing.id,
+          expectedLockVersion: normalizeLockVersion(request.lock_version),
+          approvalMethod: request.approval_method,
+          approvedByCustomerName,
+          approvedAt,
+          updatedByUserId: context.actorUserId,
+          updatedAt: approvedAt,
+        },
+        transaction,
+      );
+
+      if (approved === null) {
+        throw GarageOsApiException.versionConflict();
+      }
+
+      await this.auditService.record({
+        tenantId: context.tenantId,
+        actorUserId: context.actorUserId,
+        actorType: AUDIT_ACTOR_TYPES.TENANT_USER,
+        action: 'estimates.approved',
+        entityType: 'estimate',
+        entityId: approved.id,
+        branchId: approved.branchId,
+        beforeJson: toEstimateResponse(existing),
+        afterJson: toEstimateResponse(approved),
+        reason: 'estimate_approved',
+        client: transaction,
+      });
+
+      return {
+        estimate: toEstimateResponse(approved),
+      };
+    });
+  }
 }
 
 async function assertEstimateReferences(input: {
@@ -415,6 +559,55 @@ async function assertEstimateReferences(input: {
         },
       ]);
     }
+  }
+}
+
+export function assertCanPresentEstimate(
+  estimate: Pick<EstimateRecord, 'status' | 'validUntilDate' | 'lines'>,
+): void {
+  if (estimate.status !== 'draft') {
+    throw GarageOsApiException.workflowTransitionBlocked('Only draft estimates can be presented.', [
+      {
+        field: 'status',
+        code: 'estimate_must_be_draft',
+        message: 'Only draft estimates can be presented.',
+      },
+    ]);
+  }
+
+  if (estimate.lines.length < 1) {
+    throw GarageOsApiException.validationFailed([
+      {
+        field: 'lines',
+        code: 'estimate_lines_required',
+        message: 'Estimate line items are required before presentation.',
+      },
+    ]);
+  }
+
+  if (estimate.validUntilDate === null) {
+    throw GarageOsApiException.validationFailed([
+      {
+        field: 'valid_until_date',
+        code: 'estimate_valid_until_required',
+        message: 'Valid until date is required before presentation.',
+      },
+    ]);
+  }
+}
+
+export function assertCanApproveEstimate(estimate: Pick<EstimateRecord, 'status'>): void {
+  if (estimate.status !== 'presented') {
+    throw GarageOsApiException.workflowTransitionBlocked(
+      'Only presented estimates can be approved.',
+      [
+        {
+          field: 'status',
+          code: 'estimate_must_be_presented',
+          message: 'Only presented estimates can be approved.',
+        },
+      ],
+    );
   }
 }
 
