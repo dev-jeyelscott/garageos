@@ -12,6 +12,32 @@ export type EstimateApprovalMethod = 'verbal' | 'sms' | 'email' | 'signed_docume
 
 export type EstimateLineType = 'service' | 'labor' | 'part';
 
+export type JobOrderStatus =
+  | 'pending'
+  | 'in_progress'
+  | 'waiting_for_parts'
+  | 'completed'
+  | 'released'
+  | 'cancelled';
+
+export interface JobOrderSummaryRecord {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly branchId: string;
+  readonly customerId: string;
+  readonly motorcycleId: string;
+  readonly jobOrderNumber: string;
+  readonly status: JobOrderStatus;
+  readonly serviceAdvisorUserId: string;
+  readonly mileageAtIntake: number;
+  readonly customerConcern: string;
+  readonly internalNotes: string | null;
+  readonly createdByUserId: string | null;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+  readonly lockVersion: number;
+}
+
 export interface EstimateLineRecord {
   readonly id: string;
   readonly tenantId: string;
@@ -102,6 +128,42 @@ export interface ApproveEstimateInput {
   readonly updatedAt: Date;
 }
 
+export interface JobOrderNumberSequenceInput {
+  readonly tenantId: string;
+  readonly datePart: string;
+}
+
+export interface ConvertEstimateToJobOrderLineInput {
+  readonly id: string;
+  readonly lineType: Exclude<EstimateLineType, 'part'>;
+  readonly serviceId: string | null;
+  readonly description: string;
+  readonly quantity: string;
+  readonly unitPrice: string;
+  readonly authorizedAmount: string;
+  readonly lineOrder: number;
+}
+
+export interface ConvertApprovedEstimateToJobOrderInput {
+  readonly tenantId: string;
+  readonly estimateId: string;
+  readonly expectedLockVersion: number;
+  readonly jobOrderId: string;
+  readonly jobOrderNumber: string;
+  readonly serviceAdvisorUserId: string;
+  readonly createdByUserId: string;
+  readonly convertedAt: Date;
+  readonly mileageAtIntake: number;
+  readonly customerConcern: string;
+  readonly internalNotes: string | null;
+  readonly lines: readonly ConvertEstimateToJobOrderLineInput[];
+}
+
+export interface ConvertApprovedEstimateToJobOrderResult {
+  readonly estimate: EstimateRecord;
+  readonly jobOrder: JobOrderSummaryRecord;
+}
+
 export interface ListEstimatesInput {
   readonly tenantId: string;
   readonly branchId: string;
@@ -130,6 +192,16 @@ export abstract class EstimateStore {
 
   abstract findLatestEstimateNumberForDate(
     input: EstimateNumberSequenceInput,
+    client: DatabaseQueryClient,
+  ): Promise<string | null>;
+
+  abstract lockJobOrderNumberSequence(
+    input: JobOrderNumberSequenceInput,
+    client: DatabaseQueryClient,
+  ): Promise<void>;
+
+  abstract findLatestJobOrderNumberForDate(
+    input: JobOrderNumberSequenceInput,
     client: DatabaseQueryClient,
   ): Promise<string | null>;
 
@@ -166,6 +238,11 @@ export abstract class EstimateStore {
     input: ApproveEstimateInput,
     client: DatabaseQueryClient,
   ): Promise<EstimateRecord | null>;
+
+  abstract convertApprovedEstimateToJobOrder(
+    input: ConvertApprovedEstimateToJobOrderInput,
+    client: DatabaseQueryClient,
+  ): Promise<ConvertApprovedEstimateToJobOrderResult | null>;
 
   abstract isActiveShopOwner(input: {
     readonly tenantId: string;

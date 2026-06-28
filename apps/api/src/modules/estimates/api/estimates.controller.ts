@@ -19,6 +19,8 @@ import { EstimatesService } from '../application/estimates.service';
 import {
   approveEstimateRequestSchema,
   type ApproveEstimateRequest,
+  convertEstimateRequestSchema,
+  type ConvertEstimateRequest,
   createEstimateRequestSchema,
   type CreateEstimateRequest,
   listEstimatesQuerySchema,
@@ -210,6 +212,62 @@ export class EstimatesController {
 
     try {
       const response = await this.estimatesService.approveEstimate(
+        estimateId,
+        request,
+        session.tenantContextSession,
+      );
+
+      await this.idempotencyService.completeSucceeded({
+        id: idempotency.record.id,
+        responseStatusCode: 200,
+        responseBodyJson: response,
+        now: new Date(),
+      });
+
+      return response;
+    } catch (error) {
+      await this.idempotencyService.completeFailed({
+        id: idempotency.record.id,
+        now: new Date(),
+      });
+
+      throw error;
+    }
+  }
+
+  @Post(':estimate_id/convert')
+  @HttpCode(200)
+  async convertEstimate(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Param('estimate_id') estimateId: string,
+    @Body(new ZodValidationPipe(convertEstimateRequestSchema))
+    request: ConvertEstimateRequest,
+  ): ReturnType<EstimatesService['convertEstimate']> {
+    const session = await this.authService.getAuthenticatedRouteSession(authorizationHeader);
+    const now = new Date();
+
+    const idempotency = await this.idempotencyService.begin({
+      tenantId: session.tenantContextSession.actor.tenant_id,
+      userId: session.tenantContextSession.actor.user_id,
+      endpoint: 'POST /api/v1/estimates/:estimate_id/convert',
+      idempotencyKey,
+      requestIntent: {
+        estimate_id: estimateId,
+        ...request,
+      },
+      now,
+      expiresAt: this.estimatesService.getIdempotencyExpiresAt(now),
+    });
+
+    if (idempotency.type === 'replayed') {
+      return idempotency.responseBodyJson as Awaited<
+        ReturnType<EstimatesService['convertEstimate']>
+      >;
+    }
+
+    try {
+      const response = await this.estimatesService.convertEstimate(
         estimateId,
         request,
         session.tenantContextSession,

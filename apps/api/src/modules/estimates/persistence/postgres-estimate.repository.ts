@@ -8,12 +8,16 @@ import {
 import {
   EstimateStore,
   type ApproveEstimateInput,
+  type ConvertApprovedEstimateToJobOrderInput,
+  type ConvertApprovedEstimateToJobOrderResult,
   type CreateEstimateInput,
   type EstimateApprovalMethod,
   type EstimateLineInput,
   type EstimateLineRecord,
   type EstimateRecord,
   type EstimateStatus,
+  type JobOrderStatus,
+  type JobOrderSummaryRecord,
   type ListEstimatesInput,
   type PresentEstimateInput,
   type UpdateEstimateInput,
@@ -51,6 +55,24 @@ interface EstimateLineRow extends DatabaseRow {
   readonly unit_price: string;
   readonly line_total: string;
   readonly line_order: number;
+}
+
+interface JobOrderRow extends DatabaseRow {
+  readonly id: string;
+  readonly tenant_id: string;
+  readonly branch_id: string;
+  readonly customer_id: string;
+  readonly motorcycle_id: string;
+  readonly job_order_number: string;
+  readonly status: JobOrderStatus;
+  readonly service_advisor_user_id: string;
+  readonly mileage_at_intake: number;
+  readonly customer_concern: string;
+  readonly internal_notes: string | null;
+  readonly created_by_user_id: string | null;
+  readonly created_at: Date;
+  readonly updated_at: Date;
+  readonly lock_version: number;
 }
 
 @Injectable()
@@ -109,6 +131,40 @@ export class PostgresEstimateRepository extends EstimateStore {
     );
 
     return result.rows[0]?.estimate_number ?? null;
+  }
+
+  async lockJobOrderNumberSequence(
+    input: {
+      readonly tenantId: string;
+      readonly datePart: string;
+    },
+    client: DatabaseQueryClient,
+  ): Promise<void> {
+    await client.query('select pg_advisory_xact_lock(hashtext($1))', [
+      `job-order-number:${input.tenantId}:${input.datePart}`,
+    ]);
+  }
+
+  async findLatestJobOrderNumberForDate(
+    input: {
+      readonly tenantId: string;
+      readonly datePart: string;
+    },
+    client: DatabaseQueryClient,
+  ): Promise<string | null> {
+    const result = await client.query<{ job_order_number: string }>(
+      `
+        select job_order_number
+        from job_orders
+        where tenant_id = $1
+          and job_order_number like $2
+        order by job_order_number desc
+        limit 1
+      `,
+      [input.tenantId, `JO-${input.datePart}-%`],
+    );
+
+    return result.rows[0]?.job_order_number ?? null;
   }
 
   async listEstimates(input: ListEstimatesInput): Promise<readonly EstimateRecord[]> {
@@ -462,6 +518,190 @@ export class PostgresEstimateRepository extends EstimateStore {
     return toEstimateRecord(updated, lines);
   }
 
+  async convertApprovedEstimateToJobOrder(
+    input: ConvertApprovedEstimateToJobOrderInput,
+    client: DatabaseQueryClient,
+  ): Promise<ConvertApprovedEstimateToJobOrderResult | null> {
+    const estimate = await this.findEstimateById(input.tenantId, input.estimateId, client);
+
+    if (estimate === null) {
+      return null;
+    }
+
+    if (estimate.motorcycleId === null) {
+      throw new Error('Approved estimate cannot be converted without a motorcycle.');
+    }
+
+    const jobOrderResult = await client.query<JobOrderRow>(
+      `
+        insert into job_orders (
+          id,
+          tenant_id,
+          branch_id,
+          customer_id,
+          motorcycle_id,
+          job_order_number,
+          status,
+          service_advisor_user_id,
+          mileage_at_intake,
+          customer_concern,
+          internal_notes,
+          created_by_user_id,
+          created_at,
+          updated_at,
+          lock_version
+        )
+        values ($1, $2, $3, $4, $5, $6, 'pending', $7, $8, $9, $10, $11, $12, $12, 0)
+        returning *
+      `,
+      [
+        input.jobOrderId,
+        input.tenantId,
+        estimate.branchId,
+        estimate.customerId,
+        estimate.motorcycleId,
+        input.jobOrderNumber,
+        input.serviceAdvisorUserId,
+        input.mileageAtIntake,
+        input.customerConcern,
+        input.internalNotes,
+        input.createdByUserId,
+        input.convertedAt,
+      ],
+    );
+
+    const jobOrder = jobOrderResult.rows[0];
+
+    if (jobOrder === undefined) {
+      throw new Error('Converted job order could not be created.');
+    }
+
+    await client.query(
+      `
+        insert into job_order_status_events (
+          id,
+          tenant_id,
+          job_order_id,
+          from_status,
+          to_status,
+          reason,
+          created_by_user_id,
+          created_at
+        )
+        values (gen_random_uuid(), $1, $2, null, 'pending', 'estimate_converted', $3, $4)
+      `,
+      [input.tenantId, jobOrder.id, input.createdByUserId, input.convertedAt],
+    );
+
+    for (const line of input.lines) {
+      await client.query(
+        `
+          insert into job_order_lines (
+            id,
+            tenant_id,
+            job_order_id,
+            line_type,
+            service_id,
+            product_id,
+            description,
+            quantity,
+            unit_price,
+            authorized_amount,
+            status,
+            line_order,
+            created_at,
+            updated_at
+          )
+          values ($1, $2, $3, $4, $5, null, $6, $7, $8, $9, 'active', $10, $11, $11)
+        `,
+        [
+          line.id,
+          input.tenantId,
+          jobOrder.id,
+          line.lineType,
+          line.serviceId,
+          line.description,
+          line.quantity,
+          line.unitPrice,
+          line.authorizedAmount,
+          line.lineOrder,
+          input.convertedAt,
+        ],
+      );
+
+      await client.query(
+        `
+          insert into job_order_line_snapshots (
+            id,
+            tenant_id,
+            job_order_line_id,
+            source_name,
+            source_price,
+            source_disclaimer,
+            captured_at
+          )
+          values (gen_random_uuid(), $1, $2, $3, $4, null, $5)
+        `,
+        [input.tenantId, line.id, line.description, line.unitPrice, input.convertedAt],
+      );
+    }
+
+    const updateResult = await client.query<EstimateRow>(
+      `
+        update estimates
+        set
+          status = 'converted',
+          converted_job_order_id = $4,
+          updated_by_user_id = $5,
+          updated_at = $6,
+          lock_version = lock_version + 1
+        where tenant_id = $1
+          and id = $2
+          and status = 'approved'
+          and lock_version = $3
+        returning *
+      `,
+      [
+        input.tenantId,
+        input.estimateId,
+        input.expectedLockVersion,
+        jobOrder.id,
+        input.createdByUserId,
+        input.convertedAt,
+      ],
+    );
+
+    const convertedEstimate = updateResult.rows[0];
+
+    if (convertedEstimate === undefined) {
+      return null;
+    }
+
+    await client.query(
+      `
+        insert into estimate_status_events (
+          id,
+          tenant_id,
+          estimate_id,
+          from_status,
+          to_status,
+          reason,
+          created_by_user_id,
+          created_at
+        )
+        values (gen_random_uuid(), $1, $2, 'approved', 'converted', 'estimate_converted', $3, $4)
+      `,
+      [input.tenantId, input.estimateId, input.createdByUserId, input.convertedAt],
+    );
+
+    const estimateLines = await this.findEstimateLines(input.tenantId, input.estimateId, client);
+
+    return {
+      estimate: toEstimateRecord(convertedEstimate, estimateLines),
+      jobOrder: toJobOrderSummaryRecord(jobOrder),
+    };
+  }
+
   async isActiveShopOwner(input: {
     readonly tenantId: string;
     readonly userId: string;
@@ -669,6 +909,26 @@ function toEstimateRecord(row: EstimateRow, lines: readonly EstimateLineRecord[]
     updatedByUserId: row.updated_by_user_id,
     lockVersion: row.lock_version,
     lines,
+  };
+}
+
+function toJobOrderSummaryRecord(row: JobOrderRow): JobOrderSummaryRecord {
+  return {
+    id: row.id,
+    tenantId: row.tenant_id,
+    branchId: row.branch_id,
+    customerId: row.customer_id,
+    motorcycleId: row.motorcycle_id,
+    jobOrderNumber: row.job_order_number,
+    status: row.status,
+    serviceAdvisorUserId: row.service_advisor_user_id,
+    mileageAtIntake: row.mileage_at_intake,
+    customerConcern: row.customer_concern,
+    internalNotes: row.internal_notes,
+    createdByUserId: row.created_by_user_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    lockVersion: row.lock_version,
   };
 }
 

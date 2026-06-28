@@ -80,10 +80,18 @@ export const approveEstimateRequestSchema = z.object({
   lock_version: z.number().int().min(0),
 });
 
+export const convertEstimateRequestSchema = z.object({
+  mileage_at_intake: z.number().int().min(0),
+  customer_concern: z.string().trim().min(1).max(1000),
+  internal_notes: z.string().trim().max(2000).nullish(),
+  lock_version: z.number().int().min(0),
+});
+
 export type ListEstimatesQuery = z.infer<typeof listEstimatesQuerySchema>;
 export type CreateEstimateRequest = z.infer<typeof createEstimateRequestSchema>;
 export type UpdateEstimateRequest = z.infer<typeof updateEstimateRequestSchema>;
 export type PresentEstimateRequest = z.infer<typeof presentEstimateRequestSchema>;
 export type ApproveEstimateRequest = z.infer<typeof approveEstimateRequestSchema>;
+export type ConvertEstimateRequest = z.infer<typeof convertEstimateRequestSchema>;
 export type EstimateLineRequest = z.infer<typeof estimateLineRequestSchema>;
 export type EstimateApprovalMethodRequest = z.infer<typeof estimateApprovalMethodSchema>;

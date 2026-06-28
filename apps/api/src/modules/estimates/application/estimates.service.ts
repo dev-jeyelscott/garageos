@@ -20,6 +20,7 @@ import {
 } from '../../../shared/tenant-context/tenant-context';
 import type {
   ApproveEstimateRequest,
+  ConvertEstimateRequest,
   CreateEstimateRequest,
   EstimateLineRequest,
   ListEstimatesQuery,
@@ -33,6 +34,7 @@ import {
   type EstimateLineType,
   type EstimateRecord,
   type EstimateStatus,
+  type JobOrderSummaryRecord,
 } from './estimate.store';
 
 const IDEMPOTENCY_RETENTION_HOURS = 24;
@@ -81,6 +83,27 @@ export interface EstimateMutationResponse {
   readonly estimate: EstimateResponse;
 }
 
+export interface JobOrderConversionSummaryResponse {
+  readonly id: string;
+  readonly branch_id: string;
+  readonly customer_id: string;
+  readonly motorcycle_id: string;
+  readonly job_order_number: string;
+  readonly status: JobOrderSummaryRecord['status'];
+  readonly service_advisor_user_id: string;
+  readonly mileage_at_intake: number;
+  readonly customer_concern: string;
+  readonly internal_notes: string | null;
+  readonly lock_version: number;
+  readonly created_at: string;
+  readonly updated_at: string;
+}
+
+export interface EstimateConversionResponse {
+  readonly estimate: EstimateResponse;
+  readonly job_order: JobOrderConversionSummaryResponse;
+}
+
 interface NormalizedEstimateLineInput {
   readonly id: string;
   readonly lineType: Exclude<EstimateLineType, 'part'>;
@@ -98,6 +121,12 @@ interface NormalizedEstimateInput {
   readonly motorcycleId: string | null;
   readonly validUntilDate: string | null;
   readonly lines: readonly NormalizedEstimateLineInput[];
+}
+
+interface NormalizedConvertEstimateInput {
+  readonly mileageAtIntake: number;
+  readonly customerConcern: string;
+  readonly internalNotes: string | null;
 }
 
 @Injectable()
@@ -500,6 +529,141 @@ export class EstimatesService {
       };
     });
   }
+
+  async convertEstimate(
+    estimateId: string,
+    request: ConvertEstimateRequest,
+    session: TenantContextAuthenticatedSession,
+  ): Promise<EstimateConversionResponse> {
+    const context = resolveTenantContextFromAuthenticatedSession(session);
+    const isShopOwner = await this.estimateStore.isActiveShopOwner({
+      tenantId: context.tenantId,
+      userId: context.actorUserId,
+    });
+
+    assertTenantLifecycleAccess({
+      context,
+      isShopOwner,
+      action: TENANT_ACCESS_ACTIONS.OPERATIONAL_WRITE,
+    });
+    assertEstimatePermission(context, isShopOwner, 'estimates.convert');
+
+    const input = normalizeConvertEstimateInput(request);
+    const convertedAt = new Date();
+
+    return this.transactionRunner.runInTransaction(async (transaction) => {
+      const existing = await this.estimateStore.findEstimateByIdForUpdate(
+        context.tenantId,
+        estimateId.trim(),
+        transaction,
+      );
+
+      if (existing === null) {
+        throw GarageOsApiException.resourceNotFound('Estimate was not found.');
+      }
+
+      assertEstimateBranchAccess(context, existing.branchId);
+      assertCanConvertEstimate(existing);
+
+      await assertJobOrderConversionReferences({
+        estimateStore: this.estimateStore,
+        tenantId: context.tenantId,
+        branchId: existing.branchId,
+        customerId: existing.customerId,
+        motorcycleId: existing.motorcycleId,
+        transaction,
+      });
+
+      const timezone =
+        (await this.estimateStore.getTenantTimezone(context.tenantId, transaction)) ??
+        DEFAULT_TENANT_TIMEZONE;
+      const datePart = formatTenantBusinessDate(convertedAt, timezone);
+
+      await this.estimateStore.lockJobOrderNumberSequence(
+        {
+          tenantId: context.tenantId,
+          datePart,
+        },
+        transaction,
+      );
+
+      const latestJobOrderNumber = await this.estimateStore.findLatestJobOrderNumberForDate(
+        {
+          tenantId: context.tenantId,
+          datePart,
+        },
+        transaction,
+      );
+
+      const jobOrderNumber = buildNextJobOrderNumber(datePart, latestJobOrderNumber);
+
+      const converted = await this.estimateStore.convertApprovedEstimateToJobOrder(
+        {
+          tenantId: context.tenantId,
+          estimateId: existing.id,
+          expectedLockVersion: normalizeLockVersion(request.lock_version),
+          jobOrderId: randomUUID(),
+          jobOrderNumber,
+          serviceAdvisorUserId: context.actorUserId,
+          createdByUserId: context.actorUserId,
+          convertedAt,
+          mileageAtIntake: input.mileageAtIntake,
+          customerConcern: input.customerConcern,
+          internalNotes: input.internalNotes,
+          lines: existing.lines.map((line) => {
+            if (line.lineType === 'part') {
+              throw GarageOsApiException.validationFailed([
+                {
+                  field: 'lines',
+                  code: 'estimate_part_lines_not_supported_for_conversion_boundary',
+                  message:
+                    'Estimate part lines cannot be converted until inventory reservation support is implemented.',
+                },
+              ]);
+            }
+
+            return {
+              id: randomUUID(),
+              lineType: line.lineType,
+              serviceId: line.serviceId,
+              description: line.description,
+              quantity: line.quantity,
+              unitPrice: line.unitPrice,
+              authorizedAmount: line.lineTotal,
+              lineOrder: line.lineOrder,
+            };
+          }),
+        },
+        transaction,
+      );
+
+      if (converted === null) {
+        throw GarageOsApiException.versionConflict();
+      }
+
+      await this.auditService.record({
+        tenantId: context.tenantId,
+        actorUserId: context.actorUserId,
+        actorType: AUDIT_ACTOR_TYPES.TENANT_USER,
+        action: 'estimates.converted',
+        entityType: 'estimate',
+        entityId: converted.estimate.id,
+        branchId: converted.estimate.branchId,
+        beforeJson: toEstimateResponse(existing),
+        afterJson: {
+          estimate: toEstimateResponse(converted.estimate),
+          job_order: toJobOrderConversionSummaryResponse(converted.jobOrder),
+        },
+        reason: 'estimate_converted_to_job_order',
+        client: transaction,
+      });
+
+      return {
+        estimate: toEstimateResponse(converted.estimate),
+        job_order: toJobOrderConversionSummaryResponse(converted.jobOrder),
+      };
+    });
+  }
 }
 
 async function assertEstimateReferences(input: {
@@ -611,6 +775,130 @@ export function assertCanApproveEstimate(estimate: Pick<EstimateRecord, 'status'
   }
 }
 
+export function assertCanConvertEstimate(
+  estimate: Pick<EstimateRecord, 'status' | 'motorcycleId' | 'convertedJobOrderId' | 'lines'>,
+): asserts estimate is Pick<
+  EstimateRecord,
+  'status' | 'motorcycleId' | 'convertedJobOrderId' | 'lines'
+> & {
+  readonly motorcycleId: string;
+} {
+  if (estimate.status !== 'approved') {
+    throw GarageOsApiException.workflowTransitionBlocked(
+      'Only approved estimates can be converted to job orders.',
+      [
+        {
+          field: 'status',
+          code: 'estimate_must_be_approved',
+          message: 'Only approved estimates can be converted to job orders.',
+        },
+      ],
+    );
+  }
+
+  if (estimate.convertedJobOrderId !== null) {
+    throw GarageOsApiException.workflowTransitionBlocked('Estimate has already been converted.', [
+      {
+        field: 'converted_job_order_id',
+        code: 'estimate_already_converted',
+        message: 'Estimate has already been converted.',
+      },
+    ]);
+  }
+
+  if (estimate.motorcycleId === null) {
+    throw GarageOsApiException.validationFailed([
+      {
+        field: 'motorcycle_id',
+        code: 'estimate_motorcycle_required_for_job_order_conversion',
+        message:
+          'Approved estimate must be linked to a motorcycle before conversion to a job order.',
+      },
+    ]);
+  }
+
+  if (estimate.lines.length < 1) {
+    throw GarageOsApiException.validationFailed([
+      {
+        field: 'lines',
+        code: 'estimate_lines_required_for_conversion',
+        message: 'Estimate line items are required before conversion.',
+      },
+    ]);
+  }
+
+  if (estimate.lines.some((line) => line.lineType === 'part')) {
+    throw GarageOsApiException.validationFailed([
+      {
+        field: 'lines',
+        code: 'estimate_part_lines_not_supported_for_conversion_boundary',
+        message:
+          'Estimate part lines cannot be converted until inventory reservation support is implemented.',
+      },
+    ]);
+  }
+}
+
+async function assertJobOrderConversionReferences(input: {
+  readonly estimateStore: EstimateStore;
+  readonly tenantId: string;
+  readonly branchId: string;
+  readonly customerId: string;
+  readonly motorcycleId: string;
+  readonly transaction: Parameters<EstimateStore['convertApprovedEstimateToJobOrder']>[1];
+}): Promise<void> {
+  const branchExists = await input.estimateStore.activeBranchExists(
+    input.tenantId,
+    input.branchId,
+    input.transaction,
+  );
+
+  if (!branchExists) {
+    throw GarageOsApiException.validationFailed([
+      {
+        field: 'branch_id',
+        code: 'branch_not_active',
+        message: 'Estimate branch must still be active before conversion.',
+      },
+    ]);
+  }
+
+  const customerExists = await input.estimateStore.activeCustomerExists(
+    input.tenantId,
+    input.customerId,
+    input.transaction,
+  );
+
+  if (!customerExists) {
+    throw GarageOsApiException.validationFailed([
+      {
+        field: 'customer_id',
+        code: 'customer_not_active',
+        message: 'Estimate customer must still be active before conversion.',
+      },
+    ]);
+  }
+
+  const motorcycleBelongsToCustomer = await input.estimateStore.activeMotorcycleBelongsToCustomer(
+    {
+      tenantId: input.tenantId,
+      motorcycleId: input.motorcycleId,
+      customerId: input.customerId,
+    },
+    input.transaction,
+  );
+
+  if (!motorcycleBelongsToCustomer) {
+    throw GarageOsApiException.validationFailed([
+      {
+        field: 'motorcycle_id',
+        code: 'motorcycle_not_active_for_customer',
+        message: 'Estimate motorcycle must still be active and linked to the selected customer.',
+      },
+    ]);
+  }
+}
+
 async function assertReferencedServices(input: {
   readonly estimateStore: EstimateStore;
   readonly tenantId: string;
@@ -651,6 +939,16 @@ function normalizeEstimateInput(request: CreateEstimateRequest): NormalizedEstim
     motorcycleId: normalizeNullableText(request.motorcycle_id),
     validUntilDate: normalizeNullableText(request.valid_until_date),
     lines: normalizeEstimateLines(request.lines),
+  };
+}
+
+function normalizeConvertEstimateInput(
+  request: ConvertEstimateRequest,
+): NormalizedConvertEstimateInput {
+  return {
+    mileageAtIntake: request.mileage_at_intake,
+    customerConcern: normalizeWhitespace(request.customer_concern),
+    internalNotes: normalizeNullableText(request.internal_notes),
   };
 }
 
@@ -709,6 +1007,26 @@ function toEstimateLineResponse(line: EstimateLineRecord): EstimateLineResponse 
   };
 }
 
+function toJobOrderConversionSummaryResponse(
+  jobOrder: JobOrderSummaryRecord,
+): JobOrderConversionSummaryResponse {
+  return {
+    id: jobOrder.id,
+    branch_id: jobOrder.branchId,
+    customer_id: jobOrder.customerId,
+    motorcycle_id: jobOrder.motorcycleId,
+    job_order_number: jobOrder.jobOrderNumber,
+    status: jobOrder.status,
+    service_advisor_user_id: jobOrder.serviceAdvisorUserId,
+    mileage_at_intake: jobOrder.mileageAtIntake,
+    customer_concern: jobOrder.customerConcern,
+    internal_notes: jobOrder.internalNotes,
+    lock_version: jobOrder.lockVersion,
+    created_at: jobOrder.createdAt.toISOString(),
+    updated_at: jobOrder.updatedAt.toISOString(),
+  };
+}
+
 function calculateEstimateSubtotal(lines: readonly EstimateLineRecord[]): string {
   const subtotal = lines.reduce((sum, line) => sum + Number(line.lineTotal), 0);
 
@@ -733,6 +1051,16 @@ export function buildNextEstimateNumber(
     latestEstimateNumber === null ? 1 : Number(latestEstimateNumber.slice(-6)) + 1;
 
   return `EST-${datePart}-${String(nextSequence).padStart(6, '0')}`;
+}
+
+export function buildNextJobOrderNumber(
+  datePart: string,
+  latestJobOrderNumber: string | null,
+): string {
+  const nextSequence =
+    latestJobOrderNumber === null ? 1 : Number(latestJobOrderNumber.slice(-6)) + 1;
+
+  return `JO-${datePart}-${String(nextSequence).padStart(6, '0')}`;
 }
 
 export function formatTenantBusinessDate(value: Date, timezone: string): string {
