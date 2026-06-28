@@ -7,6 +7,7 @@ import { InventoryStockBalancesController } from './api/inventory-stock-balances
 import { FifoLayerService } from './application/fifo-layer.service';
 import { InventoryLedgerService } from './application/inventory-ledger.service';
 import { InventoryReadService } from './application/inventory-read.service';
+import { InventoryReconciliationService } from './application/inventory-reconciliation.service';
 import { InventoryReservationService } from './application/inventory-reservation.service';
 import { InventoryStockBalancesService } from './application/inventory-stock-balances.service';
 import { INVENTORY_PROVIDERS } from './inventory.providers';
@@ -18,6 +19,7 @@ import { INVENTORY_PROVIDERS } from './inventory.providers';
     InventoryStockBalancesService,
     InventoryLedgerService,
     InventoryReadService,
+    InventoryReconciliationService,
     FifoLayerService,
     InventoryReservationService,
     ...INVENTORY_PROVIDERS,
@@ -26,6 +28,7 @@ import { INVENTORY_PROVIDERS } from './inventory.providers';
     InventoryStockBalancesService,
     InventoryLedgerService,
     InventoryReadService,
+    InventoryReconciliationService,
     FifoLayerService,
     InventoryReservationService,
   ],
