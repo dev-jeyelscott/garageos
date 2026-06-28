@@ -1,7 +1,14 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 
-import { Card, Container } from '../../../components/ui';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Container,
+} from '../../../components/ui';
 
 export function AuthPageShell({
   title,
@@ -38,25 +45,27 @@ export function AuthPageShell({
             </div>
           </aside>
 
-          <Card className="p-6 sm:p-8">
-            <div className="mb-6">
+          <Card>
+            <CardHeader>
               <p className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
                 GarageOS
               </p>
-              <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">{title}</h1>
-              <p className="mt-3 text-sm leading-6 text-muted-foreground">{description}</p>
-            </div>
+              <CardTitle className="mt-2 text-3xl font-black sm:text-4xl">{title}</CardTitle>
+              <CardDescription className="mt-3">{description}</CardDescription>
+            </CardHeader>
 
-            {children}
+            <CardContent>
+              {children}
 
-            {secondaryActions === undefined ? null : (
-              <nav
-                aria-label="Related auth actions"
-                className="mt-6 flex flex-wrap gap-3 border-t border-border pt-5 text-sm"
-              >
-                {secondaryActions}
-              </nav>
-            )}
+              {secondaryActions === undefined ? null : (
+                <nav
+                  aria-label="Related auth actions"
+                  className="mt-6 flex flex-wrap gap-3 border-t border-border pt-5 text-sm"
+                >
+                  {secondaryActions}
+                </nav>
+              )}
+            </CardContent>
           </Card>
         </div>
       </Container>
@@ -68,27 +77,16 @@ export const styles = {
   form: 'grid gap-4',
   field: 'grid gap-2',
   label: 'text-sm font-semibold text-foreground',
-  input:
-    'min-h-11 rounded-xl border border-input bg-background px-3 py-2 text-base text-foreground shadow-sm outline-none transition placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/20',
   checkboxLabel: 'flex items-center gap-3 text-sm font-medium text-muted-foreground',
-  primaryButton:
-    'inline-flex min-h-11 items-center justify-center rounded-xl border border-primary bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition hover:opacity-90 disabled:pointer-events-none disabled:opacity-60',
-  secondaryButton:
-    'inline-flex min-h-11 items-center justify-center rounded-xl border border-border bg-card px-4 py-2 text-sm font-semibold text-card-foreground shadow-sm transition hover:bg-secondary disabled:pointer-events-none disabled:opacity-60',
-  secondaryButtonLink:
-    'inline-flex min-h-11 items-center justify-center rounded-xl border border-border bg-card px-4 py-2 text-sm font-semibold text-card-foreground no-underline shadow-sm transition hover:bg-secondary',
   buttonRow: 'mt-4 flex flex-wrap gap-3',
   link: 'font-semibold text-accent-foreground underline-offset-4 hover:underline',
-  infoPanel: 'mt-4 rounded-2xl border border-border bg-muted p-4',
-  successPanel: 'mt-4 rounded-2xl border border-success/30 bg-success/10 p-4',
-  errorPanel: 'mt-4 rounded-2xl border border-destructive/30 bg-destructive/10 p-4',
+  infoPanel: 'mt-4',
   panelTitle: 'mb-2 text-base font-bold text-foreground',
   paragraph: 'mb-2 text-sm leading-6 text-muted-foreground',
   helpPanel: 'rounded-2xl border border-dashed border-border bg-muted p-4',
   helpTitle: 'mb-2 text-sm font-bold text-foreground',
   helpList: 'm-0 list-disc space-y-1 pl-5 text-sm text-muted-foreground',
   detailList: 'mt-2 list-disc space-y-1 pl-5 text-sm text-muted-foreground',
-  metadataList: 'mt-3 grid grid-cols-[120px_1fr] gap-x-3 gap-y-1 text-xs text-muted-foreground',
   sessionGrid: 'grid gap-4',
   keyValue: 'grid gap-1 border-b border-border py-2 sm:grid-cols-[180px_1fr] sm:gap-3',
   key: 'text-sm font-bold text-muted-foreground',

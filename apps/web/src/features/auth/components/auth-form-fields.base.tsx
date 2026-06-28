@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 
+import { Alert, Button, Input } from '../../../components/ui';
 import { styles } from './auth.base';
 
 export function InputField({
@@ -21,13 +22,12 @@ export function InputField({
   return (
     <label className={styles.field}>
       <span className={styles.label}>{label}</span>
-      <input
+      <Input
         name={name}
         type={type}
         required={required}
         autoComplete={autoComplete}
         defaultValue={defaultValue}
-        className={styles.input}
       />
     </label>
   );
@@ -55,9 +55,9 @@ export function PrimaryButton({
   readonly children: ReactNode;
 }) {
   return (
-    <button type="submit" disabled={disabled} className={styles.primaryButton}>
+    <Button type="submit" disabled={disabled}>
       {children}
-    </button>
+    </Button>
   );
 }
 
@@ -83,10 +83,10 @@ export function InfoPanel({
   readonly children: ReactNode;
 }) {
   return (
-    <section className={styles.infoPanel}>
+    <Alert role="status" className={styles.infoPanel}>
       <h2 className={styles.panelTitle}>{title}</h2>
       {children}
-    </section>
+    </Alert>
   );
 }
 

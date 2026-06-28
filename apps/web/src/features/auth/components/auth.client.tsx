@@ -1,9 +1,9 @@
 'use client';
 
-import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 
+import { Button, ButtonLink } from '../../../components/ui';
 import {
   confirmEmailVerification,
   resendEmailVerification,
@@ -228,12 +228,12 @@ export function EmailVerificationRequiredScreen() {
       </InfoPanel>
 
       <div className={styles.buttonRow}>
-        <button type="button" onClick={handleResend} className={styles.primaryButton}>
+        <Button type="button" onClick={handleResend}>
           Resend verification email
-        </button>
-        <button type="button" onClick={handleLogout} className={styles.secondaryButton}>
+        </Button>
+        <Button type="button" variant="secondary" onClick={handleLogout}>
           Logout
-        </button>
+        </Button>
       </div>
 
       <StatusMessage state={state} />
@@ -579,12 +579,12 @@ export function LogoutScreen() {
       secondaryActions={<AuthLink href="/">Cancel</AuthLink>}
     >
       <div className={styles.buttonRow}>
-        <button type="button" onClick={handleLogoutCurrentDevice} className={styles.primaryButton}>
+        <Button type="button" onClick={handleLogoutCurrentDevice}>
           Logout current device
-        </button>
-        <button type="button" onClick={handleLogoutAllDevices} className={styles.secondaryButton}>
+        </Button>
+        <Button type="button" variant="secondary" onClick={handleLogoutAllDevices}>
           Logout all devices
-        </button>
+        </Button>
       </div>
 
       <StatusMessage state={state} />
@@ -689,15 +689,15 @@ function SessionSummary({
       </InfoPanel>
 
       <div className={styles.buttonRow}>
-        <button type="button" onClick={() => void onRefresh()} className={styles.primaryButton}>
+        <Button type="button" onClick={() => void onRefresh()}>
           Refresh session
-        </button>
-        <Link href="/auth/password/change" className={styles.secondaryButtonLink}>
+        </Button>
+        <ButtonLink href="/auth/password/change" variant="secondary">
           Change password
-        </Link>
-        <Link href="/auth/logout" className={styles.secondaryButtonLink}>
+        </ButtonLink>
+        <ButtonLink href="/auth/logout" variant="secondary">
           Logout
-        </Link>
+        </ButtonLink>
       </div>
     </section>
   );
