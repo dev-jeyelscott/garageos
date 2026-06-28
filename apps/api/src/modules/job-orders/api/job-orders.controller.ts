@@ -132,6 +132,16 @@ export class JobOrdersController {
     return this.jobOrdersService.listStatusEvents(jobOrderId, session.tenantContextSession);
   }
 
+  @Get(':job_order_id/audit-events')
+  async listAuditEvents(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('job_order_id') jobOrderId: string,
+  ): ReturnType<JobOrdersService['listAuditEvents']> {
+    const session = await this.authService.getAuthenticatedRouteSession(authorizationHeader);
+
+    return this.jobOrdersService.listAuditEvents(jobOrderId, session.tenantContextSession);
+  }
+
   @Get(':job_order_id/attachments')
   async listAttachmentPlaceholders(
     @Headers('authorization') authorizationHeader: string | undefined,

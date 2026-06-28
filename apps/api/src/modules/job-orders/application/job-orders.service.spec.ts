@@ -18,6 +18,7 @@ import {
   calculateJobOrderLineAuthorizedAmount,
   getJobOrderStatusTransitionAuditAction,
   getRequiredJobOrderStatusTransitionPermission,
+  toJobOrderAuditEventResponse,
 } from './job-orders.service';
 
 describe('JobOrdersService baseline helpers', () => {
@@ -401,6 +402,61 @@ describe('job order attachment placeholders', () => {
     expect(() => assertJobOrderAttachmentsFileModuleBlocked()).toThrow(
       'One or more fields are invalid.',
     );
+  });
+});
+
+describe('job order audit history responses', () => {
+  it('maps sanitized job order audit events to API response shape', () => {
+    const createdAt = new Date('2026-06-28T10:00:00.000Z');
+
+    expect(
+      toJobOrderAuditEventResponse(
+        {
+          id: 'audit-event-1',
+          tenantId: 'tenant-1',
+          actorUserId: 'user-1',
+          actorType: 'tenant_user',
+          action: 'job_orders.status_changed',
+          entityType: 'job_order',
+          entityId: 'job-order-1',
+          branchId: 'branch-1',
+          beforeJson: {
+            status: 'pending',
+          },
+          afterJson: {
+            status: 'in_progress',
+          },
+          metadataJson: {
+            from_status: 'pending',
+            to_status: 'in_progress',
+          },
+          reason: 'job_order_status_changed',
+          createdAt,
+        },
+        'job-order-1',
+      ),
+    ).toEqual({
+      id: 'audit-event-1',
+      job_order_id: 'job-order-1',
+      actor_user_id: 'user-1',
+      actor_type: 'tenant_user',
+      action: 'job_orders.status_changed',
+      entity_type: 'job_order',
+      entity_id: 'job-order-1',
+      branch_id: 'branch-1',
+      before_json: {
+        status: 'pending',
+      },
+      after_json: {
+        status: 'in_progress',
+      },
+      metadata_json: {
+        from_status: 'pending',
+        to_status: 'in_progress',
+      },
+      reason: 'job_order_status_changed',
+      created_at: '2026-06-28T10:00:00.000Z',
+    });
   });
 });
 

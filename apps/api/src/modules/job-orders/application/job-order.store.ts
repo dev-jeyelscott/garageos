@@ -35,6 +35,24 @@ export interface JobOrderStatusEventRecord {
   readonly createdAt: Date;
 }
 
+export type JobOrderAuditActorType = 'tenant_user' | 'platform_admin' | 'system';
+
+export interface JobOrderAuditEventRecord {
+  readonly id: string;
+  readonly tenantId: string | null;
+  readonly actorUserId: string | null;
+  readonly actorType: JobOrderAuditActorType;
+  readonly action: string;
+  readonly entityType: string;
+  readonly entityId: string | null;
+  readonly branchId: string | null;
+  readonly beforeJson: unknown | null;
+  readonly afterJson: unknown | null;
+  readonly metadataJson: unknown | null;
+  readonly reason: string | null;
+  readonly createdAt: Date;
+}
+
 export interface AssignableMechanicRecord {
   readonly userId: string;
   readonly employeeId: string;
@@ -307,6 +325,12 @@ export abstract class JobOrderStore {
     jobOrderId: string,
     client?: DatabaseQueryClient,
   ): Promise<readonly JobOrderStatusEventRecord[]>;
+
+  abstract listJobOrderAuditEvents(
+    tenantId: string,
+    jobOrderId: string,
+    client?: DatabaseQueryClient,
+  ): Promise<readonly JobOrderAuditEventRecord[]>;
 
   abstract isActiveShopOwner(input: {
     readonly tenantId: string;

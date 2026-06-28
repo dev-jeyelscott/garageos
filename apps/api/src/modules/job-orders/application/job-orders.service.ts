@@ -38,6 +38,7 @@ import type {
 } from '../api/job-order.schemas';
 import {
   JobOrderStore,
+  type JobOrderAuditEventRecord,
   type JobOrderLineRecord,
   type JobOrderLineSnapshotInput,
   type JobOrderLineStatus,
@@ -89,6 +90,22 @@ export interface JobOrderStatusEventResponse {
   readonly created_at: string;
 }
 
+export interface JobOrderAuditEventResponse {
+  readonly id: string;
+  readonly job_order_id: string;
+  readonly actor_user_id: string | null;
+  readonly actor_type: JobOrderAuditEventRecord['actorType'];
+  readonly action: string;
+  readonly entity_type: string;
+  readonly entity_id: string | null;
+  readonly branch_id: string | null;
+  readonly before_json: unknown | null;
+  readonly after_json: unknown | null;
+  readonly metadata_json: unknown | null;
+  readonly reason: string | null;
+  readonly created_at: string;
+}
+
 export interface JobOrderResponse {
   readonly id: string;
   readonly branch_id: string;
@@ -122,6 +139,10 @@ export interface JobOrderDetailResponse {
 
 export interface JobOrderStatusEventsResponse {
   readonly status_events: readonly JobOrderStatusEventResponse[];
+}
+
+export interface JobOrderAuditEventsResponse {
+  readonly audit_events: readonly JobOrderAuditEventResponse[];
 }
 
 export interface JobOrderAttachmentsPlaceholderResponse {
@@ -300,6 +321,44 @@ export class JobOrdersService {
 
     return {
       status_events: statusEvents.map(toJobOrderStatusEventResponse),
+    };
+  }
+
+  async listAuditEvents(
+    jobOrderId: string,
+    session: TenantContextAuthenticatedSession,
+  ): Promise<JobOrderAuditEventsResponse> {
+    const context = resolveTenantContextFromAuthenticatedSession(session);
+    const isShopOwner = await this.jobOrderStore.isActiveShopOwner({
+      tenantId: context.tenantId,
+      userId: context.actorUserId,
+    });
+
+    assertTenantLifecycleAccess({
+      context,
+      isShopOwner,
+      action: TENANT_ACCESS_ACTIONS.OPERATIONAL_READ,
+    });
+    assertJobOrderPermission(context, isShopOwner, 'job_orders.read');
+    assertJobOrderPermission(context, isShopOwner, 'audit_logs.read');
+
+    const jobOrder = await this.jobOrderStore.findJobOrderById(context.tenantId, jobOrderId.trim());
+
+    if (jobOrder === null) {
+      throw GarageOsApiException.resourceNotFound('Job order was not found.');
+    }
+
+    assertJobOrderBranchAccess(context, jobOrder.branchId);
+
+    const auditEvents = await this.jobOrderStore.listJobOrderAuditEvents(
+      context.tenantId,
+      jobOrder.id,
+    );
+
+    return {
+      audit_events: auditEvents.map((auditEvent) =>
+        toJobOrderAuditEventResponse(auditEvent, jobOrder.id),
+      ),
     };
   }
 
@@ -1921,6 +1980,27 @@ function toJobOrderStatusEventResponse(
     reason: statusEvent.reason,
     created_by_user_id: statusEvent.createdByUserId,
     created_at: statusEvent.createdAt.toISOString(),
+  };
+}
+
+export function toJobOrderAuditEventResponse(
+  auditEvent: JobOrderAuditEventRecord,
+  jobOrderId: string,
+): JobOrderAuditEventResponse {
+  return {
+    id: auditEvent.id,
+    job_order_id: jobOrderId,
+    actor_user_id: auditEvent.actorUserId,
+    actor_type: auditEvent.actorType,
+    action: auditEvent.action,
+    entity_type: auditEvent.entityType,
+    entity_id: auditEvent.entityId,
+    branch_id: auditEvent.branchId,
+    before_json: auditEvent.beforeJson,
+    after_json: auditEvent.afterJson,
+    metadata_json: auditEvent.metadataJson,
+    reason: auditEvent.reason,
+    created_at: auditEvent.createdAt.toISOString(),
   };
 }
 

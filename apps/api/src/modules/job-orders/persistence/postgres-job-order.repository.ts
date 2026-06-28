@@ -13,6 +13,8 @@ import {
   type CompleteJobOrderLineInput,
   type CreateJobOrderInput,
   type CreateJobOrderLineInput,
+  type JobOrderAuditActorType,
+  type JobOrderAuditEventRecord,
   type JobOrderLineRecord,
   type JobOrderLineStatus,
   type JobOrderLineType,
@@ -91,6 +93,22 @@ interface JobOrderStatusEventRow extends DatabaseRow {
   readonly reason: string | null;
   readonly created_by_user_id: string | null;
   readonly created_at: Date;
+}
+
+interface JobOrderAuditEventRow extends DatabaseRow {
+  readonly id: string;
+  readonly tenant_id: string | null;
+  readonly actor_user_id: string | null;
+  readonly actor_type: string;
+  readonly action: string;
+  readonly entity_type: string;
+  readonly entity_id: string | null;
+  readonly branch_id: string | null;
+  readonly before_json: unknown | null;
+  readonly after_json: unknown | null;
+  readonly metadata_json: unknown | null;
+  readonly reason: string | null;
+  readonly created_at: Date | string;
 }
 
 interface AssignableMechanicRow extends DatabaseRow {
@@ -929,6 +947,53 @@ export class PostgresJobOrderRepository extends JobOrderStore {
     return result.rows.map(toJobOrderStatusEventRecord);
   }
 
+  async listJobOrderAuditEvents(
+    tenantId: string,
+    jobOrderId: string,
+    client?: DatabaseQueryClient,
+  ): Promise<readonly JobOrderAuditEventRecord[]> {
+    const queryClient = client ?? this.database;
+    const result = await queryClient.query<JobOrderAuditEventRow>(
+      `
+        select
+          id,
+          tenant_id,
+          actor_user_id,
+          actor_type,
+          action,
+          entity_type,
+          entity_id,
+          branch_id,
+          before_json,
+          after_json,
+          metadata_json,
+          reason,
+          created_at
+        from audit_logs
+        where tenant_id = $1
+          and (
+            (
+              entity_type = 'job_order'
+              and entity_id = $2::uuid
+            )
+            or (
+              entity_type = 'job_order_line'
+              and entity_id in (
+                select id
+                from job_order_lines
+                where tenant_id = $1
+                  and job_order_id = $2::uuid
+              )
+            )
+          )
+        order by created_at asc, id asc
+      `,
+      [tenantId, jobOrderId],
+    );
+
+    return result.rows.map(toJobOrderAuditEventRecord);
+  }
+
   async isActiveShopOwner(input: {
     readonly tenantId: string;
     readonly userId: string;
@@ -1252,6 +1317,32 @@ function toJobOrderStatusEventRecord(row: JobOrderStatusEventRow): JobOrderStatu
     createdByUserId: row.created_by_user_id,
     createdAt: row.created_at,
   };
+}
+
+function toJobOrderAuditEventRecord(row: JobOrderAuditEventRow): JobOrderAuditEventRecord {
+  return {
+    id: row.id,
+    tenantId: row.tenant_id,
+    actorUserId: row.actor_user_id,
+    actorType: toJobOrderAuditActorType(row.actor_type),
+    action: row.action,
+    entityType: row.entity_type,
+    entityId: row.entity_id,
+    branchId: row.branch_id,
+    beforeJson: row.before_json,
+    afterJson: row.after_json,
+    metadataJson: row.metadata_json,
+    reason: row.reason,
+    createdAt: row.created_at instanceof Date ? row.created_at : new Date(row.created_at),
+  };
+}
+
+function toJobOrderAuditActorType(actorType: string): JobOrderAuditActorType {
+  if (actorType === 'tenant_user' || actorType === 'platform_admin' || actorType === 'system') {
+    return actorType;
+  }
+
+  throw new Error(`Unknown job order audit actor type: ${actorType}.`);
 }
 
 function normalizeDecimalString(value: string | number): string {
