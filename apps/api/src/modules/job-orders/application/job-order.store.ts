@@ -1,0 +1,163 @@
+import type { DatabaseQueryClient } from '../../../shared/database/database-client';
+
+export type JobOrderStatus =
+  | 'pending'
+  | 'in_progress'
+  | 'waiting_for_parts'
+  | 'completed'
+  | 'released'
+  | 'cancelled';
+
+export type JobOrderLineType = 'service' | 'labor' | 'part';
+
+export type JobOrderLineStatus = 'active' | 'completed' | 'cancelled';
+
+export interface JobOrderLineRecord {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly jobOrderId: string;
+  readonly lineType: JobOrderLineType;
+  readonly serviceId: string | null;
+  readonly productId: string | null;
+  readonly description: string;
+  readonly quantity: string;
+  readonly unitPrice: string;
+  readonly authorizedAmount: string;
+  readonly status: JobOrderLineStatus;
+  readonly inventoryReservationId: string | null;
+  readonly completedAt: Date | null;
+  readonly lineOrder: number;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+}
+
+export interface JobOrderRecord {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly branchId: string;
+  readonly customerId: string;
+  readonly motorcycleId: string;
+  readonly jobOrderNumber: string;
+  readonly status: JobOrderStatus;
+  readonly serviceAdvisorUserId: string;
+  readonly primaryMechanicUserId: string | null;
+  readonly mileageAtIntake: number;
+  readonly customerConcern: string;
+  readonly internalNotes: string | null;
+  readonly completedAt: Date | null;
+  readonly releasedAt: Date | null;
+  readonly noChargeReason: string | null;
+  readonly releaseWithBalanceReason: string | null;
+  readonly createdByUserId: string | null;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+  readonly lockVersion: number;
+  readonly lines: readonly JobOrderLineRecord[];
+}
+
+export interface JobOrderNumberSequenceInput {
+  readonly tenantId: string;
+  readonly datePart: string;
+}
+
+export interface ListJobOrdersInput {
+  readonly tenantId: string;
+  readonly branchId: string;
+  readonly status: JobOrderStatus | undefined;
+  readonly customerId: string | undefined;
+  readonly motorcycleId: string | undefined;
+  readonly normalizedSearch: string | null;
+  readonly limit: number;
+}
+
+export interface CreateJobOrderInput {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly branchId: string;
+  readonly customerId: string;
+  readonly motorcycleId: string;
+  readonly jobOrderNumber: string;
+  readonly serviceAdvisorUserId: string;
+  readonly mileageAtIntake: number;
+  readonly customerConcern: string;
+  readonly internalNotes: string | null;
+  readonly createdByUserId: string;
+  readonly createdAt: Date;
+}
+
+export interface UpdatePendingJobOrderInput {
+  readonly tenantId: string;
+  readonly jobOrderId: string;
+  readonly mileageAtIntake: number;
+  readonly customerConcern: string;
+  readonly internalNotes: string | null;
+  readonly expectedLockVersion: number;
+  readonly updatedAt: Date;
+}
+
+export abstract class JobOrderStore {
+  abstract getTenantTimezone(
+    tenantId: string,
+    client?: DatabaseQueryClient,
+  ): Promise<string | null>;
+
+  abstract lockJobOrderNumberSequence(
+    input: JobOrderNumberSequenceInput,
+    client: DatabaseQueryClient,
+  ): Promise<void>;
+
+  abstract findLatestJobOrderNumberForDate(
+    input: JobOrderNumberSequenceInput,
+    client: DatabaseQueryClient,
+  ): Promise<string | null>;
+
+  abstract listJobOrders(input: ListJobOrdersInput): Promise<readonly JobOrderRecord[]>;
+
+  abstract findJobOrderById(
+    tenantId: string,
+    jobOrderId: string,
+    client?: DatabaseQueryClient,
+  ): Promise<JobOrderRecord | null>;
+
+  abstract findJobOrderByIdForUpdate(
+    tenantId: string,
+    jobOrderId: string,
+    client: DatabaseQueryClient,
+  ): Promise<JobOrderRecord | null>;
+
+  abstract createJobOrder(
+    input: CreateJobOrderInput,
+    client: DatabaseQueryClient,
+  ): Promise<JobOrderRecord>;
+
+  abstract updatePendingJobOrder(
+    input: UpdatePendingJobOrderInput,
+    client: DatabaseQueryClient,
+  ): Promise<JobOrderRecord | null>;
+
+  abstract isActiveShopOwner(input: {
+    readonly tenantId: string;
+    readonly userId: string;
+  }): Promise<boolean>;
+
+  abstract activeBranchExists(
+    tenantId: string,
+    branchId: string,
+    client?: DatabaseQueryClient,
+  ): Promise<boolean>;
+
+  abstract activeCustomerExists(
+    tenantId: string,
+    customerId: string,
+    client?: DatabaseQueryClient,
+  ): Promise<boolean>;
+
+  abstract activeMotorcycleBelongsToCustomer(
+    input: {
+      readonly tenantId: string;
+      readonly motorcycleId: string;
+      readonly customerId: string;
+    },
+    client?: DatabaseQueryClient,
+  ): Promise<boolean>;
+}
