@@ -4,7 +4,12 @@ import {
   buildNextJobOrderNumber,
   formatTenantBusinessDate,
 } from '../../../shared/numbering/document-numbering';
-import { assertCanUpdateJobOrderBaseline } from './job-orders.service';
+import {
+  assertBaselinePartLinesBlocked,
+  assertCanEditJobOrderLines,
+  assertCanUpdateJobOrderBaseline,
+  calculateJobOrderLineAuthorizedAmount,
+} from './job-orders.service';
 
 describe('JobOrdersService baseline helpers', () => {
   it('generates the first tenant-scoped job order number for a business date', () => {
@@ -37,5 +42,37 @@ describe('job order baseline validators', () => {
         status: 'in_progress',
       }),
     ).toThrow('One or more fields are invalid.');
+  });
+});
+
+describe('job order line scaffolding validators', () => {
+  it.each(['pending', 'in_progress', 'waiting_for_parts'] as const)(
+    'allows service/labor line edits while job order is %s',
+    (status) => {
+      expect(() =>
+        assertCanEditJobOrderLines({
+          status,
+        }),
+      ).not.toThrow();
+    },
+  );
+
+  it.each(['completed', 'released', 'cancelled'] as const)(
+    'blocks service/labor line edits while job order is %s',
+    (status) => {
+      expect(() =>
+        assertCanEditJobOrderLines({
+          status,
+        }),
+      ).toThrow('One or more fields are invalid.');
+    },
+  );
+
+  it('calculates authorized line amount from quantity and unit price', () => {
+    expect(calculateJobOrderLineAuthorizedAmount('2.000', '125.50')).toBe('251.00');
+  });
+
+  it('blocks part lines until inventory reservation support exists', () => {
+    expect(() => assertBaselinePartLinesBlocked()).toThrow('One or more fields are invalid.');
   });
 });

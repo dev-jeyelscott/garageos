@@ -18,6 +18,7 @@ import { GARAGE_OS_ROUTE_ACCESS_METADATA_KEYS } from './route-access.decorators'
 @Injectable()
 export class PermissionAccessRouteGuard implements CanActivate {
   constructor(
+    @Inject(Reflector)
     private readonly reflector: Reflector,
     @Inject(AuditService)
     private readonly auditService: AuditService,

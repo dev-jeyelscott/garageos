@@ -19,6 +19,7 @@ import {
 @Injectable()
 export class BranchAccessRouteGuard implements CanActivate {
   constructor(
+    @Inject(Reflector)
     private readonly reflector: Reflector,
     @Inject(AuditService)
     private readonly auditService: AuditService,

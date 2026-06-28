@@ -18,6 +18,7 @@ import { evaluateTenantStatusAccess } from './tenant-status-access';
 @Injectable()
 export class TenantStatusAccessRouteGuard implements CanActivate {
   constructor(
+    @Inject(Reflector)
     private readonly reflector: Reflector,
     @Inject(AuditService)
     private readonly auditService: AuditService,

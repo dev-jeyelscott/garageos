@@ -2,6 +2,14 @@ import { z } from 'zod';
 
 const uuidSchema = z.string().uuid();
 
+const moneySchema = z
+  .string()
+  .regex(/^\d{1,12}(\.\d{1,2})?$/, 'Money must use up to 2 decimal places.');
+
+const quantitySchema = z
+  .string()
+  .regex(/^\d{1,11}(\.\d{1,3})?$/, 'Quantity must use up to 3 decimal places.');
+
 export const jobOrderStatusSchema = z.enum([
   'pending',
   'in_progress',
@@ -10,6 +18,40 @@ export const jobOrderStatusSchema = z.enum([
   'released',
   'cancelled',
 ]);
+
+export const jobOrderServiceLaborLineTypeSchema = z.enum(['service', 'labor']);
+
+const jobOrderServiceLaborLineRequestSchema = z
+  .object({
+    line_type: jobOrderServiceLaborLineTypeSchema,
+    service_id: uuidSchema.nullish(),
+    description: z.string().trim().min(1).max(500),
+    quantity: quantitySchema.default('1.000'),
+    unit_price: moneySchema.default('0.00'),
+    line_order: z.number().int().min(0).max(999).optional(),
+  })
+  .superRefine((value, context) => {
+    if (
+      value.line_type === 'labor' &&
+      value.service_id !== null &&
+      value.service_id !== undefined
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['service_id'],
+        message: 'Labor lines must not reference a predefined service.',
+      });
+    }
+
+    if (value.line_type === 'labor' && Number(value.quantity) * Number(value.unit_price) === 0) {
+      context.addIssue({
+        code: 'custom',
+        path: ['unit_price'],
+        message:
+          'Zero-amount labor lines require a free-labor reason, which is not supported in this baseline slice.',
+      });
+    }
+  });
 
 export const listJobOrdersQuerySchema = z.object({
   branch_id: uuidSchema,
@@ -51,7 +93,23 @@ export const updateJobOrderRequestSchema = z
     }
   });
 
+export const createJobOrderServiceLineRequestSchema = jobOrderServiceLaborLineRequestSchema;
+
+export const updateJobOrderLineRequestSchema = jobOrderServiceLaborLineRequestSchema;
+
+export const createJobOrderPartLineRequestSchema = z.object({
+  product_id: uuidSchema,
+  description: z.string().trim().min(1).max(500),
+  quantity: quantitySchema.default('1.000'),
+  unit_price: moneySchema.default('0.00'),
+});
+
 export type JobOrderStatusRequest = z.infer<typeof jobOrderStatusSchema>;
 export type ListJobOrdersQuery = z.infer<typeof listJobOrdersQuerySchema>;
 export type CreateJobOrderRequest = z.infer<typeof createJobOrderRequestSchema>;
 export type UpdateJobOrderRequest = z.infer<typeof updateJobOrderRequestSchema>;
+export type CreateJobOrderServiceLineRequest = z.infer<
+  typeof createJobOrderServiceLineRequestSchema
+>;
+export type UpdateJobOrderLineRequest = z.infer<typeof updateJobOrderLineRequestSchema>;
+export type CreateJobOrderPartLineRequest = z.infer<typeof createJobOrderPartLineRequestSchema>;

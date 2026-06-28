@@ -7,13 +7,17 @@ import {
 } from '../../../shared/database/database-client';
 import {
   JobOrderStore,
+  type CancelJobOrderLineInput,
   type CreateJobOrderInput,
+  type CreateJobOrderLineInput,
   type JobOrderLineRecord,
   type JobOrderLineStatus,
   type JobOrderLineType,
   type JobOrderRecord,
   type JobOrderStatus,
   type ListJobOrdersInput,
+  type ServiceSnapshotRecord,
+  type UpdateJobOrderLineInput,
   type UpdatePendingJobOrderInput,
 } from '../application/job-order.store';
 
@@ -57,6 +61,12 @@ interface JobOrderLineRow extends DatabaseRow {
   readonly line_order: number;
   readonly created_at: Date;
   readonly updated_at: Date;
+}
+
+interface ServiceSnapshotRow extends DatabaseRow {
+  readonly name: string;
+  readonly starting_price: string;
+  readonly price_disclaimer: string | null;
 }
 
 @Injectable()
@@ -327,6 +337,208 @@ export class PostgresJobOrderRepository extends JobOrderStore {
     return toJobOrderRecord(updated, lines);
   }
 
+  async findJobOrderLineByIdForUpdate(
+    tenantId: string,
+    jobOrderId: string,
+    lineId: string,
+    client: DatabaseQueryClient,
+  ): Promise<JobOrderLineRecord | null> {
+    const result = await client.query<JobOrderLineRow>(
+      `
+        select *
+        from job_order_lines
+        where tenant_id = $1
+          and job_order_id = $2
+          and id = $3
+        for update
+      `,
+      [tenantId, jobOrderId, lineId],
+    );
+
+    const line = result.rows[0];
+
+    return line === undefined ? null : toJobOrderLineRecord(line);
+  }
+
+  async createJobOrderLine(
+    input: CreateJobOrderLineInput,
+    client: DatabaseQueryClient,
+  ): Promise<JobOrderLineRecord> {
+    const result = await client.query<JobOrderLineRow>(
+      `
+        insert into job_order_lines (
+          id,
+          tenant_id,
+          job_order_id,
+          line_type,
+          service_id,
+          product_id,
+          description,
+          quantity,
+          unit_price,
+          authorized_amount,
+          status,
+          line_order,
+          created_at,
+          updated_at
+        )
+        values (
+          $1,
+          $2,
+          $3,
+          $4,
+          $5,
+          null,
+          $6,
+          $7,
+          $8,
+          $9,
+          'active',
+          coalesce(
+            $10::integer,
+            (
+              select coalesce(max(line_order) + 1, 0)
+              from job_order_lines
+              where tenant_id = $2
+                and job_order_id = $3
+            )
+          ),
+          $11,
+          $11
+        )
+        returning *
+      `,
+      [
+        input.id,
+        input.tenantId,
+        input.jobOrderId,
+        input.lineType,
+        input.serviceId,
+        input.description,
+        input.quantity,
+        input.unitPrice,
+        input.authorizedAmount,
+        input.lineOrder,
+        input.createdAt,
+      ],
+    );
+
+    const created = result.rows[0];
+
+    if (created === undefined) {
+      throw new Error('Created job order line could not be loaded.');
+    }
+
+    await this.upsertJobOrderLineSnapshot(
+      {
+        tenantId: input.tenantId,
+        lineId: input.id,
+        sourceName: input.sourceName,
+        sourcePrice: input.sourcePrice,
+        sourceDisclaimer: input.sourceDisclaimer,
+        capturedAt: input.createdAt,
+      },
+      client,
+    );
+
+    await this.touchJobOrder(input.tenantId, input.jobOrderId, input.createdAt, client);
+
+    return toJobOrderLineRecord(created);
+  }
+
+  async updateJobOrderLine(
+    input: UpdateJobOrderLineInput,
+    client: DatabaseQueryClient,
+  ): Promise<JobOrderLineRecord | null> {
+    const result = await client.query<JobOrderLineRow>(
+      `
+        update job_order_lines
+        set
+          line_type = $4,
+          service_id = $5,
+          product_id = null,
+          description = $6,
+          quantity = $7,
+          unit_price = $8,
+          authorized_amount = $9,
+          line_order = coalesce($10::integer, line_order),
+          updated_at = $11
+        where tenant_id = $1
+          and job_order_id = $2
+          and id = $3
+          and status = 'active'
+          and line_type in ('service', 'labor')
+        returning *
+      `,
+      [
+        input.tenantId,
+        input.jobOrderId,
+        input.lineId,
+        input.lineType,
+        input.serviceId,
+        input.description,
+        input.quantity,
+        input.unitPrice,
+        input.authorizedAmount,
+        input.lineOrder,
+        input.updatedAt,
+      ],
+    );
+
+    const updated = result.rows[0];
+
+    if (updated === undefined) {
+      return null;
+    }
+
+    await this.upsertJobOrderLineSnapshot(
+      {
+        tenantId: input.tenantId,
+        lineId: input.lineId,
+        sourceName: input.sourceName,
+        sourcePrice: input.sourcePrice,
+        sourceDisclaimer: input.sourceDisclaimer,
+        capturedAt: input.updatedAt,
+      },
+      client,
+    );
+
+    await this.touchJobOrder(input.tenantId, input.jobOrderId, input.updatedAt, client);
+
+    return toJobOrderLineRecord(updated);
+  }
+
+  async cancelJobOrderLine(
+    input: CancelJobOrderLineInput,
+    client: DatabaseQueryClient,
+  ): Promise<JobOrderLineRecord | null> {
+    const result = await client.query<JobOrderLineRow>(
+      `
+        update job_order_lines
+        set
+          status = 'cancelled',
+          updated_at = $4
+        where tenant_id = $1
+          and job_order_id = $2
+          and id = $3
+          and status = 'active'
+          and line_type in ('service', 'labor')
+        returning *
+      `,
+      [input.tenantId, input.jobOrderId, input.lineId, input.updatedAt],
+    );
+
+    const updated = result.rows[0];
+
+    if (updated === undefined) {
+      return null;
+    }
+
+    await this.touchJobOrder(input.tenantId, input.jobOrderId, input.updatedAt, client);
+
+    return toJobOrderLineRecord(updated);
+  }
+
   async isActiveShopOwner(input: {
     readonly tenantId: string;
     readonly userId: string;
@@ -421,6 +633,37 @@ export class PostgresJobOrderRepository extends JobOrderStore {
     return result.rows[0]?.exists ?? false;
   }
 
+  async findActiveServiceSnapshot(
+    tenantId: string,
+    serviceId: string,
+    client?: DatabaseQueryClient,
+  ): Promise<ServiceSnapshotRecord | null> {
+    const queryClient = client ?? this.database;
+    const result = await queryClient.query<ServiceSnapshotRow>(
+      `
+        select name, starting_price, price_disclaimer
+        from services
+        where tenant_id = $1
+          and id = $2
+          and status = 'active'
+        limit 1
+      `,
+      [tenantId, serviceId],
+    );
+
+    const row = result.rows[0];
+
+    if (row === undefined) {
+      return null;
+    }
+
+    return {
+      name: row.name,
+      startingPrice: normalizeDecimalString(row.starting_price),
+      priceDisclaimer: row.price_disclaimer,
+    };
+  }
+
   private async attachLines(rows: readonly JobOrderRow[]): Promise<readonly JobOrderRecord[]> {
     const jobOrders: JobOrderRecord[] = [];
 
@@ -449,6 +692,66 @@ export class PostgresJobOrderRepository extends JobOrderStore {
     );
 
     return result.rows.map(toJobOrderLineRecord);
+  }
+
+  private async upsertJobOrderLineSnapshot(
+    input: {
+      readonly tenantId: string;
+      readonly lineId: string;
+      readonly sourceName: string;
+      readonly sourcePrice: string;
+      readonly sourceDisclaimer: string | null;
+      readonly capturedAt: Date;
+    },
+    client: DatabaseQueryClient,
+  ): Promise<void> {
+    await client.query(
+      `
+        insert into job_order_line_snapshots (
+          id,
+          tenant_id,
+          job_order_line_id,
+          source_name,
+          source_price,
+          source_disclaimer,
+          captured_at
+        )
+        values (gen_random_uuid(), $1, $2, $3, $4, $5, $6)
+        on conflict (tenant_id, job_order_line_id)
+        do update set
+          source_name = excluded.source_name,
+          source_price = excluded.source_price,
+          source_disclaimer = excluded.source_disclaimer,
+          captured_at = excluded.captured_at
+      `,
+      [
+        input.tenantId,
+        input.lineId,
+        input.sourceName,
+        input.sourcePrice,
+        input.sourceDisclaimer,
+        input.capturedAt,
+      ],
+    );
+  }
+
+  private async touchJobOrder(
+    tenantId: string,
+    jobOrderId: string,
+    updatedAt: Date,
+    client: DatabaseQueryClient,
+  ): Promise<void> {
+    await client.query(
+      `
+        update job_orders
+        set
+          updated_at = $3,
+          lock_version = lock_version + 1
+        where tenant_id = $1
+          and id = $2
+      `,
+      [tenantId, jobOrderId, updatedAt],
+    );
   }
 }
 

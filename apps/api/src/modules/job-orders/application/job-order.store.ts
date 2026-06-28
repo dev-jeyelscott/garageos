@@ -55,6 +55,18 @@ export interface JobOrderRecord {
   readonly lines: readonly JobOrderLineRecord[];
 }
 
+export interface ServiceSnapshotRecord {
+  readonly name: string;
+  readonly startingPrice: string;
+  readonly priceDisclaimer: string | null;
+}
+
+export interface JobOrderLineSnapshotInput {
+  readonly sourceName: string;
+  readonly sourcePrice: string;
+  readonly sourceDisclaimer: string | null;
+}
+
 export interface JobOrderNumberSequenceInput {
   readonly tenantId: string;
   readonly datePart: string;
@@ -95,6 +107,41 @@ export interface UpdatePendingJobOrderInput {
   readonly updatedAt: Date;
 }
 
+export interface CreateJobOrderLineInput extends JobOrderLineSnapshotInput {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly jobOrderId: string;
+  readonly lineType: Exclude<JobOrderLineType, 'part'>;
+  readonly serviceId: string | null;
+  readonly description: string;
+  readonly quantity: string;
+  readonly unitPrice: string;
+  readonly authorizedAmount: string;
+  readonly lineOrder: number | null;
+  readonly createdAt: Date;
+}
+
+export interface UpdateJobOrderLineInput extends JobOrderLineSnapshotInput {
+  readonly tenantId: string;
+  readonly jobOrderId: string;
+  readonly lineId: string;
+  readonly lineType: Exclude<JobOrderLineType, 'part'>;
+  readonly serviceId: string | null;
+  readonly description: string;
+  readonly quantity: string;
+  readonly unitPrice: string;
+  readonly authorizedAmount: string;
+  readonly lineOrder: number | null;
+  readonly updatedAt: Date;
+}
+
+export interface CancelJobOrderLineInput {
+  readonly tenantId: string;
+  readonly jobOrderId: string;
+  readonly lineId: string;
+  readonly updatedAt: Date;
+}
+
 export abstract class JobOrderStore {
   abstract getTenantTimezone(
     tenantId: string,
@@ -125,6 +172,13 @@ export abstract class JobOrderStore {
     client: DatabaseQueryClient,
   ): Promise<JobOrderRecord | null>;
 
+  abstract findJobOrderLineByIdForUpdate(
+    tenantId: string,
+    jobOrderId: string,
+    lineId: string,
+    client: DatabaseQueryClient,
+  ): Promise<JobOrderLineRecord | null>;
+
   abstract createJobOrder(
     input: CreateJobOrderInput,
     client: DatabaseQueryClient,
@@ -134,6 +188,21 @@ export abstract class JobOrderStore {
     input: UpdatePendingJobOrderInput,
     client: DatabaseQueryClient,
   ): Promise<JobOrderRecord | null>;
+
+  abstract createJobOrderLine(
+    input: CreateJobOrderLineInput,
+    client: DatabaseQueryClient,
+  ): Promise<JobOrderLineRecord>;
+
+  abstract updateJobOrderLine(
+    input: UpdateJobOrderLineInput,
+    client: DatabaseQueryClient,
+  ): Promise<JobOrderLineRecord | null>;
+
+  abstract cancelJobOrderLine(
+    input: CancelJobOrderLineInput,
+    client: DatabaseQueryClient,
+  ): Promise<JobOrderLineRecord | null>;
 
   abstract isActiveShopOwner(input: {
     readonly tenantId: string;
@@ -160,4 +229,10 @@ export abstract class JobOrderStore {
     },
     client?: DatabaseQueryClient,
   ): Promise<boolean>;
+
+  abstract findActiveServiceSnapshot(
+    tenantId: string,
+    serviceId: string,
+    client?: DatabaseQueryClient,
+  ): Promise<ServiceSnapshotRecord | null>;
 }

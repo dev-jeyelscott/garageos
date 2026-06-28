@@ -24,13 +24,17 @@ import {
   type TenantContextAuthenticatedSession,
 } from '../../../shared/tenant-context/tenant-context';
 import type {
+  CreateJobOrderPartLineRequest,
   CreateJobOrderRequest,
+  CreateJobOrderServiceLineRequest,
   ListJobOrdersQuery,
+  UpdateJobOrderLineRequest,
   UpdateJobOrderRequest,
 } from '../api/job-order.schemas';
 import {
   JobOrderStore,
   type JobOrderLineRecord,
+  type JobOrderLineSnapshotInput,
   type JobOrderLineStatus,
   type JobOrderLineType,
   type JobOrderRecord,
@@ -91,6 +95,11 @@ export interface JobOrderMutationResponse {
   readonly job_order: JobOrderResponse;
 }
 
+export interface JobOrderLineMutationResponse {
+  readonly job_order: JobOrderResponse;
+  readonly line: JobOrderLineResponse;
+}
+
 interface NormalizedCreateJobOrderInput {
   readonly branchId: string;
   readonly customerId: string;
@@ -104,6 +113,16 @@ interface NormalizedUpdateJobOrderInput {
   readonly mileageAtIntake: number;
   readonly customerConcern: string;
   readonly internalNotes: string | null;
+}
+
+interface NormalizedJobOrderLineInput {
+  readonly lineType: Exclude<JobOrderLineType, 'part'>;
+  readonly serviceId: string | null;
+  readonly description: string;
+  readonly quantity: string;
+  readonly unitPrice: string;
+  readonly authorizedAmount: string;
+  readonly lineOrder: number | null;
 }
 
 @Injectable()
@@ -355,6 +374,346 @@ export class JobOrdersService {
       };
     });
   }
+
+  async addServiceLine(
+    jobOrderId: string,
+    request: CreateJobOrderServiceLineRequest,
+    session: TenantContextAuthenticatedSession,
+  ): Promise<JobOrderLineMutationResponse> {
+    const context = resolveTenantContextFromAuthenticatedSession(session);
+    const isShopOwner = await this.jobOrderStore.isActiveShopOwner({
+      tenantId: context.tenantId,
+      userId: context.actorUserId,
+    });
+
+    assertTenantLifecycleAccess({
+      context,
+      isShopOwner,
+      action: TENANT_ACCESS_ACTIONS.OPERATIONAL_WRITE,
+    });
+    assertJobOrderPermission(context, isShopOwner, 'job_orders.update');
+
+    const input = normalizeJobOrderLineInput(request);
+
+    return this.transactionRunner.runInTransaction(async (transaction) => {
+      const existing = await this.jobOrderStore.findJobOrderByIdForUpdate(
+        context.tenantId,
+        jobOrderId.trim(),
+        transaction,
+      );
+
+      if (existing === null) {
+        throw GarageOsApiException.resourceNotFound('Job order was not found.');
+      }
+
+      assertJobOrderBranchAccess(context, existing.branchId);
+      assertCanEditJobOrderLines(existing);
+
+      const snapshot = await buildJobOrderLineSnapshot({
+        jobOrderStore: this.jobOrderStore,
+        tenantId: context.tenantId,
+        line: input,
+        transaction,
+      });
+      const createdAt = new Date();
+
+      const line = await this.jobOrderStore.createJobOrderLine(
+        {
+          id: randomUUID(),
+          tenantId: context.tenantId,
+          jobOrderId: existing.id,
+          lineType: input.lineType,
+          serviceId: input.serviceId,
+          description: input.description,
+          quantity: input.quantity,
+          unitPrice: input.unitPrice,
+          authorizedAmount: input.authorizedAmount,
+          lineOrder: input.lineOrder,
+          sourceName: snapshot.sourceName,
+          sourcePrice: snapshot.sourcePrice,
+          sourceDisclaimer: snapshot.sourceDisclaimer,
+          createdAt,
+        },
+        transaction,
+      );
+
+      const updated = await this.reloadJobOrderOrThrow(context.tenantId, existing.id, transaction);
+
+      await this.auditService.record({
+        tenantId: context.tenantId,
+        actorUserId: context.actorUserId,
+        actorType: AUDIT_ACTOR_TYPES.TENANT_USER,
+        action: 'job_order_lines.created',
+        entityType: 'job_order_line',
+        entityId: line.id,
+        branchId: updated.branchId,
+        beforeJson: toJobOrderResponse(existing),
+        afterJson: toJobOrderResponse(updated),
+        reason: 'job_order_line_created',
+        client: transaction,
+      });
+
+      return {
+        job_order: toJobOrderResponse(updated),
+        line: toJobOrderLineResponse(line),
+      };
+    });
+  }
+
+  async updateJobOrderLine(
+    jobOrderId: string,
+    lineId: string,
+    request: UpdateJobOrderLineRequest,
+    session: TenantContextAuthenticatedSession,
+  ): Promise<JobOrderLineMutationResponse> {
+    const context = resolveTenantContextFromAuthenticatedSession(session);
+    const isShopOwner = await this.jobOrderStore.isActiveShopOwner({
+      tenantId: context.tenantId,
+      userId: context.actorUserId,
+    });
+
+    assertTenantLifecycleAccess({
+      context,
+      isShopOwner,
+      action: TENANT_ACCESS_ACTIONS.OPERATIONAL_WRITE,
+    });
+    assertJobOrderPermission(context, isShopOwner, 'job_orders.update');
+
+    const input = normalizeJobOrderLineInput(request);
+
+    return this.transactionRunner.runInTransaction(async (transaction) => {
+      const existingJobOrder = await this.jobOrderStore.findJobOrderByIdForUpdate(
+        context.tenantId,
+        jobOrderId.trim(),
+        transaction,
+      );
+
+      if (existingJobOrder === null) {
+        throw GarageOsApiException.resourceNotFound('Job order was not found.');
+      }
+
+      assertJobOrderBranchAccess(context, existingJobOrder.branchId);
+      assertCanEditJobOrderLines(existingJobOrder);
+
+      const existingLine = await this.jobOrderStore.findJobOrderLineByIdForUpdate(
+        context.tenantId,
+        existingJobOrder.id,
+        lineId.trim(),
+        transaction,
+      );
+
+      if (existingLine === null) {
+        throw GarageOsApiException.resourceNotFound('Job order line was not found.');
+      }
+
+      assertEditableServiceOrLaborLine(existingLine);
+
+      const snapshot = await buildJobOrderLineSnapshot({
+        jobOrderStore: this.jobOrderStore,
+        tenantId: context.tenantId,
+        line: input,
+        transaction,
+      });
+      const updatedAt = new Date();
+
+      const line = await this.jobOrderStore.updateJobOrderLine(
+        {
+          tenantId: context.tenantId,
+          jobOrderId: existingJobOrder.id,
+          lineId: existingLine.id,
+          lineType: input.lineType,
+          serviceId: input.serviceId,
+          description: input.description,
+          quantity: input.quantity,
+          unitPrice: input.unitPrice,
+          authorizedAmount: input.authorizedAmount,
+          lineOrder: input.lineOrder,
+          sourceName: snapshot.sourceName,
+          sourcePrice: snapshot.sourcePrice,
+          sourceDisclaimer: snapshot.sourceDisclaimer,
+          updatedAt,
+        },
+        transaction,
+      );
+
+      if (line === null) {
+        throw GarageOsApiException.resourceNotFound('Job order line was not found.');
+      }
+
+      const updatedJobOrder = await this.reloadJobOrderOrThrow(
+        context.tenantId,
+        existingJobOrder.id,
+        transaction,
+      );
+
+      await this.auditService.record({
+        tenantId: context.tenantId,
+        actorUserId: context.actorUserId,
+        actorType: AUDIT_ACTOR_TYPES.TENANT_USER,
+        action: 'job_order_lines.updated',
+        entityType: 'job_order_line',
+        entityId: line.id,
+        branchId: updatedJobOrder.branchId,
+        beforeJson: {
+          job_order: toJobOrderResponse(existingJobOrder),
+          line: toJobOrderLineResponse(existingLine),
+        },
+        afterJson: {
+          job_order: toJobOrderResponse(updatedJobOrder),
+          line: toJobOrderLineResponse(line),
+        },
+        reason: 'job_order_line_updated',
+        client: transaction,
+      });
+
+      return {
+        job_order: toJobOrderResponse(updatedJobOrder),
+        line: toJobOrderLineResponse(line),
+      };
+    });
+  }
+
+  async removeJobOrderLine(
+    jobOrderId: string,
+    lineId: string,
+    session: TenantContextAuthenticatedSession,
+  ): Promise<JobOrderLineMutationResponse> {
+    const context = resolveTenantContextFromAuthenticatedSession(session);
+    const isShopOwner = await this.jobOrderStore.isActiveShopOwner({
+      tenantId: context.tenantId,
+      userId: context.actorUserId,
+    });
+
+    assertTenantLifecycleAccess({
+      context,
+      isShopOwner,
+      action: TENANT_ACCESS_ACTIONS.OPERATIONAL_WRITE,
+    });
+    assertJobOrderPermission(context, isShopOwner, 'job_orders.update');
+
+    return this.transactionRunner.runInTransaction(async (transaction) => {
+      const existingJobOrder = await this.jobOrderStore.findJobOrderByIdForUpdate(
+        context.tenantId,
+        jobOrderId.trim(),
+        transaction,
+      );
+
+      if (existingJobOrder === null) {
+        throw GarageOsApiException.resourceNotFound('Job order was not found.');
+      }
+
+      assertJobOrderBranchAccess(context, existingJobOrder.branchId);
+      assertCanEditJobOrderLines(existingJobOrder);
+
+      const existingLine = await this.jobOrderStore.findJobOrderLineByIdForUpdate(
+        context.tenantId,
+        existingJobOrder.id,
+        lineId.trim(),
+        transaction,
+      );
+
+      if (existingLine === null) {
+        throw GarageOsApiException.resourceNotFound('Job order line was not found.');
+      }
+
+      assertEditableServiceOrLaborLine(existingLine);
+
+      const updatedAt = new Date();
+      const line = await this.jobOrderStore.cancelJobOrderLine(
+        {
+          tenantId: context.tenantId,
+          jobOrderId: existingJobOrder.id,
+          lineId: existingLine.id,
+          updatedAt,
+        },
+        transaction,
+      );
+
+      if (line === null) {
+        throw GarageOsApiException.resourceNotFound('Job order line was not found.');
+      }
+
+      const updatedJobOrder = await this.reloadJobOrderOrThrow(
+        context.tenantId,
+        existingJobOrder.id,
+        transaction,
+      );
+
+      await this.auditService.record({
+        tenantId: context.tenantId,
+        actorUserId: context.actorUserId,
+        actorType: AUDIT_ACTOR_TYPES.TENANT_USER,
+        action: 'job_order_lines.removed',
+        entityType: 'job_order_line',
+        entityId: line.id,
+        branchId: updatedJobOrder.branchId,
+        beforeJson: {
+          job_order: toJobOrderResponse(existingJobOrder),
+          line: toJobOrderLineResponse(existingLine),
+        },
+        afterJson: {
+          job_order: toJobOrderResponse(updatedJobOrder),
+          line: toJobOrderLineResponse(line),
+        },
+        reason: 'job_order_line_removed',
+        client: transaction,
+      });
+
+      return {
+        job_order: toJobOrderResponse(updatedJobOrder),
+        line: toJobOrderLineResponse(line),
+      };
+    });
+  }
+
+  async createPartLine(
+    jobOrderId: string,
+    _request: CreateJobOrderPartLineRequest,
+    session: TenantContextAuthenticatedSession,
+  ): Promise<never> {
+    const context = resolveTenantContextFromAuthenticatedSession(session);
+    const isShopOwner = await this.jobOrderStore.isActiveShopOwner({
+      tenantId: context.tenantId,
+      userId: context.actorUserId,
+    });
+
+    assertTenantLifecycleAccess({
+      context,
+      isShopOwner,
+      action: TENANT_ACCESS_ACTIONS.OPERATIONAL_WRITE,
+    });
+    assertJobOrderPermission(context, isShopOwner, 'job_orders.update');
+
+    return this.transactionRunner.runInTransaction(async (transaction) => {
+      const existing = await this.jobOrderStore.findJobOrderByIdForUpdate(
+        context.tenantId,
+        jobOrderId.trim(),
+        transaction,
+      );
+
+      if (existing === null) {
+        throw GarageOsApiException.resourceNotFound('Job order was not found.');
+      }
+
+      assertJobOrderBranchAccess(context, existing.branchId);
+      assertCanEditJobOrderLines(existing);
+      assertBaselinePartLinesBlocked();
+    });
+  }
+
+  private async reloadJobOrderOrThrow(
+    tenantId: string,
+    jobOrderId: string,
+    transaction: DatabaseQueryClient,
+  ): Promise<JobOrderRecord> {
+    const jobOrder = await this.jobOrderStore.findJobOrderById(tenantId, jobOrderId, transaction);
+
+    if (jobOrder === null) {
+      throw GarageOsApiException.resourceNotFound('Job order was not found.');
+    }
+
+    return jobOrder;
+  }
 }
 
 export function assertCanUpdateJobOrderBaseline(jobOrder: Pick<JobOrderRecord, 'status'>): void {
@@ -366,6 +725,50 @@ export function assertCanUpdateJobOrderBaseline(jobOrder: Pick<JobOrderRecord, '
         message: 'Only pending job orders can be updated in this baseline slice.',
       },
     ]);
+  }
+}
+
+export function assertCanEditJobOrderLines(jobOrder: Pick<JobOrderRecord, 'status'>): void {
+  if (
+    jobOrder.status !== 'pending' &&
+    jobOrder.status !== 'in_progress' &&
+    jobOrder.status !== 'waiting_for_parts'
+  ) {
+    throw GarageOsApiException.validationFailed([
+      {
+        field: 'status',
+        code: 'job_order_line_edit_blocked_by_status',
+        message:
+          'Job order lines can only be changed while the job order is pending, in progress, or waiting for parts.',
+      },
+    ]);
+  }
+}
+
+export function assertBaselinePartLinesBlocked(): never {
+  throw GarageOsApiException.validationFailed([
+    {
+      field: 'part_lines',
+      code: 'job_order_part_lines_not_supported_until_inventory_reservation',
+      message:
+        'Job order part lines are blocked until inventory reservation and FIFO allocation support is implemented.',
+    },
+  ]);
+}
+
+function assertEditableServiceOrLaborLine(line: JobOrderLineRecord): void {
+  if (line.status !== 'active') {
+    throw GarageOsApiException.validationFailed([
+      {
+        field: 'line_id',
+        code: 'job_order_line_not_active',
+        message: 'Only active job order lines can be edited or removed.',
+      },
+    ]);
+  }
+
+  if (line.lineType === 'part' || line.inventoryReservationId !== null) {
+    assertBaselinePartLinesBlocked();
   }
 }
 
@@ -427,6 +830,60 @@ async function assertJobOrderReferences(input: {
       },
     ]);
   }
+}
+
+async function buildJobOrderLineSnapshot(input: {
+  readonly jobOrderStore: JobOrderStore;
+  readonly tenantId: string;
+  readonly line: NormalizedJobOrderLineInput;
+  readonly transaction: DatabaseQueryClient;
+}): Promise<JobOrderLineSnapshotInput> {
+  if (input.line.serviceId === null) {
+    return {
+      sourceName: input.line.description,
+      sourcePrice: input.line.unitPrice,
+      sourceDisclaimer: null,
+    };
+  }
+
+  const service = await input.jobOrderStore.findActiveServiceSnapshot(
+    input.tenantId,
+    input.line.serviceId,
+    input.transaction,
+  );
+
+  if (service === null) {
+    throw GarageOsApiException.validationFailed([
+      {
+        field: 'service_id',
+        code: 'service_not_active',
+        message: 'Referenced job order service must be active and belong to the current tenant.',
+      },
+    ]);
+  }
+
+  return {
+    sourceName: service.name,
+    sourcePrice: service.startingPrice,
+    sourceDisclaimer: service.priceDisclaimer,
+  };
+}
+
+function normalizeJobOrderLineInput(
+  request: CreateJobOrderServiceLineRequest | UpdateJobOrderLineRequest,
+): NormalizedJobOrderLineInput {
+  const quantity = normalizeQuantityString(request.quantity);
+  const unitPrice = normalizeMoneyString(request.unit_price);
+
+  return {
+    lineType: request.line_type,
+    serviceId: normalizeNullableText(request.service_id),
+    description: normalizeWhitespace(request.description),
+    quantity,
+    unitPrice,
+    authorizedAmount: calculateJobOrderLineAuthorizedAmount(quantity, unitPrice),
+    lineOrder: request.line_order ?? null,
+  };
 }
 
 function normalizeCreateJobOrderInput(
@@ -499,6 +956,16 @@ function toJobOrderLineResponse(line: JobOrderLineRecord): JobOrderLineResponse 
     created_at: line.createdAt.toISOString(),
     updated_at: line.updatedAt.toISOString(),
   };
+}
+
+export function calculateJobOrderLineAuthorizedAmount(quantity: string, unitPrice: string): string {
+  const total = Number(quantity) * Number(unitPrice);
+
+  if (!Number.isFinite(total)) {
+    return '0.00';
+  }
+
+  return (Math.round(total * 100) / 100).toFixed(2);
 }
 
 function assertJobOrderPermission(
