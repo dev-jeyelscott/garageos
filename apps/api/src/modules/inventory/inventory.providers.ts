@@ -1,9 +1,11 @@
 import { FifoLayerStore } from './application/fifo-layer.store';
+import { FifoConsumptionStore } from './application/fifo-consumption.store';
 import { FifoReservationAllocationStore } from './application/fifo-reservation-allocation.store';
 import { InventoryLedgerStore } from './application/inventory-ledger.store';
 import { InventoryReservationStore } from './application/inventory-reservation.store';
 import { StockBalanceStore } from './application/stock-balance.store';
 import { PostgresFifoLayerRepository } from './persistence/postgres-fifo-layer.repository';
+import { PostgresFifoConsumptionRepository } from './persistence/postgres-fifo-consumption.repository';
 import { PostgresFifoReservationAllocationRepository } from './persistence/postgres-fifo-reservation-allocation.repository';
 import { PostgresInventoryLedgerRepository } from './persistence/postgres-inventory-ledger.repository';
 import { PostgresInventoryReservationRepository } from './persistence/postgres-inventory-reservation.repository';
@@ -21,6 +23,10 @@ export const INVENTORY_PROVIDERS = [
   {
     provide: FifoLayerStore,
     useClass: PostgresFifoLayerRepository,
+  },
+  {
+    provide: FifoConsumptionStore,
+    useClass: PostgresFifoConsumptionRepository,
   },
   {
     provide: FifoReservationAllocationStore,

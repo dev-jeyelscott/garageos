@@ -10,6 +10,7 @@ import {
   INVENTORY_RESERVATION_STATUSES,
   INVENTORY_RESERVATION_STATUS_VALUES,
   InventoryReservationStore,
+  type ConsumeInventoryReservationInput,
   type CreateInventoryReservationInput,
   type InventoryReservationRecord,
   type InventoryReservationStatus,
@@ -175,6 +176,48 @@ export class PostgresInventoryReservationRepository extends InventoryReservation
         input.reservationId,
         INVENTORY_RESERVATION_STATUSES.RELEASED,
         input.releasedAt,
+        INVENTORY_RESERVATION_STATUSES.ACTIVE,
+      ],
+    );
+
+    const [row] = result.rows;
+
+    return row === undefined ? null : mapInventoryReservationRow(row);
+  }
+
+  async markReservationConsumed(
+    input: ConsumeInventoryReservationInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<InventoryReservationRecord | null> {
+    const result = await client.query<InventoryReservationRow>(
+      `
+        update inventory_reservations
+        set
+          reserved_quantity = 0::numeric(14,3),
+          status = $3,
+          consumed_at = $4::timestamptz
+        where tenant_id = $1::uuid
+          and id = $2::uuid
+          and status = $5
+        returning
+          id,
+          tenant_id,
+          branch_id,
+          product_id,
+          source_type,
+          source_id,
+          requested_quantity::text,
+          reserved_quantity::text,
+          status,
+          reserved_at,
+          released_at,
+          consumed_at
+      `,
+      [
+        input.tenantId,
+        input.reservationId,
+        INVENTORY_RESERVATION_STATUSES.CONSUMED,
+        input.consumedAt,
         INVENTORY_RESERVATION_STATUSES.ACTIVE,
       ],
     );

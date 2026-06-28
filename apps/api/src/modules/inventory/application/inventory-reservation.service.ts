@@ -8,6 +8,11 @@ import {
   type DatabaseTransactionRunner,
 } from '../../../shared/database/database-transaction';
 import { FifoLayerService } from './fifo-layer.service';
+import {
+  FifoConsumptionStore,
+  type CreateFifoConsumptionInput,
+  type FifoConsumptionRecord,
+} from './fifo-consumption.store';
 import type { FifoLayerAllocationCandidateRecord } from './fifo-layer.store';
 import {
   FIFO_ALLOCATION_STATUSES,
@@ -48,10 +53,17 @@ const RESERVATION_RELEASE_TRANSACTION_TYPES = [
   INVENTORY_TRANSACTION_TYPES.INVENTORY_TRANSFER_RESERVATION_RELEASE,
 ] as const;
 
+const RESERVATION_CONSUMPTION_TRANSACTION_TYPES = [
+  INVENTORY_TRANSACTION_TYPES.JOB_ORDER_CONSUMPTION,
+] as const;
+
 export type InventoryReservationTransactionType = (typeof RESERVATION_TRANSACTION_TYPES)[number];
 
 export type InventoryReservationReleaseTransactionType =
   (typeof RESERVATION_RELEASE_TRANSACTION_TYPES)[number];
+
+export type InventoryReservationConsumptionTransactionType =
+  (typeof RESERVATION_CONSUMPTION_TRANSACTION_TYPES)[number];
 
 export interface ReserveInventoryCommand {
   readonly tenantId: string;
@@ -87,6 +99,23 @@ export interface InventoryReservationReleaseCommandResult {
   readonly ledgerEntry: InventoryLedgerEntryRecord;
 }
 
+export interface ConsumeInventoryReservationCommand {
+  readonly tenantId: string;
+  readonly reservationId: string;
+  readonly transactionType: InventoryReservationConsumptionTransactionType | string;
+  readonly consumedAt?: Date;
+  readonly consumedByUserId?: string | null;
+}
+
+export interface InventoryReservationConsumptionCommandResult {
+  readonly reservation: InventoryReservationRecord;
+  readonly fifoAllocations: readonly FifoReservationAllocationRecord[];
+  readonly fifoConsumptions: readonly FifoConsumptionRecord[];
+  readonly stockAvailability: StockAvailabilitySnapshot;
+  readonly ledgerEntry: InventoryLedgerEntryRecord;
+  readonly totalCost: string;
+}
+
 interface NormalizedReserveInventoryCommand {
   readonly tenantId: string;
   readonly branchId: string;
@@ -107,6 +136,14 @@ interface NormalizedReleaseInventoryReservationCommand {
   readonly releasedByUserId: string | null;
 }
 
+interface NormalizedConsumeInventoryReservationCommand {
+  readonly tenantId: string;
+  readonly reservationId: string;
+  readonly transactionType: InventoryReservationConsumptionTransactionType;
+  readonly consumedAt: Date;
+  readonly consumedByUserId: string | null;
+}
+
 interface BuildFifoReservationAllocationsInput {
   readonly tenantId: string;
   readonly reservationId: string;
@@ -124,6 +161,8 @@ export class InventoryReservationService {
     private readonly fifoLayerService: FifoLayerService,
     @Inject(FifoReservationAllocationStore)
     private readonly fifoReservationAllocationStore: FifoReservationAllocationStore,
+    @Inject(FifoConsumptionStore)
+    private readonly fifoConsumptionStore: FifoConsumptionStore,
     @Inject(StockBalanceStore)
     private readonly stockBalanceStore: StockBalanceStore,
     private readonly inventoryLedgerService: InventoryLedgerService,
@@ -167,6 +206,25 @@ export class InventoryReservationService {
     const input = normalizeReleaseInventoryCommand(command);
 
     return this.executeRelease(input, client);
+  }
+
+  async consumeInventory(
+    command: ConsumeInventoryReservationCommand,
+  ): Promise<InventoryReservationConsumptionCommandResult> {
+    const input = normalizeConsumeInventoryCommand(command);
+
+    return this.transactionRunner.runInTransaction((transaction) =>
+      this.executeConsumption(input, transaction),
+    );
+  }
+
+  async consumeInventoryInTransaction(
+    command: ConsumeInventoryReservationCommand,
+    client: DatabaseQueryClient,
+  ): Promise<InventoryReservationConsumptionCommandResult> {
+    const input = normalizeConsumeInventoryCommand(command);
+
+    return this.executeConsumption(input, client);
   }
 
   private async executeReservation(
@@ -379,6 +437,198 @@ export class InventoryReservationService {
       ledgerEntry,
     };
   }
+
+  private async executeConsumption(
+    input: NormalizedConsumeInventoryReservationCommand,
+    client: DatabaseQueryClient,
+  ): Promise<InventoryReservationConsumptionCommandResult> {
+    const activeReservation = await this.inventoryReservationStore.lockActiveReservationForUpdate(
+      {
+        tenantId: input.tenantId,
+        reservationId: input.reservationId,
+      },
+      client,
+    );
+
+    if (activeReservation === null) {
+      throw GarageOsApiException.workflowTransitionBlocked(
+        'Inventory reservation cannot be consumed.',
+        [
+          {
+            field: 'reservation_id',
+            code: 'reservation_not_active',
+            message: 'Reservation is not active or does not exist.',
+          },
+        ],
+      );
+    }
+
+    const reservedQuantity = normalizePositiveQuantity(
+      activeReservation.reservedQuantity,
+      'reserved_qty',
+    );
+
+    const activeAllocations =
+      await this.fifoReservationAllocationStore.lockActiveAllocationsByReservationForUpdate(
+        {
+          tenantId: activeReservation.tenantId,
+          reservationId: activeReservation.id,
+        },
+        client,
+      );
+
+    const allocatedQuantityUnits = activeAllocations.reduce(
+      (total, allocation) =>
+        total + parseQuantityUnits(allocation.reservedQuantity, 'reserved_qty'),
+      0n,
+    );
+    const reservedQuantityUnits = parseQuantityUnits(reservedQuantity, 'reserved_qty');
+
+    if (allocatedQuantityUnits !== reservedQuantityUnits) {
+      throw GarageOsApiException.fifoAllocationConflict([
+        {
+          field: 'reservation_id',
+          code: 'fifo_allocation_quantity_mismatch',
+          message: 'Active FIFO allocation quantity does not match reserved quantity.',
+        },
+      ]);
+    }
+
+    const updatedStockAvailability =
+      await this.stockBalanceStore.decrementOnHandAndReservedQuantity(
+        {
+          tenantId: activeReservation.tenantId,
+          branchId: activeReservation.branchId,
+          productId: activeReservation.productId,
+          quantityConsumed: reservedQuantity,
+        },
+        client,
+      );
+
+    if (updatedStockAvailability === null) {
+      throw GarageOsApiException.workflowTransitionBlocked(
+        'Inventory reservation consumption conflicts with the current stock balance.',
+        [
+          {
+            field: 'reservation_id',
+            code: 'reservation_consumption_stock_conflict',
+            message: 'Reservation consumption would make stock quantities invalid.',
+          },
+        ],
+      );
+    }
+
+    const fifoConsumptionInputs = activeAllocations.map((allocation) => {
+      const totalCost = calculateTotalCost(
+        allocation.reservedQuantity,
+        allocation.unitCostSnapshot,
+      );
+
+      return {
+        id: randomUUID(),
+        tenantId: activeReservation.tenantId,
+        branchId: activeReservation.branchId,
+        productId: activeReservation.productId,
+        fifoLayerId: allocation.fifoLayerId,
+        quantityConsumed: allocation.reservedQuantity,
+        unitCost: allocation.unitCostSnapshot,
+        totalCost,
+        sourceType: activeReservation.sourceType,
+        sourceId: activeReservation.sourceId,
+        consumedAt: input.consumedAt,
+      };
+    });
+
+    for (const allocation of activeAllocations) {
+      const decrementedLayer = await this.fifoLayerService.decrementRemainingQuantity(
+        {
+          tenantId: activeReservation.tenantId,
+          fifoLayerId: allocation.fifoLayerId,
+          quantityConsumed: allocation.reservedQuantity,
+        },
+        client,
+      );
+
+      if (decrementedLayer === null) {
+        throw GarageOsApiException.fifoAllocationConflict([
+          {
+            field: 'reservation_id',
+            code: 'fifo_layer_consumption_conflict',
+            message: 'FIFO layer quantity could not be decremented for consumption.',
+          },
+        ]);
+      }
+    }
+
+    const fifoConsumptions = await this.fifoConsumptionStore.createConsumptions(
+      fifoConsumptionInputs,
+      client,
+    );
+
+    const consumedAllocations =
+      await this.fifoReservationAllocationStore.markActiveAllocationsConsumedByReservation(
+        {
+          tenantId: activeReservation.tenantId,
+          reservationId: activeReservation.id,
+          allocationIds: activeAllocations.map((allocation) => allocation.id),
+          consumedAt: input.consumedAt,
+        },
+        client,
+      );
+
+    const consumedReservation = await this.inventoryReservationStore.markReservationConsumed(
+      {
+        tenantId: activeReservation.tenantId,
+        reservationId: activeReservation.id,
+        consumedAt: input.consumedAt,
+      },
+      client,
+    );
+
+    if (consumedReservation === null) {
+      throw GarageOsApiException.workflowTransitionBlocked(
+        'Inventory reservation cannot be consumed.',
+        [
+          {
+            field: 'reservation_id',
+            code: 'reservation_consumption_conflict',
+            message: 'Reservation status changed before consumption completed.',
+          },
+        ],
+      );
+    }
+
+    const totalCost = sumMoneyAmounts(
+      fifoConsumptionInputs.map((consumption) => consumption.totalCost),
+    );
+
+    const ledgerEntry = await this.inventoryLedgerService.recordLedgerEntry(
+      {
+        tenantId: activeReservation.tenantId,
+        branchId: activeReservation.branchId,
+        productId: activeReservation.productId,
+        transactionType: input.transactionType,
+        quantityDeltaOnHand: negateQuantity(reservedQuantity),
+        quantityDeltaReserved: negateQuantity(reservedQuantity),
+        unitCost: null,
+        totalCost,
+        sourceType: activeReservation.sourceType,
+        sourceId: activeReservation.sourceId,
+        occurredAt: input.consumedAt,
+        createdByUserId: input.consumedByUserId,
+      },
+      client,
+    );
+
+    return {
+      reservation: consumedReservation,
+      fifoAllocations: consumedAllocations,
+      fifoConsumptions,
+      stockAvailability: toStockAvailabilitySnapshot(updatedStockAvailability),
+      ledgerEntry,
+      totalCost,
+    };
+  }
 }
 
 function normalizeReserveInventoryCommand(
@@ -412,6 +662,21 @@ function normalizeReleaseInventoryCommand(
       command.releasedByUserId === null || command.releasedByUserId === undefined
         ? null
         : normalizeUuid(command.releasedByUserId, 'released_by_user_id'),
+  };
+}
+
+function normalizeConsumeInventoryCommand(
+  command: ConsumeInventoryReservationCommand,
+): NormalizedConsumeInventoryReservationCommand {
+  return {
+    tenantId: normalizeUuid(command.tenantId, 'tenant_id'),
+    reservationId: normalizeUuid(command.reservationId, 'reservation_id'),
+    transactionType: normalizeReservationConsumptionTransactionType(command.transactionType),
+    consumedAt: normalizeDate(command.consumedAt, 'consumed_at'),
+    consumedByUserId:
+      command.consumedByUserId === null || command.consumedByUserId === undefined
+        ? null
+        : normalizeUuid(command.consumedByUserId, 'consumed_by_user_id'),
   };
 }
 
@@ -537,6 +802,24 @@ function normalizeReservationReleaseTransactionType(
   ]);
 }
 
+function normalizeReservationConsumptionTransactionType(
+  value: InventoryTransactionType | string,
+): InventoryReservationConsumptionTransactionType {
+  const normalizedValue = normalizeRequiredText(value, 'transaction_type');
+
+  if ((RESERVATION_CONSUMPTION_TRANSACTION_TYPES as readonly string[]).includes(normalizedValue)) {
+    return normalizedValue as InventoryReservationConsumptionTransactionType;
+  }
+
+  throw GarageOsApiException.validationFailed([
+    {
+      field: 'transaction_type',
+      code: 'unsupported_inventory_reservation_consumption_transaction_type',
+      message: 'Inventory reservation consumption transaction type is not supported.',
+    },
+  ]);
+}
+
 function normalizePositiveQuantity(value: string, field: string): string {
   const normalizedValue = normalizeRequiredText(value, field);
 
@@ -642,6 +925,24 @@ function parseQuantityUnits(value: string, field: string): bigint {
   return BigInt(normalizedWholePart) * 1000n + BigInt(normalizedDecimalPart);
 }
 
+function calculateTotalCost(quantity: string, unitCost: string): string {
+  const quantityUnits = parseQuantityUnits(quantity, 'quantity_consumed');
+  const unitCostCents = parseMoneyCents(unitCost, 'unit_cost');
+
+  const totalCents = (quantityUnits * unitCostCents + 500n) / 1000n;
+
+  return formatMoneyCents(totalCents);
+}
+
+function sumMoneyAmounts(amounts: readonly string[]): string {
+  const totalCents = amounts.reduce(
+    (total, amount) => total + parseMoneyCents(amount, 'total_cost'),
+    0n,
+  );
+
+  return formatMoneyCents(totalCents);
+}
+
 function formatQuantityUnits(value: bigint): string {
   const wholePart = value / 1000n;
   const decimalPart = value % 1000n;
@@ -665,4 +966,52 @@ function toStockAvailabilitySnapshot(record: StockAvailabilityRecord): StockAvai
     available_qty: calculateAvailableQuantity(record.onHandQty, record.reservedQty),
     lock_version: record.lockVersion,
   };
+}
+
+function sumQuantities(values: readonly string[]): string {
+  return formatQuantityUnits(
+    values.reduce((total, value) => total + parseQuantityUnits(value, 'reserved_qty'), 0n),
+  );
+}
+
+function parseMoneyCents(value: string, field: string): bigint {
+  const normalizedValue = normalizeRequiredText(value, field);
+
+  if (!/^\d+(\.\d{1,2})?$/.test(normalizedValue)) {
+    throw GarageOsApiException.validationFailed([
+      {
+        field,
+        code: 'invalid_money_amount',
+        message: 'Amount must be a non-negative decimal with up to 2 decimals.',
+      },
+    ]);
+  }
+
+  const [wholePart = '0', decimalPart = ''] = normalizedValue.split('.');
+  const normalizedWholePart = wholePart.replace(/^0+(?=\d)/, '') || '0';
+  const normalizedDecimalPart = decimalPart.padEnd(2, '0');
+
+  return BigInt(normalizedWholePart) * 100n + BigInt(normalizedDecimalPart);
+}
+
+function formatMoneyCents(value: bigint): string {
+  const wholePart = value / 100n;
+  const decimalPart = value % 100n;
+
+  return `${wholePart.toString()}.${decimalPart.toString().padStart(2, '0')}`;
+}
+
+function multiplyQuantityByMoney(quantity: string, unitCost: string): string {
+  const quantityUnits = parseQuantityUnits(quantity, 'quantity_consumed');
+  const unitCostCents = parseMoneyCents(unitCost, 'unit_cost');
+  const totalMills = quantityUnits * unitCostCents;
+  const roundedCents = (totalMills + 500n) / 1000n;
+
+  return formatMoneyCents(roundedCents);
+}
+
+function sumMoney(values: readonly string[]): string {
+  return formatMoneyCents(
+    values.reduce((total, value) => total + parseMoneyCents(value, 'total_cost'), 0n),
+  );
 }

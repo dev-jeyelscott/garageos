@@ -36,6 +36,12 @@ export interface LockOpenFifoLayersForAllocationInput {
   readonly productId: string;
 }
 
+export interface DecrementFifoLayerRemainingQuantityInput {
+  readonly tenantId: string;
+  readonly fifoLayerId: string;
+  readonly quantityConsumed: string;
+}
+
 export interface FifoLayerRecord extends CreateFifoLayerInput {}
 
 export interface FifoLayerAllocationCandidateRecord extends FifoLayerRecord {
@@ -53,4 +59,9 @@ export abstract class FifoLayerStore {
     input: LockOpenFifoLayersForAllocationInput,
     client?: DatabaseQueryClient,
   ): Promise<readonly FifoLayerAllocationCandidateRecord[]>;
+
+  abstract decrementRemainingQuantity(
+    input: DecrementFifoLayerRemainingQuantityInput,
+    client?: DatabaseQueryClient,
+  ): Promise<FifoLayerRecord | null>;
 }

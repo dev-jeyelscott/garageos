@@ -6,6 +6,7 @@ import type { DatabaseQueryClient } from '../../../shared/database/database-clie
 import {
   FIFO_LAYER_SOURCE_TRANSACTION_TYPE_VALUES,
   FifoLayerStore,
+  type DecrementFifoLayerRemainingQuantityInput,
   type FifoLayerAllocationCandidateRecord,
   type FifoLayerRecord,
   type FifoLayerSourceTransactionType,
@@ -34,6 +35,12 @@ export interface LockOpenFifoLayersForAllocationCommand {
   readonly tenantId: string;
   readonly branchId: string;
   readonly productId: string;
+}
+
+export interface DecrementFifoLayerRemainingQuantityCommand {
+  readonly tenantId: string;
+  readonly fifoLayerId: string;
+  readonly quantityConsumed: string;
 }
 
 @Injectable()
@@ -66,6 +73,15 @@ export class FifoLayerService {
 
     return this.fifoLayerStore.lockOpenLayersForAllocation(input, client);
   }
+
+  async decrementRemainingQuantity(
+    command: DecrementFifoLayerRemainingQuantityCommand,
+    client?: DatabaseQueryClient,
+  ): Promise<FifoLayerRecord | null> {
+    const input = normalizeDecrementFifoLayerRemainingQuantityCommand(command);
+
+    return this.fifoLayerStore.decrementRemainingQuantity(input, client);
+  }
 }
 
 function normalizeCreateFifoLayerCommand(
@@ -97,6 +113,16 @@ function normalizeLockOpenFifoLayersCommand(
     tenantId: normalizeUuid(command.tenantId, 'tenant_id'),
     branchId: normalizeUuid(command.branchId, 'branch_id'),
     productId: normalizeUuid(command.productId, 'product_id'),
+  };
+}
+
+function normalizeDecrementFifoLayerRemainingQuantityCommand(
+  command: DecrementFifoLayerRemainingQuantityCommand,
+): DecrementFifoLayerRemainingQuantityInput {
+  return {
+    tenantId: normalizeUuid(command.tenantId, 'tenant_id'),
+    fifoLayerId: normalizeUuid(command.fifoLayerId, 'fifo_layer_id'),
+    quantityConsumed: normalizePositiveQuantity(command.quantityConsumed, 'quantity_consumed'),
   };
 }
 

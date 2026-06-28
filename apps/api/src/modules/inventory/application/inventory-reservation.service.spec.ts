@@ -10,6 +10,7 @@ import { FifoLayerService } from './fifo-layer.service';
 import {
   FifoLayerStore,
   type CreateFifoLayerInput,
+  type DecrementFifoLayerRemainingQuantityInput,
   type FifoLayerAllocationCandidateRecord,
   type FifoLayerRecord,
   type LockOpenFifoLayersForAllocationInput,
@@ -18,6 +19,8 @@ import {
   FifoReservationAllocationStore,
   type CreateFifoReservationAllocationInput,
   type FifoReservationAllocationRecord,
+  type ConsumeFifoReservationAllocationsInput,
+  type LockFifoReservationAllocationsInput,
   type ReleaseFifoReservationAllocationsInput,
 } from './fifo-reservation-allocation.store';
 import { InventoryLedgerService } from './inventory-ledger.service';
@@ -33,6 +36,7 @@ import {
   type CreateInventoryReservationInput,
   type InventoryReservationRecord,
   type LockInventoryReservationInput,
+  type ConsumeInventoryReservationInput,
   type ReleaseInventoryReservationInput,
 } from './inventory-reservation.store';
 import { InventoryStockBalancesService } from './inventory-stock-balances.service';
@@ -41,10 +45,15 @@ import {
   type DecrementReservedQuantityInput,
   type GetStockAvailabilityInput,
   type IncrementReservedQuantityInput,
-  type ListStockBalancesInput,
+  type DecrementOnHandAndReservedQuantityInput,
   type StockAvailabilityRecord,
   type StockBalanceRecord,
 } from './stock-balance.store';
+import {
+  FifoConsumptionStore,
+  type CreateFifoConsumptionInput,
+  type FifoConsumptionRecord,
+} from './fifo-consumption.store';
 
 const TENANT_ID = '11111111-1111-4111-8111-111111111111';
 const BRANCH_ID = '22222222-2222-4222-8222-222222222222';
@@ -53,6 +62,7 @@ const PRODUCT_ID = '55555555-5555-4555-8555-555555555555';
 const SOURCE_ID = '66666666-6666-4666-8666-666666666666';
 const RESERVATION_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const RELEASED_AT = new Date('2026-06-28T13:00:00.000Z');
+const CONSUMED_AT = new Date('2026-06-28T14:00:00.000Z');
 const FIFO_LAYER_ID_1 = '77777777-7777-4777-8777-777777777777';
 const FIFO_LAYER_ID_2 = '88888888-8888-4888-8888-888888888888';
 const FIFO_SOURCE_ID = '99999999-9999-4999-8999-999999999999';
@@ -635,6 +645,308 @@ describe('InventoryReservationService', () => {
     expect(transactionRunner.runCount).toBe(0);
   });
 
+  it('consumes an active reservation, creates FIFO consumptions, decrements stock and layers, and writes a consumption ledger entry', async () => {
+    const {
+      service,
+      transactionRunner,
+      stockStore,
+      reservationStore,
+      fifoLayerStore,
+      fifoReservationAllocationStore,
+      fifoConsumptionStore,
+      ledgerStore,
+    } = createService();
+
+    reservationStore.activeReservation = createInventoryReservationRecord({
+      id: RESERVATION_ID,
+      reservedQuantity: '2.000',
+    });
+    stockStore.decrementedConsumedStockAvailability = createStockAvailabilityRecord({
+      onHandQty: '8.000',
+      reservedQty: '1.000',
+      availableQty: '7.000',
+      lockVersion: 3,
+    });
+    fifoLayerStore.allocationCandidates = [
+      createFifoLayerAllocationCandidateRecord({
+        id: FIFO_LAYER_ID_1,
+        remainingQuantity: '5.000',
+        unitCost: '100.00',
+      }),
+      createFifoLayerAllocationCandidateRecord({
+        id: FIFO_LAYER_ID_2,
+        remainingQuantity: '5.000',
+        unitCost: '110.00',
+      }),
+    ];
+    fifoReservationAllocationStore.activeAllocations = [
+      createFifoReservationAllocationRecord({
+        id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        reservationId: RESERVATION_ID,
+        fifoLayerId: FIFO_LAYER_ID_1,
+        reservedQuantity: '1.500',
+        unitCostSnapshot: '100.00',
+      }),
+      createFifoReservationAllocationRecord({
+        id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        reservationId: RESERVATION_ID,
+        fifoLayerId: FIFO_LAYER_ID_2,
+        reservedQuantity: '0.500',
+        unitCostSnapshot: '110.00',
+      }),
+    ];
+
+    const result = await service.consumeInventory({
+      tenantId: TENANT_ID,
+      reservationId: RESERVATION_ID,
+      transactionType: INVENTORY_TRANSACTION_TYPES.JOB_ORDER_CONSUMPTION,
+      consumedAt: CONSUMED_AT,
+      consumedByUserId: USER_ID,
+    });
+
+    expect(transactionRunner.runCount).toBe(1);
+    expect(reservationStore.lockActiveReservationInputs).toEqual([
+      {
+        tenantId: TENANT_ID,
+        reservationId: RESERVATION_ID,
+      },
+    ]);
+    expect(
+      fifoReservationAllocationStore.lockActiveAllocationsByReservationForUpdateInputs,
+    ).toEqual([
+      {
+        tenantId: TENANT_ID,
+        reservationId: RESERVATION_ID,
+      },
+    ]);
+    expect(stockStore.decrementOnHandAndReservedQuantityInputs).toEqual([
+      {
+        tenantId: TENANT_ID,
+        branchId: BRANCH_ID,
+        productId: PRODUCT_ID,
+        quantityConsumed: '2.000',
+      },
+    ]);
+    expect(fifoLayerStore.decrementRemainingQuantityInputs).toEqual([
+      {
+        tenantId: TENANT_ID,
+        fifoLayerId: FIFO_LAYER_ID_1,
+        quantityConsumed: '1.500',
+      },
+      {
+        tenantId: TENANT_ID,
+        fifoLayerId: FIFO_LAYER_ID_2,
+        quantityConsumed: '0.500',
+      },
+    ]);
+    expect(fifoConsumptionStore.createConsumptionInputs).toMatchObject([
+      {
+        tenantId: TENANT_ID,
+        branchId: BRANCH_ID,
+        productId: PRODUCT_ID,
+        fifoLayerId: FIFO_LAYER_ID_1,
+        quantityConsumed: '1.500',
+        unitCost: '100.00',
+        totalCost: '150.00',
+        sourceType: 'job_order_line',
+        sourceId: SOURCE_ID,
+        consumedAt: CONSUMED_AT,
+      },
+      {
+        tenantId: TENANT_ID,
+        branchId: BRANCH_ID,
+        productId: PRODUCT_ID,
+        fifoLayerId: FIFO_LAYER_ID_2,
+        quantityConsumed: '0.500',
+        unitCost: '110.00',
+        totalCost: '55.00',
+        sourceType: 'job_order_line',
+        sourceId: SOURCE_ID,
+        consumedAt: CONSUMED_AT,
+      },
+    ]);
+    expect(fifoReservationAllocationStore.markActiveAllocationsConsumedByReservationInputs).toEqual(
+      [
+        {
+          tenantId: TENANT_ID,
+          reservationId: RESERVATION_ID,
+          allocationIds: [
+            'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+            'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+          ],
+          consumedAt: CONSUMED_AT,
+        },
+      ],
+    );
+    expect(reservationStore.markReservationConsumedInputs).toEqual([
+      {
+        tenantId: TENANT_ID,
+        reservationId: RESERVATION_ID,
+        consumedAt: CONSUMED_AT,
+      },
+    ]);
+    expect(ledgerStore.createLedgerEntryInputs).toHaveLength(1);
+    expect(ledgerStore.createLedgerEntryInputs[0]).toMatchObject({
+      tenantId: TENANT_ID,
+      branchId: BRANCH_ID,
+      productId: PRODUCT_ID,
+      transactionType: INVENTORY_TRANSACTION_TYPES.JOB_ORDER_CONSUMPTION,
+      quantityDeltaOnHand: '-2.000',
+      quantityDeltaReserved: '-2.000',
+      unitCost: null,
+      totalCost: '205.00',
+      sourceType: 'job_order_line',
+      sourceId: SOURCE_ID,
+      occurredAt: CONSUMED_AT,
+      createdByUserId: USER_ID,
+    });
+    expect(result.reservation).toMatchObject({
+      id: RESERVATION_ID,
+      reservedQuantity: '0.000',
+      status: 'consumed',
+      consumedAt: CONSUMED_AT,
+    });
+    expect(result.fifoAllocations).toMatchObject([
+      {
+        reservationId: RESERVATION_ID,
+        fifoLayerId: FIFO_LAYER_ID_1,
+        status: 'consumed',
+        consumedAt: CONSUMED_AT,
+      },
+      {
+        reservationId: RESERVATION_ID,
+        fifoLayerId: FIFO_LAYER_ID_2,
+        status: 'consumed',
+        consumedAt: CONSUMED_AT,
+      },
+    ]);
+    expect(result.fifoConsumptions).toMatchObject([
+      {
+        fifoLayerId: FIFO_LAYER_ID_1,
+        quantityConsumed: '1.500',
+        totalCost: '150.00',
+      },
+      {
+        fifoLayerId: FIFO_LAYER_ID_2,
+        quantityConsumed: '0.500',
+        totalCost: '55.00',
+      },
+    ]);
+    expect(result.totalCost).toBe('205.00');
+    expect(result.stockAvailability).toMatchObject({
+      tenant_id: TENANT_ID,
+      branch_id: BRANCH_ID,
+      product_id: PRODUCT_ID,
+      on_hand_qty: '8.000',
+      reserved_qty: '1.000',
+      available_qty: '7.000',
+      lock_version: 3,
+    });
+  });
+
+  it('blocks consumption when reservation is missing or not active', async () => {
+    const {
+      service,
+      stockStore,
+      fifoReservationAllocationStore,
+      fifoConsumptionStore,
+      ledgerStore,
+    } = createService();
+
+    await expect(
+      service.consumeInventory({
+        tenantId: TENANT_ID,
+        reservationId: RESERVATION_ID,
+        transactionType: INVENTORY_TRANSACTION_TYPES.JOB_ORDER_CONSUMPTION,
+        consumedAt: CONSUMED_AT,
+        consumedByUserId: USER_ID,
+      }),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.WORKFLOW_TRANSITION_BLOCKED,
+      details: [
+        {
+          field: 'reservation_id',
+          code: 'reservation_not_active',
+        },
+      ],
+    });
+
+    expect(stockStore.decrementOnHandAndReservedQuantityInputs).toEqual([]);
+    expect(
+      fifoReservationAllocationStore.lockActiveAllocationsByReservationForUpdateInputs,
+    ).toEqual([]);
+    expect(fifoConsumptionStore.createConsumptionInputs).toEqual([]);
+    expect(ledgerStore.createLedgerEntryInputs).toEqual([]);
+  });
+
+  it('blocks consumption when active FIFO allocations do not match reserved quantity', async () => {
+    const {
+      service,
+      stockStore,
+      reservationStore,
+      fifoReservationAllocationStore,
+      fifoConsumptionStore,
+      ledgerStore,
+    } = createService();
+
+    reservationStore.activeReservation = createInventoryReservationRecord({
+      id: RESERVATION_ID,
+      reservedQuantity: '2.000',
+    });
+    fifoReservationAllocationStore.activeAllocations = [
+      createFifoReservationAllocationRecord({
+        id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        reservedQuantity: '1.000',
+      }),
+    ];
+
+    await expect(
+      service.consumeInventory({
+        tenantId: TENANT_ID,
+        reservationId: RESERVATION_ID,
+        transactionType: INVENTORY_TRANSACTION_TYPES.JOB_ORDER_CONSUMPTION,
+        consumedAt: CONSUMED_AT,
+        consumedByUserId: USER_ID,
+      }),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.FIFO_ALLOCATION_CONFLICT,
+      details: [
+        {
+          field: 'reservation_id',
+          code: 'fifo_allocation_quantity_mismatch',
+        },
+      ],
+    });
+
+    expect(stockStore.decrementOnHandAndReservedQuantityInputs).toEqual([]);
+    expect(fifoConsumptionStore.createConsumptionInputs).toEqual([]);
+    expect(ledgerStore.createLedgerEntryInputs).toEqual([]);
+  });
+
+  it('rejects unsupported reservation consumption transaction types before opening a transaction', async () => {
+    const { service, transactionRunner } = createService();
+
+    await expect(
+      service.consumeInventory({
+        tenantId: TENANT_ID,
+        reservationId: RESERVATION_ID,
+        transactionType: INVENTORY_TRANSACTION_TYPES.RESERVATION_RELEASE,
+        consumedAt: CONSUMED_AT,
+        consumedByUserId: USER_ID,
+      }),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.VALIDATION_FAILED,
+      details: [
+        {
+          field: 'transaction_type',
+          code: 'unsupported_inventory_reservation_consumption_transaction_type',
+        },
+      ],
+    });
+
+    expect(transactionRunner.runCount).toBe(0);
+  });
+
   it('requires requested quantity to be greater than zero', async () => {
     const { service, transactionRunner } = createService();
 
@@ -672,6 +984,7 @@ function createService(): {
   readonly reservationStore: FakeInventoryReservationStore;
   readonly fifoReservationAllocationStore: FakeFifoReservationAllocationStore;
   readonly ledgerStore: FakeInventoryLedgerStore;
+  readonly fifoConsumptionStore: FakeFifoConsumptionStore;
 } {
   const transactionRunner = new FakeTransactionRunner();
   const stockStore = new FakeStockBalanceStore();
@@ -682,6 +995,7 @@ function createService(): {
   const stockBalancesService = new InventoryStockBalancesService(stockStore);
   const fifoLayerService = new FifoLayerService(fifoLayerStore);
   const ledgerService = new InventoryLedgerService(ledgerStore);
+  const fifoConsumptionStore = new FakeFifoConsumptionStore();
 
   return {
     service: new InventoryReservationService(
@@ -689,12 +1003,14 @@ function createService(): {
       stockBalancesService,
       fifoLayerService,
       fifoReservationAllocationStore,
+      fifoConsumptionStore,
       stockStore,
       ledgerService,
       transactionRunner,
     ),
     transactionRunner,
     stockStore,
+    fifoConsumptionStore,
     fifoLayerStore,
     reservationStore,
     fifoReservationAllocationStore,
@@ -791,10 +1107,12 @@ class FakeStockBalanceStore extends StockBalanceStore {
   stockAvailability: StockAvailabilityRecord | null = null;
   incrementedStockAvailability: StockAvailabilityRecord | null = null;
   decrementedStockAvailability: StockAvailabilityRecord | null = null;
+  decrementedConsumedStockAvailability: StockAvailabilityRecord | null = null;
 
   readonly lockAvailabilityInputs: GetStockAvailabilityInput[] = [];
   readonly incrementReservedQuantityInputs: IncrementReservedQuantityInput[] = [];
   readonly decrementReservedQuantityInputs: DecrementReservedQuantityInput[] = [];
+  readonly decrementOnHandAndReservedQuantityInputs: DecrementOnHandAndReservedQuantityInput[] = [];
 
   async isActiveShopOwner(): Promise<boolean> {
     return false;
@@ -831,6 +1149,14 @@ class FakeStockBalanceStore extends StockBalanceStore {
 
     return this.decrementedStockAvailability;
   }
+
+  async decrementOnHandAndReservedQuantity(
+    input: DecrementOnHandAndReservedQuantityInput,
+  ): Promise<StockAvailabilityRecord | null> {
+    this.decrementOnHandAndReservedQuantityInputs.push(input);
+
+    return this.decrementedConsumedStockAvailability;
+  }
 }
 
 class FakeFifoLayerStore extends FifoLayerStore {
@@ -839,6 +1165,7 @@ class FakeFifoLayerStore extends FifoLayerStore {
   ];
 
   readonly lockOpenLayersForAllocationInputs: LockOpenFifoLayersForAllocationInput[] = [];
+  readonly decrementRemainingQuantityInputs: DecrementFifoLayerRemainingQuantityInput[] = [];
 
   async createLayer(input: CreateFifoLayerInput): Promise<FifoLayerRecord> {
     return input;
@@ -851,6 +1178,16 @@ class FakeFifoLayerStore extends FifoLayerStore {
 
     return this.allocationCandidates;
   }
+
+  async decrementRemainingQuantity(
+    input: DecrementFifoLayerRemainingQuantityInput,
+  ): Promise<FifoLayerRecord | null> {
+    this.decrementRemainingQuantityInputs.push(input);
+
+    const layer = this.allocationCandidates.find((candidate) => candidate.id === input.fifoLayerId);
+
+    return layer ?? null;
+  }
 }
 
 class FakeInventoryReservationStore extends InventoryReservationStore {
@@ -859,6 +1196,7 @@ class FakeInventoryReservationStore extends InventoryReservationStore {
   readonly createReservationInputs: CreateInventoryReservationInput[] = [];
   readonly lockActiveReservationInputs: LockInventoryReservationInput[] = [];
   readonly markReservationReleasedInputs: ReleaseInventoryReservationInput[] = [];
+  readonly markReservationConsumedInputs: ConsumeInventoryReservationInput[] = [];
 
   async createReservation(
     input: CreateInventoryReservationInput,
@@ -896,6 +1234,27 @@ class FakeInventoryReservationStore extends InventoryReservationStore {
 
     return releasedReservation;
   }
+
+  async markReservationConsumed(
+    input: ConsumeInventoryReservationInput,
+  ): Promise<InventoryReservationRecord | null> {
+    this.markReservationConsumedInputs.push(input);
+
+    if (this.activeReservation === null) {
+      return null;
+    }
+
+    const consumedReservation: InventoryReservationRecord = {
+      ...this.activeReservation,
+      reservedQuantity: '0.000',
+      status: 'consumed',
+      consumedAt: input.consumedAt,
+    };
+
+    this.activeReservation = consumedReservation;
+
+    return consumedReservation;
+  }
 }
 
 class FakeFifoReservationAllocationStore extends FifoReservationAllocationStore {
@@ -905,6 +1264,10 @@ class FakeFifoReservationAllocationStore extends FifoReservationAllocationStore 
 
   readonly createAllocationInputs: CreateFifoReservationAllocationInput[] = [];
   readonly releaseActiveAllocationsByReservationInputs: ReleaseFifoReservationAllocationsInput[] =
+    [];
+  readonly lockActiveAllocationsByReservationForUpdateInputs: LockFifoReservationAllocationsInput[] =
+    [];
+  readonly markActiveAllocationsConsumedByReservationInputs: ConsumeFifoReservationAllocationsInput[] =
     [];
 
   async createAllocations(
@@ -925,6 +1288,40 @@ class FakeFifoReservationAllocationStore extends FifoReservationAllocationStore 
       status: 'released',
       releasedAt: input.releasedAt,
     }));
+  }
+
+  async lockActiveAllocationsByReservationForUpdate(
+    input: LockFifoReservationAllocationsInput,
+  ): Promise<readonly FifoReservationAllocationRecord[]> {
+    this.lockActiveAllocationsByReservationForUpdateInputs.push(input);
+
+    return this.activeAllocations;
+  }
+
+  async markActiveAllocationsConsumedByReservation(
+    input: ConsumeFifoReservationAllocationsInput,
+  ): Promise<readonly FifoReservationAllocationRecord[]> {
+    this.markActiveAllocationsConsumedByReservationInputs.push(input);
+
+    return this.activeAllocations
+      .filter((allocation) => input.allocationIds.includes(allocation.id))
+      .map((allocation) => ({
+        ...allocation,
+        status: 'consumed',
+        consumedAt: input.consumedAt,
+      }));
+  }
+}
+
+class FakeFifoConsumptionStore extends FifoConsumptionStore {
+  readonly createConsumptionInputs: CreateFifoConsumptionInput[] = [];
+
+  async createConsumptions(
+    inputs: readonly CreateFifoConsumptionInput[],
+  ): Promise<readonly FifoConsumptionRecord[]> {
+    this.createConsumptionInputs.push(...inputs);
+
+    return inputs;
   }
 }
 

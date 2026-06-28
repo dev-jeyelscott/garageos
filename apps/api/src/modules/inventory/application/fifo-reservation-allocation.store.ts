@@ -31,6 +31,18 @@ export interface ReleaseFifoReservationAllocationsInput {
   readonly releasedAt: Date;
 }
 
+export interface LockFifoReservationAllocationsInput {
+  readonly tenantId: string;
+  readonly reservationId: string;
+}
+
+export interface ConsumeFifoReservationAllocationsInput {
+  readonly tenantId: string;
+  readonly reservationId: string;
+  readonly allocationIds: readonly string[];
+  readonly consumedAt: Date;
+}
+
 export interface FifoReservationAllocationRecord extends CreateFifoReservationAllocationInput {}
 
 export abstract class FifoReservationAllocationStore {
@@ -41,6 +53,16 @@ export abstract class FifoReservationAllocationStore {
 
   abstract releaseActiveAllocationsByReservation(
     input: ReleaseFifoReservationAllocationsInput,
+    client?: DatabaseQueryClient,
+  ): Promise<readonly FifoReservationAllocationRecord[]>;
+
+  abstract lockActiveAllocationsByReservationForUpdate(
+    input: LockFifoReservationAllocationsInput,
+    client?: DatabaseQueryClient,
+  ): Promise<readonly FifoReservationAllocationRecord[]>;
+
+  abstract markActiveAllocationsConsumedByReservation(
+    input: ConsumeFifoReservationAllocationsInput,
     client?: DatabaseQueryClient,
   ): Promise<readonly FifoReservationAllocationRecord[]>;
 }

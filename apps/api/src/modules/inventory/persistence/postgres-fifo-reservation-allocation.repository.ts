@@ -10,9 +10,11 @@ import {
   FIFO_ALLOCATION_STATUSES,
   FIFO_ALLOCATION_STATUS_VALUES,
   FifoReservationAllocationStore,
+  type ConsumeFifoReservationAllocationsInput,
   type CreateFifoReservationAllocationInput,
   type FifoAllocationStatus,
   type FifoReservationAllocationRecord,
+  type LockFifoReservationAllocationsInput,
   type ReleaseFifoReservationAllocationsInput,
 } from '../application/fifo-reservation-allocation.store';
 
@@ -81,6 +83,82 @@ export class PostgresFifoReservationAllocationRepository extends FifoReservation
         input.reservationId,
         FIFO_ALLOCATION_STATUSES.RELEASED,
         input.releasedAt,
+        FIFO_ALLOCATION_STATUSES.ACTIVE,
+      ],
+    );
+
+    return result.rows.map(mapFifoReservationAllocationRow);
+  }
+
+  async lockActiveAllocationsByReservationForUpdate(
+    input: LockFifoReservationAllocationsInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<readonly FifoReservationAllocationRecord[]> {
+    const result = await client.query<FifoReservationAllocationRow>(
+      `
+        select
+          allocation.id,
+          allocation.tenant_id,
+          allocation.reservation_id,
+          allocation.fifo_layer_id,
+          allocation.reserved_quantity::text,
+          allocation.unit_cost_snapshot::text,
+          allocation.status,
+          allocation.allocated_at,
+          allocation.released_at,
+          allocation.consumed_at
+        from fifo_reservation_allocations allocation
+        inner join fifo_layers layer
+          on layer.tenant_id = allocation.tenant_id
+         and layer.id = allocation.fifo_layer_id
+        where allocation.tenant_id = $1::uuid
+          and allocation.reservation_id = $2::uuid
+          and allocation.status = $3
+        order by layer.received_at asc, layer.id asc, allocation.id asc
+        for update of allocation, layer
+      `,
+      [input.tenantId, input.reservationId, FIFO_ALLOCATION_STATUSES.ACTIVE],
+    );
+
+    return result.rows.map(mapFifoReservationAllocationRow);
+  }
+
+  async markActiveAllocationsConsumedByReservation(
+    input: ConsumeFifoReservationAllocationsInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<readonly FifoReservationAllocationRecord[]> {
+    if (input.allocationIds.length === 0) {
+      return [];
+    }
+
+    const result = await client.query<FifoReservationAllocationRow>(
+      `
+        update fifo_reservation_allocations
+        set
+          status = $4,
+          consumed_at = $5::timestamptz
+        where tenant_id = $1::uuid
+          and reservation_id = $2::uuid
+          and id = any($3::uuid[])
+          and status = $6
+        returning
+          id,
+          tenant_id,
+          reservation_id,
+          fifo_layer_id,
+          reserved_quantity::text,
+          unit_cost_snapshot::text,
+          status,
+          allocated_at,
+          released_at,
+          consumed_at
+      `,
+      [
+        input.tenantId,
+        input.reservationId,
+        input.allocationIds,
+        FIFO_ALLOCATION_STATUSES.CONSUMED,
+        input.consumedAt,
         FIFO_ALLOCATION_STATUSES.ACTIVE,
       ],
     );

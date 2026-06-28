@@ -36,6 +36,10 @@ export interface ReleaseInventoryReservationInput extends LockInventoryReservati
   readonly releasedAt: Date;
 }
 
+export interface ConsumeInventoryReservationInput extends LockInventoryReservationInput {
+  readonly consumedAt: Date;
+}
+
 export interface InventoryReservationRecord extends CreateInventoryReservationInput {}
 
 export abstract class InventoryReservationStore {
@@ -51,6 +55,11 @@ export abstract class InventoryReservationStore {
 
   abstract markReservationReleased(
     input: ReleaseInventoryReservationInput,
+    client?: DatabaseQueryClient,
+  ): Promise<InventoryReservationRecord | null>;
+
+  abstract markReservationConsumed(
+    input: ConsumeInventoryReservationInput,
     client?: DatabaseQueryClient,
   ): Promise<InventoryReservationRecord | null>;
 }

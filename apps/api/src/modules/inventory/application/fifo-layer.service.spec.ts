@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { API_ERROR_CODES } from '../../../shared/api/api-error-code';
 import type { DatabaseQueryClient } from '../../../shared/database/database-client';
 import {
+  DecrementFifoLayerRemainingQuantityInput,
   FIFO_LAYER_SOURCE_TRANSACTION_TYPES,
   FifoLayerStore,
   type CreateFifoLayerInput,
@@ -240,6 +241,7 @@ class FakeFifoLayerStore extends FifoLayerStore {
   readonly lockInputs: LockOpenFifoLayersForAllocationInput[] = [];
   readonly lockClients: (DatabaseQueryClient | undefined)[] = [];
   lockedCandidates: FifoLayerAllocationCandidateRecord[] = [];
+  readonly decrementRemainingQuantityInputs: DecrementFifoLayerRemainingQuantityInput[] = [];
 
   async createLayer(
     input: CreateFifoLayerInput,
@@ -266,4 +268,36 @@ class FakeFifoLayerStore extends FifoLayerStore {
 
     return this.lockedCandidates;
   }
+
+  async decrementRemainingQuantity(
+    input: DecrementFifoLayerRemainingQuantityInput,
+  ): Promise<FifoLayerRecord | null> {
+    this.decrementRemainingQuantityInputs.push(input);
+
+    const layer = this.lockedCandidates.find((candidate) => candidate.id === input.fifoLayerId);
+
+    if (layer === undefined) {
+      return null;
+    }
+
+    return {
+      id: layer.id,
+      tenantId: layer.tenantId,
+      branchId: layer.branchId,
+      productId: layer.productId,
+      quantityReceived: layer.quantityReceived,
+      remainingQuantity: subtractQuantity(layer.remainingQuantity, input.quantityConsumed),
+      unitCost: layer.unitCost,
+      sourceTransactionType: layer.sourceTransactionType,
+      sourceTransactionId: layer.sourceTransactionId,
+      receivedAt: layer.receivedAt,
+      originalSourceLayerId: layer.originalSourceLayerId,
+    };
+  }
+}
+
+function subtractQuantity(left: string, right: string): string {
+  const result = Number.parseFloat(left) - Number.parseFloat(right);
+
+  return result.toFixed(3);
 }

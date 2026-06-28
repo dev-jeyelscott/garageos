@@ -10,6 +10,7 @@ import {
   FIFO_LAYER_SOURCE_TRANSACTION_TYPE_VALUES,
   FifoLayerStore,
   type CreateFifoLayerInput,
+  type DecrementFifoLayerRemainingQuantityInput,
   type FifoLayerAllocationCandidateRecord,
   type FifoLayerRecord,
   type FifoLayerSourceTransactionType,
@@ -173,6 +174,38 @@ export class PostgresFifoLayerRepository extends FifoLayerStore {
     );
 
     return result.rows.map(mapFifoLayerAllocationCandidateRow);
+  }
+
+  async decrementRemainingQuantity(
+    input: DecrementFifoLayerRemainingQuantityInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<FifoLayerRecord | null> {
+    const result = await client.query<FifoLayerRow>(
+      `
+        update fifo_layers
+        set remaining_quantity = remaining_quantity - $3::numeric(14,3)
+        where tenant_id = $1::uuid
+          and id = $2::uuid
+          and remaining_quantity >= $3::numeric(14,3)
+        returning
+          id,
+          tenant_id,
+          branch_id,
+          product_id,
+          quantity_received::text,
+          remaining_quantity::text,
+          unit_cost::text,
+          source_transaction_type,
+          source_transaction_id,
+          received_at,
+          original_source_layer_id
+      `,
+      [input.tenantId, input.fifoLayerId, input.quantityConsumed],
+    );
+
+    const [row] = result.rows;
+
+    return row === undefined ? null : mapFifoLayerRow(row);
   }
 }
 
