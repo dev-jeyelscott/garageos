@@ -11,6 +11,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { BranchModule } from './modules/branches/branch.module';
 import { CustomersModule } from './modules/customers/customers.module';
 import { EmployeesModule } from './modules/employees/employees.module';
+import { EstimatesModule } from './modules/estimates/estimates.module';
 import { MotorcyclesModule } from './modules/motorcycles/motorcycles.module';
 import { ProductCategoriesModule } from './modules/product-categories/product-categories.module';
 import { ServicesModule } from './modules/services/services.module';
@@ -40,6 +41,7 @@ export class HealthController {
     ShopModule,
     BranchModule,
     EmployeesModule,
+    EstimatesModule,
     CustomersModule,
     MotorcyclesModule,
     ServicesModule,

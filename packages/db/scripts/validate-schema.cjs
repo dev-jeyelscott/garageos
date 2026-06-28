@@ -9,7 +9,7 @@ require('dotenv').config({
 const DATABASE_URL = process.env.DATABASE_URL;
 
 const EXPECTED = {
-  migrationCount: 19,
+  migrationCount: 20,
   publicTableCount: 106,
   subscriptionPlans: 3,
   subscriptionPlanLimits: 27,
@@ -234,6 +234,105 @@ async function validateProductCategoriesSchema(client) {
   assertEqual('product categories tenant status index', tenantStatusIndexCount, 1);
 }
 
+async function validateEstimatesBaselineSchema(client) {
+  const estimateColumnCount = await count(
+    client,
+    `
+      select count(*)
+      from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'estimates'
+        and column_name in (
+          'id',
+          'tenant_id',
+          'branch_id',
+          'customer_id',
+          'motorcycle_id',
+          'estimate_number',
+          'status',
+          'valid_until_date',
+          'approval_method',
+          'approved_by_customer_name',
+          'approved_at',
+          'converted_job_order_id',
+          'created_by_user_id',
+          'created_at',
+          'updated_at',
+          'updated_by_user_id',
+          'lock_version'
+        )
+    `,
+  );
+
+  const estimateLineColumnCount = await count(
+    client,
+    `
+      select count(*)
+      from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'estimate_lines'
+        and column_name in (
+          'id',
+          'tenant_id',
+          'estimate_id',
+          'line_type',
+          'service_id',
+          'product_id',
+          'description',
+          'quantity',
+          'unit_price',
+          'line_total',
+          'line_order'
+        )
+    `,
+  );
+
+  const estimateStatusConstraintCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_constraint
+      where conname = 'chk_estimates_status'
+    `,
+  );
+
+  const estimateLineTypeConstraintCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_constraint
+      where conname = 'chk_estimate_lines_type'
+    `,
+  );
+
+  const estimateBranchStatusIndexCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_indexes
+      where schemaname = 'public'
+        and indexname = 'idx_estimates_branch_status'
+    `,
+  );
+
+  const estimateLineOrderIndexCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_indexes
+      where schemaname = 'public'
+        and indexname = 'idx_estimate_lines_estimate_order'
+    `,
+  );
+
+  assertEqual('estimates baseline columns', estimateColumnCount, 17);
+  assertEqual('estimate lines baseline columns', estimateLineColumnCount, 11);
+  assertEqual('estimates status constraint', estimateStatusConstraintCount, 1);
+  assertEqual('estimate lines type constraint', estimateLineTypeConstraintCount, 1);
+  assertEqual('estimates branch status index', estimateBranchStatusIndexCount, 1);
+  assertEqual('estimate lines estimate order index', estimateLineOrderIndexCount, 1);
+}
+
 async function validateMoneyPrecision(client) {
   const result = await client.query(`
     select table_name, column_name, numeric_precision, numeric_scale
@@ -315,6 +414,7 @@ async function main() {
     await validateTenantDuplicateApprovalSchema(client);
     await validateRoleManagementSchema(client);
     await validateProductCategoriesSchema(client);
+    await validateEstimatesBaselineSchema(client);
     await validateMoneyPrecision(client);
     await validateQuantityPrecision(client);
 
