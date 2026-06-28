@@ -27,6 +27,15 @@ export interface CreateInventoryReservationInput {
   readonly consumedAt: Date | null;
 }
 
+export interface LockInventoryReservationInput {
+  readonly tenantId: string;
+  readonly reservationId: string;
+}
+
+export interface ReleaseInventoryReservationInput extends LockInventoryReservationInput {
+  readonly releasedAt: Date;
+}
+
 export interface InventoryReservationRecord extends CreateInventoryReservationInput {}
 
 export abstract class InventoryReservationStore {
@@ -34,4 +43,14 @@ export abstract class InventoryReservationStore {
     input: CreateInventoryReservationInput,
     client?: DatabaseQueryClient,
   ): Promise<InventoryReservationRecord>;
+
+  abstract lockActiveReservationForUpdate(
+    input: LockInventoryReservationInput,
+    client?: DatabaseQueryClient,
+  ): Promise<InventoryReservationRecord | null>;
+
+  abstract markReservationReleased(
+    input: ReleaseInventoryReservationInput,
+    client?: DatabaseQueryClient,
+  ): Promise<InventoryReservationRecord | null>;
 }

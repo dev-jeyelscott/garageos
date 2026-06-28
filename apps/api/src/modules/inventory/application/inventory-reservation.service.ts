@@ -43,7 +43,15 @@ const RESERVATION_TRANSACTION_TYPES = [
   INVENTORY_TRANSACTION_TYPES.INVENTORY_TRANSFER_RESERVATION,
 ] as const;
 
+const RESERVATION_RELEASE_TRANSACTION_TYPES = [
+  INVENTORY_TRANSACTION_TYPES.RESERVATION_RELEASE,
+  INVENTORY_TRANSACTION_TYPES.INVENTORY_TRANSFER_RESERVATION_RELEASE,
+] as const;
+
 export type InventoryReservationTransactionType = (typeof RESERVATION_TRANSACTION_TYPES)[number];
+
+export type InventoryReservationReleaseTransactionType =
+  (typeof RESERVATION_RELEASE_TRANSACTION_TYPES)[number];
 
 export interface ReserveInventoryCommand {
   readonly tenantId: string;
@@ -64,6 +72,21 @@ export interface InventoryReservationCommandResult {
   readonly ledgerEntry: InventoryLedgerEntryRecord;
 }
 
+export interface ReleaseInventoryReservationCommand {
+  readonly tenantId: string;
+  readonly reservationId: string;
+  readonly transactionType: InventoryReservationReleaseTransactionType | string;
+  readonly releasedAt?: Date;
+  readonly releasedByUserId?: string | null;
+}
+
+export interface InventoryReservationReleaseCommandResult {
+  readonly reservation: InventoryReservationRecord;
+  readonly fifoAllocations: readonly FifoReservationAllocationRecord[];
+  readonly stockAvailability: StockAvailabilitySnapshot;
+  readonly ledgerEntry: InventoryLedgerEntryRecord;
+}
+
 interface NormalizedReserveInventoryCommand {
   readonly tenantId: string;
   readonly branchId: string;
@@ -74,6 +97,14 @@ interface NormalizedReserveInventoryCommand {
   readonly transactionType: InventoryReservationTransactionType;
   readonly reservedAt: Date;
   readonly createdByUserId: string | null;
+}
+
+interface NormalizedReleaseInventoryReservationCommand {
+  readonly tenantId: string;
+  readonly reservationId: string;
+  readonly transactionType: InventoryReservationReleaseTransactionType;
+  readonly releasedAt: Date;
+  readonly releasedByUserId: string | null;
 }
 
 interface BuildFifoReservationAllocationsInput {
@@ -117,6 +148,25 @@ export class InventoryReservationService {
     const input = normalizeReserveInventoryCommand(command);
 
     return this.executeReservation(input, client);
+  }
+
+  async releaseInventory(
+    command: ReleaseInventoryReservationCommand,
+  ): Promise<InventoryReservationReleaseCommandResult> {
+    const input = normalizeReleaseInventoryCommand(command);
+
+    return this.transactionRunner.runInTransaction((transaction) =>
+      this.executeRelease(input, transaction),
+    );
+  }
+
+  async releaseInventoryInTransaction(
+    command: ReleaseInventoryReservationCommand,
+    client: DatabaseQueryClient,
+  ): Promise<InventoryReservationReleaseCommandResult> {
+    const input = normalizeReleaseInventoryCommand(command);
+
+    return this.executeRelease(input, client);
   }
 
   private async executeReservation(
@@ -219,6 +269,116 @@ export class InventoryReservationService {
       ledgerEntry,
     };
   }
+  private async executeRelease(
+    input: NormalizedReleaseInventoryReservationCommand,
+    client: DatabaseQueryClient,
+  ): Promise<InventoryReservationReleaseCommandResult> {
+    const activeReservation = await this.inventoryReservationStore.lockActiveReservationForUpdate(
+      {
+        tenantId: input.tenantId,
+        reservationId: input.reservationId,
+      },
+      client,
+    );
+
+    if (activeReservation === null) {
+      throw GarageOsApiException.workflowTransitionBlocked(
+        'Inventory reservation cannot be released.',
+        [
+          {
+            field: 'reservation_id',
+            code: 'reservation_not_active',
+            message: 'Reservation is not active or does not exist.',
+          },
+        ],
+      );
+    }
+
+    const releasedQuantity = normalizePositiveQuantity(
+      activeReservation.reservedQuantity,
+      'reserved_qty',
+    );
+
+    const updatedStockAvailability = await this.stockBalanceStore.decrementReservedQuantity(
+      {
+        tenantId: activeReservation.tenantId,
+        branchId: activeReservation.branchId,
+        productId: activeReservation.productId,
+        reservedQuantityDelta: releasedQuantity,
+      },
+      client,
+    );
+
+    if (updatedStockAvailability === null) {
+      throw GarageOsApiException.workflowTransitionBlocked(
+        'Inventory reservation release would make reserved stock negative.',
+        [
+          {
+            field: 'reservation_id',
+            code: 'reservation_release_conflict',
+            message: 'Reservation release conflicts with the current stock balance.',
+          },
+        ],
+      );
+    }
+
+    const fifoAllocations =
+      await this.fifoReservationAllocationStore.releaseActiveAllocationsByReservation(
+        {
+          tenantId: activeReservation.tenantId,
+          reservationId: activeReservation.id,
+          releasedAt: input.releasedAt,
+        },
+        client,
+      );
+
+    const releasedReservation = await this.inventoryReservationStore.markReservationReleased(
+      {
+        tenantId: activeReservation.tenantId,
+        reservationId: activeReservation.id,
+        releasedAt: input.releasedAt,
+      },
+      client,
+    );
+
+    if (releasedReservation === null) {
+      throw GarageOsApiException.workflowTransitionBlocked(
+        'Inventory reservation cannot be released.',
+        [
+          {
+            field: 'reservation_id',
+            code: 'reservation_release_conflict',
+            message: 'Reservation status changed before release completed.',
+          },
+        ],
+      );
+    }
+
+    const ledgerEntry = await this.inventoryLedgerService.recordLedgerEntry(
+      {
+        tenantId: activeReservation.tenantId,
+        branchId: activeReservation.branchId,
+        productId: activeReservation.productId,
+        transactionType: input.transactionType,
+        quantityDeltaOnHand: '0.000',
+        quantityDeltaReserved: negateQuantity(releasedQuantity),
+        unitCost: null,
+        totalCost: null,
+        sourceType: activeReservation.sourceType,
+        sourceId: activeReservation.sourceId,
+        occurredAt: input.releasedAt,
+        createdByUserId: input.releasedByUserId,
+      },
+      client,
+    );
+
+    return {
+      reservation: releasedReservation,
+      fifoAllocations,
+      stockAvailability: toStockAvailabilitySnapshot(updatedStockAvailability),
+      ledgerEntry,
+    };
+  }
 }
 
 function normalizeReserveInventoryCommand(
@@ -237,6 +397,21 @@ function normalizeReserveInventoryCommand(
       command.createdByUserId === null || command.createdByUserId === undefined
         ? null
         : normalizeUuid(command.createdByUserId, 'created_by_user_id'),
+  };
+}
+
+function normalizeReleaseInventoryCommand(
+  command: ReleaseInventoryReservationCommand,
+): NormalizedReleaseInventoryReservationCommand {
+  return {
+    tenantId: normalizeUuid(command.tenantId, 'tenant_id'),
+    reservationId: normalizeUuid(command.reservationId, 'reservation_id'),
+    transactionType: normalizeReservationReleaseTransactionType(command.transactionType),
+    releasedAt: normalizeDate(command.releasedAt, 'released_at'),
+    releasedByUserId:
+      command.releasedByUserId === null || command.releasedByUserId === undefined
+        ? null
+        : normalizeUuid(command.releasedByUserId, 'released_by_user_id'),
   };
 }
 
@@ -340,6 +515,24 @@ function normalizeReservationTransactionType(
       field: 'transaction_type',
       code: 'unsupported_inventory_reservation_transaction_type',
       message: 'Inventory reservation transaction type is not supported.',
+    },
+  ]);
+}
+
+function normalizeReservationReleaseTransactionType(
+  value: InventoryTransactionType | string,
+): InventoryReservationReleaseTransactionType {
+  const normalizedValue = normalizeRequiredText(value, 'transaction_type');
+
+  if ((RESERVATION_RELEASE_TRANSACTION_TYPES as readonly string[]).includes(normalizedValue)) {
+    return normalizedValue as InventoryReservationReleaseTransactionType;
+  }
+
+  throw GarageOsApiException.validationFailed([
+    {
+      field: 'transaction_type',
+      code: 'unsupported_inventory_reservation_release_transaction_type',
+      message: 'Inventory reservation release transaction type is not supported.',
     },
   ]);
 }
@@ -454,6 +647,12 @@ function formatQuantityUnits(value: bigint): string {
   const decimalPart = value % 1000n;
 
   return `${wholePart.toString()}.${decimalPart.toString().padStart(3, '0')}`;
+}
+
+function negateQuantity(value: string): string {
+  const quantityUnits = parseQuantityUnits(value, 'reserved_qty');
+
+  return `-${formatQuantityUnits(quantityUnits)}`;
 }
 
 function toStockAvailabilitySnapshot(record: StockAvailabilityRecord): StockAvailabilitySnapshot {

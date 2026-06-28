@@ -25,11 +25,22 @@ export interface CreateFifoReservationAllocationInput {
   readonly consumedAt: Date | null;
 }
 
+export interface ReleaseFifoReservationAllocationsInput {
+  readonly tenantId: string;
+  readonly reservationId: string;
+  readonly releasedAt: Date;
+}
+
 export interface FifoReservationAllocationRecord extends CreateFifoReservationAllocationInput {}
 
 export abstract class FifoReservationAllocationStore {
   abstract createAllocations(
     inputs: readonly CreateFifoReservationAllocationInput[],
+    client?: DatabaseQueryClient,
+  ): Promise<readonly FifoReservationAllocationRecord[]>;
+
+  abstract releaseActiveAllocationsByReservation(
+    input: ReleaseFifoReservationAllocationsInput,
     client?: DatabaseQueryClient,
   ): Promise<readonly FifoReservationAllocationRecord[]>;
 }

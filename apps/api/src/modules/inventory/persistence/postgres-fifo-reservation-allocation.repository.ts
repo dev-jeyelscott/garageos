@@ -7,11 +7,13 @@ import {
   type DatabaseRow,
 } from '../../../shared/database/database-client';
 import {
+  FIFO_ALLOCATION_STATUSES,
   FIFO_ALLOCATION_STATUS_VALUES,
   FifoReservationAllocationStore,
   type CreateFifoReservationAllocationInput,
   type FifoAllocationStatus,
   type FifoReservationAllocationRecord,
+  type ReleaseFifoReservationAllocationsInput,
 } from '../application/fifo-reservation-allocation.store';
 
 interface FifoReservationAllocationRow extends DatabaseRow {
@@ -47,6 +49,43 @@ export class PostgresFifoReservationAllocationRepository extends FifoReservation
     }
 
     return allocations;
+  }
+
+  async releaseActiveAllocationsByReservation(
+    input: ReleaseFifoReservationAllocationsInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<readonly FifoReservationAllocationRecord[]> {
+    const result = await client.query<FifoReservationAllocationRow>(
+      `
+        update fifo_reservation_allocations
+        set
+          status = $3,
+          released_at = $4::timestamptz
+        where tenant_id = $1::uuid
+          and reservation_id = $2::uuid
+          and status = $5
+        returning
+          id,
+          tenant_id,
+          reservation_id,
+          fifo_layer_id,
+          reserved_quantity::text,
+          unit_cost_snapshot::text,
+          status,
+          allocated_at,
+          released_at,
+          consumed_at
+      `,
+      [
+        input.tenantId,
+        input.reservationId,
+        FIFO_ALLOCATION_STATUSES.RELEASED,
+        input.releasedAt,
+        FIFO_ALLOCATION_STATUSES.ACTIVE,
+      ],
+    );
+
+    return result.rows.map(mapFifoReservationAllocationRow);
   }
 
   private async createAllocation(
