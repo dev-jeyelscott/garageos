@@ -75,6 +75,16 @@ Do not design screens or flows for:
 | User menu                   | Profile, change password, logout, logout all.                                    |
 | Support-access marker       | Visibly marks audited platform support sessions.                                 |
 
+### Public Marketing Shell
+
+| Public area        | Required behavior                                                                                                                                                                                                         |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public homepage    | Route `/` presents GarageOS as a mobile-first SaaS marketing page for documented motorcycle shop operations.                                                                                                              |
+| Public navigation  | Shows product, workflow, feature, role-fit, login, and owner signup links only.                                                                                                                                           |
+| Conversion actions | CTAs may link to owner signup and login. They must not imply automatic subscription payment collection.                                                                                                                   |
+| Scope guardrails   | Homepage copy must not advertise excluded capabilities such as customer portal, standalone POS, payroll, full accounting, automatic subscription charging, 2FA, native apps, offline writes, or unsupported AI/custom BI. |
+| Visual direction   | Use near-white marketing surfaces, orange/gold CTAs, graphite product previews, chrome/silver borders, rounded cards, and soft shadows.                                                                                   |
+
 ### Mobile Navigation
 
 | Area           | Items                                                                                                  |
@@ -118,6 +128,7 @@ Do not design screens or flows for:
 
 | Group                     | Route Prefix                                           | Primary Users                                                 |
 | ------------------------- | ------------------------------------------------------ | ------------------------------------------------------------- |
+| Public Marketing          | `/`                                                    | Prospects, shop owners, public visitors                       |
 | Public/Auth               | `/auth/*`                                              | All users                                                     |
 | Onboarding                | `/onboarding/*`                                        | Shop Owner                                                    |
 | Dashboard                 | `/dashboard`                                           | Authorized tenant users                                       |
@@ -170,6 +181,14 @@ Use these patterns instead of redefining layout per module.
 ---
 
 ## 10. Screen Group Details
+
+### 10.0 Public Marketing Homepage
+
+| Screen                    | Route | API                                                                     |
+| ------------------------- | ----- | ----------------------------------------------------------------------- |
+| Public Marketing Homepage | `/`   | Static public page with links to `/auth/signup-owner` and `/auth/login` |
+
+Required states: responsive 360px mobile layout, visible public navigation, clear owner-signup/login CTAs, no authenticated tenant data, no unsupported product claims, and no automatic subscription payment UI.
 
 ### 10.1 Public/Auth
 

@@ -62,6 +62,19 @@ Use one contextual primary CTA per screen, such as **New Job Order**, **Add Cust
 
 ---
 
+### 3.1 Public Marketing Shell
+
+The public homepage at `/` is separate from the authenticated tenant shell and platform shell.
+
+| Area              | Required behavior                                                                                                     |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Route             | `/`                                                                                                                   |
+| Purpose           | Public SaaS marketing homepage for GarageOS.                                                                          |
+| Primary audience  | Motorcycle shop owners and service center operators evaluating GarageOS.                                              |
+| Navigation        | Product, Workflow, Features, For Shops, Login, owner signup CTA.                                                      |
+| Content inventory | Hero, product preview, feature grid, workflow timeline, role-fit cards, operational trust section, final CTA, footer. |
+| Scope guardrails  | Copy and CTAs must not imply excluded modules or unsupported workflows.                                               |
+
 ## 4. Access Guard Order
 
 Apply this order for every protected screen and action:
@@ -113,6 +126,7 @@ Apply this order for every protected screen and action:
 
 | Group                                    | Route prefix                                                |
 | ---------------------------------------- | ----------------------------------------------------------- |
+| Public Marketing                         | `/`                                                         |
 | Auth                                     | `/auth/*`                                                   |
 | Onboarding                               | `/onboarding/*`                                             |
 | Dashboard                                | `/dashboard`                                                |

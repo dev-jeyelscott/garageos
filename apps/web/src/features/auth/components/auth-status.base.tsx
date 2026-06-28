@@ -10,16 +10,19 @@ export function StatusMessage({ state }: { readonly state: ActionState }) {
   }
 
   if (state.status === 'error' && state.error !== null) {
-    return <FormErrorSummary title={state.message} error={state.error} />;
+    return (
+      <FormErrorSummary title={state.message} error={state.error} className={styles.statusPanel} />
+    );
   }
 
   return (
     <Alert
       role="status"
+      aria-live="polite"
       variant={state.status === 'success' ? 'success' : 'default'}
-      className={styles.infoPanel}
+      className={styles.statusPanel}
     >
-      <p className={styles.paragraph}>{state.message}</p>
+      <p className={styles.statusText}>{state.message}</p>
     </Alert>
   );
 }

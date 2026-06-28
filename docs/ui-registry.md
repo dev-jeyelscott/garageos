@@ -64,6 +64,20 @@ Add a component only when the pattern repeats, or when it encapsulates high-risk
 
 ---
 
+### 4.1 PublicMarketingLayout
+
+| Field         | Guidance                                                                                                                                                                  |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Name          | `PublicMarketingLayout`                                                                                                                                                   |
+| Status        | `page-scaffold`                                                                                                                                                           |
+| Purpose       | Compose the public GarageOS homepage as a modern SaaS marketing page without exposing tenant app functionality.                                                           |
+| Inputs        | Static marketing copy, public nav items, product-preview sample data, CTA URLs.                                                                                           |
+| Guards        | Must not depend on authenticated session, tenant data, branch data, permissions, plan state, or private API payloads.                                                     |
+| States        | Responsive mobile/desktop layout, public navigation, accessible CTAs, static product-preview cards.                                                                       |
+| shadcn/ui     | `Card`, `Badge`, `Button`, layout wrappers, icon primitives.                                                                                                              |
+| A11y/mobile   | 360px minimum layout support, readable contrast, visible labels, touch targets at least 44px / 2.75rem.                                                                   |
+| Anti-patterns | Do not imply customer portal, standalone POS, payroll, full accounting, automatic subscription collection, native apps, offline writes, 2FA, or unsupported AI/custom BI. |
+
 ## 5. App Shell Registry
 
 | Component                   | Purpose                          | Inputs                                                      | States / Guards                                                                                                                   | shadcn/ui                                      |

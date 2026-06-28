@@ -39,6 +39,25 @@ GarageOS brand input from the logo:
 
 UI tone: operational, fast, reliable, mechanic-friendly, modern SaaS. Use orange/gold sparingly on dense screens to preserve readability.
 
+### 2.1 Public Marketing Token Guidance
+
+Public marketing pages may use a slightly more expressive version of the GarageOS visual system while still relying on the same semantic tokens.
+
+| Token usage            | Guidance                                                                                                               |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Marketing background   | Prefer `background`, `card`, `muted`, and soft radial/linear gradients based on brand orange/gold.                     |
+| Marketing CTA          | Use `primary` with restrained orange/gold gradient treatment for primary conversion actions.                           |
+| Product mockup         | Use graphite/dark neutral preview panels to communicate operational software while keeping the surrounding page light. |
+| Marketing card shadow  | Use soft, wide shadows sparingly for hero preview, feature cards, and CTA panels.                                      |
+| Marketing border       | Use `border` plus low-opacity primary borders for highlighted cards.                                                   |
+| Marketing icon surface | Use `accent` background with `primary` foreground for feature and workflow icons.                                      |
+
+Rules:
+
+- Do not introduce new product states through visual tokens.
+- Do not overuse saturated orange across dense operational screens.
+- Public marketing styling must not override tenant app readability, accessibility, permission, lifecycle, offline, or immutable-record states.
+
 ---
 
 ## 3. Token Model
