@@ -29,6 +29,7 @@ import type {
   AppendJobOrderServiceNoteRequest,
   AssignJobOrderMechanicsRequest,
   CompleteJobOrderLineRequest,
+  CompleteJobOrderRequest,
   CreateJobOrderAttachmentPlaceholderRequest,
   CreateJobOrderPartLineRequest,
   CreateJobOrderRequest,
@@ -220,6 +221,17 @@ interface NormalizedJobOrderServiceNoteInput {
 
 interface NormalizedCompleteJobOrderLineInput {
   readonly completionNotes: string | null;
+}
+
+interface JobOrderCompletionInventoryConsumptionAuditSummary {
+  readonly line_id: string;
+  readonly inventory_reservation_id: string;
+  readonly product_id: string | null;
+  readonly quantity: string;
+  readonly fifo_allocation_ids: readonly string[];
+  readonly fifo_consumption_ids: readonly string[];
+  readonly inventory_ledger_entry_id: string;
+  readonly total_cost: string;
 }
 
 @Injectable()
@@ -799,6 +811,16 @@ export class JobOrdersService {
       });
 
       const transitionedAt = new Date();
+      const completionInventoryConsumptions =
+        input.toStatus === 'completed'
+          ? await this.consumeActivePartReservationsForCompletion({
+              context,
+              jobOrder: existing,
+              consumedAt: transitionedAt,
+              transaction,
+            })
+          : [];
+
       const transitionResult = await this.jobOrderStore.transitionJobOrderStatus(
         {
           tenantId: context.tenantId,
@@ -832,6 +854,14 @@ export class JobOrdersService {
           to_status: input.toStatus,
           status_event_id: transitionResult.statusEvent.id,
           required_permission: requiredPermission,
+          ...(completionInventoryConsumptions.length === 0
+            ? {}
+            : {
+                inventory_consumptions: completionInventoryConsumptions,
+                total_fifo_cost: sumMoneyStrings(
+                  completionInventoryConsumptions.map((consumption) => consumption.total_cost),
+                ),
+              }),
         },
         reason: input.reason ?? 'job_order_status_changed',
         client: transaction,
@@ -842,6 +872,22 @@ export class JobOrdersService {
         status_event: toJobOrderStatusEventResponse(transitionResult.statusEvent),
       };
     });
+  }
+
+  async completeJobOrder(
+    jobOrderId: string,
+    request: CompleteJobOrderRequest,
+    session: TenantContextAuthenticatedSession,
+  ): Promise<JobOrderStatusTransitionMutationResponse> {
+    return this.transitionStatus(
+      jobOrderId,
+      {
+        to_status: 'completed',
+        reason: null,
+        lock_version: request.lock_version,
+      },
+      session,
+    );
   }
 
   async addServiceLine(
@@ -1381,6 +1427,91 @@ export class JobOrdersService {
     });
   }
 
+  private async consumeActivePartReservationsForCompletion(input: {
+    readonly context: ResolvedTenantContext;
+    readonly jobOrder: JobOrderRecord;
+    readonly consumedAt: Date;
+    readonly transaction: DatabaseQueryClient;
+  }): Promise<readonly JobOrderCompletionInventoryConsumptionAuditSummary[]> {
+    const activePartLines = await this.jobOrderStore.listActiveJobOrderPartLinesForCompletion(
+      {
+        tenantId: input.context.tenantId,
+        jobOrderId: input.jobOrder.id,
+      },
+      input.transaction,
+    );
+
+    const consumptionSummaries: JobOrderCompletionInventoryConsumptionAuditSummary[] = [];
+
+    for (const line of activePartLines) {
+      if (line.inventoryReservationId === null) {
+        throw GarageOsApiException.workflowTransitionBlocked(
+          'Job order completion requires every active part line to have an inventory reservation.',
+          [
+            {
+              field: 'line_id',
+              code: 'job_order_part_line_missing_inventory_reservation',
+              message:
+                'Active job order part lines must be linked to an active inventory reservation before completion.',
+            },
+          ],
+        );
+      }
+
+      const consumptionResult =
+        await this.inventoryReservationService.consumeInventoryInTransaction(
+          {
+            tenantId: input.context.tenantId,
+            reservationId: line.inventoryReservationId,
+            transactionType: INVENTORY_TRANSACTION_TYPES.JOB_ORDER_CONSUMPTION,
+            consumedAt: input.consumedAt,
+            consumedByUserId: input.context.actorUserId,
+          },
+          input.transaction,
+        );
+
+      const completedLine = await this.jobOrderStore.completeJobOrderPartLineFromReservation(
+        {
+          tenantId: input.context.tenantId,
+          jobOrderId: input.jobOrder.id,
+          lineId: line.id,
+          inventoryReservationId: line.inventoryReservationId,
+          completedAt: input.consumedAt,
+        },
+        input.transaction,
+      );
+
+      if (completedLine === null) {
+        throw GarageOsApiException.workflowTransitionBlocked(
+          'Job order part line could not be completed after inventory consumption.',
+          [
+            {
+              field: 'line_id',
+              code: 'job_order_part_line_completion_conflict',
+              message:
+                'The part line status changed before completion inventory consumption finished.',
+            },
+          ],
+        );
+      }
+
+      consumptionSummaries.push({
+        line_id: completedLine.id,
+        inventory_reservation_id: line.inventoryReservationId,
+        product_id: completedLine.productId,
+        quantity: normalizeQuantityString(completedLine.quantity),
+        fifo_allocation_ids: consumptionResult.fifoAllocations.map((allocation) => allocation.id),
+        fifo_consumption_ids: consumptionResult.fifoConsumptions.map(
+          (consumption) => consumption.id,
+        ),
+        inventory_ledger_entry_id: consumptionResult.ledgerEntry.id,
+        total_cost: consumptionResult.totalCost,
+      });
+    }
+
+    return consumptionSummaries;
+  }
+
   private async reloadJobOrderOrThrow(
     tenantId: string,
     jobOrderId: string,
@@ -1626,7 +1757,10 @@ export function assertCanTransitionJobOrderStatus(
     return;
   }
 
-  if (jobOrder.status === 'in_progress' && input.toStatus === 'completed') {
+  if (
+    (jobOrder.status === 'in_progress' || jobOrder.status === 'waiting_for_parts') &&
+    input.toStatus === 'completed'
+  ) {
     assertRequiredServiceAndLaborLinesComplete(jobOrder);
 
     return;
@@ -2151,6 +2285,26 @@ export function calculateJobOrderLineAuthorizedAmount(quantity: string, unitPric
   }
 
   return (Math.round(total * 100) / 100).toFixed(2);
+}
+
+function sumMoneyStrings(values: readonly string[]): string {
+  const totalCents = values.reduce((total, value) => total + parseMoneyCents(value), 0n);
+
+  return formatMoneyCents(totalCents);
+}
+
+function parseMoneyCents(value: string): bigint {
+  const [wholePart = '0', fractionalPart = ''] = value.split('.');
+  const normalizedFractionalPart = fractionalPart.padEnd(2, '0').slice(0, 2);
+
+  return BigInt(wholePart) * 100n + BigInt(normalizedFractionalPart);
+}
+
+function formatMoneyCents(value: bigint): string {
+  const wholePart = value / 100n;
+  const fractionalPart = value % 100n;
+
+  return `${wholePart.toString()}.${fractionalPart.toString().padStart(2, '0')}`;
 }
 
 function assertAnyJobOrderPermission(

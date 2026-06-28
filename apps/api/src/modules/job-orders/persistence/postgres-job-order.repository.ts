@@ -11,6 +11,7 @@ import {
   JobOrderStore,
   type CancelJobOrderLineInput,
   type CompleteJobOrderLineInput,
+  type CompleteJobOrderPartLineFromReservationInput,
   type CreateJobOrderInput,
   type CreateJobOrderLineInput,
   type CreateJobOrderPartLineInput,
@@ -20,6 +21,7 @@ import {
   type JobOrderLineStatus,
   type JobOrderLineType,
   type JobOrderMechanicAssignmentRecord,
+  type ListActiveJobOrderPartLinesForCompletionInput,
   type JobOrderMechanicAssignmentType,
   type JobOrderRecord,
   type JobOrderStatus,
@@ -753,6 +755,60 @@ export class PostgresJobOrderRepository extends JobOrderStore {
     await this.touchJobOrder(input.tenantId, input.jobOrderId, input.completedAt, client);
 
     return toJobOrderLineRecord(updated);
+  }
+
+  async listActiveJobOrderPartLinesForCompletion(
+    input: ListActiveJobOrderPartLinesForCompletionInput,
+    client: DatabaseQueryClient,
+  ): Promise<readonly JobOrderLineRecord[]> {
+    const result = await client.query<JobOrderLineRow>(
+      `
+        select *
+        from job_order_lines
+        where tenant_id = $1
+          and job_order_id = $2
+          and line_type = 'part'
+          and status = 'active'
+        order by line_order asc, created_at asc, id asc
+        for update
+      `,
+      [input.tenantId, input.jobOrderId],
+    );
+
+    return result.rows.map(toJobOrderLineRecord);
+  }
+
+  async completeJobOrderPartLineFromReservation(
+    input: CompleteJobOrderPartLineFromReservationInput,
+    client: DatabaseQueryClient,
+  ): Promise<JobOrderLineRecord | null> {
+    const result = await client.query<JobOrderLineRow>(
+      `
+        update job_order_lines
+        set
+          status = 'completed',
+          completed_at = $5,
+          updated_at = $5
+        where tenant_id = $1
+          and job_order_id = $2
+          and id = $3
+          and inventory_reservation_id = $4
+          and line_type = 'part'
+          and status = 'active'
+        returning *
+      `,
+      [
+        input.tenantId,
+        input.jobOrderId,
+        input.lineId,
+        input.inventoryReservationId,
+        input.completedAt,
+      ],
+    );
+
+    const updated = result.rows[0];
+
+    return updated === undefined ? null : toJobOrderLineRecord(updated);
   }
 
   async isMechanicAssignedToJobOrder(

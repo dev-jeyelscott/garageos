@@ -205,6 +205,22 @@ describe('job order status transition validators', () => {
     ).not.toThrow();
   });
 
+  it('allows waiting-for-parts job order completion when service and labor lines are complete or cancelled', () => {
+    expect(() =>
+      assertCanTransitionJobOrderStatus(
+        {
+          status: 'waiting_for_parts',
+          primaryMechanicUserId: 'mechanic-1',
+          lines: [completedLine],
+        },
+        {
+          toStatus: 'completed',
+          reason: null,
+        },
+      ),
+    ).not.toThrow();
+  });
+
   it('requires a correction reason when moving completed job order back to in progress', () => {
     expect(() =>
       assertCanTransitionJobOrderStatus(
@@ -507,7 +523,7 @@ describe('job order labor task completion validators', () => {
     ).toThrow('Only active job order lines can be completed.');
   });
 
-  it('blocks completing part lines until inventory reservation support exists', () => {
+  it('blocks completing part lines through the service/labor line completion endpoint', () => {
     expect(() =>
       assertCanCompleteServiceOrLaborLine({
         status: 'active',
@@ -517,7 +533,7 @@ describe('job order labor task completion validators', () => {
     ).toThrow('One or more fields are invalid.');
   });
 
-  it('blocks completing inventory-reserved lines until inventory reservation support exists', () => {
+  it('blocks completing inventory-reserved lines through the service/labor line completion endpoint', () => {
     expect(() =>
       assertCanCompleteServiceOrLaborLine({
         status: 'active',

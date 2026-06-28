@@ -26,6 +26,8 @@ import {
   type AssignJobOrderMechanicsRequest,
   completeJobOrderLineRequestSchema,
   type CompleteJobOrderLineRequest,
+  completeJobOrderRequestSchema,
+  type CompleteJobOrderRequest,
   createJobOrderPartLineRequestSchema,
   type CreateJobOrderPartLineRequest,
   createJobOrderRequestSchema,
@@ -322,6 +324,62 @@ export class JobOrdersController {
 
     try {
       const response = await this.jobOrdersService.transitionStatus(
+        jobOrderId,
+        request,
+        session.tenantContextSession,
+      );
+
+      await this.idempotencyService.completeSucceeded({
+        id: idempotency.record.id,
+        responseStatusCode: 200,
+        responseBodyJson: response,
+        now: new Date(),
+      });
+
+      return response;
+    } catch (error) {
+      await this.idempotencyService.completeFailed({
+        id: idempotency.record.id,
+        now: new Date(),
+      });
+
+      throw error;
+    }
+  }
+
+  @Post(':job_order_id/complete')
+  @HttpCode(200)
+  async completeJobOrder(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Param('job_order_id') jobOrderId: string,
+    @Body(new ZodValidationPipe(completeJobOrderRequestSchema))
+    request: CompleteJobOrderRequest,
+  ): ReturnType<JobOrdersService['completeJobOrder']> {
+    const session = await this.authService.getAuthenticatedRouteSession(authorizationHeader);
+    const now = new Date();
+
+    const idempotency = await this.idempotencyService.begin({
+      tenantId: session.tenantContextSession.actor.tenant_id,
+      userId: session.tenantContextSession.actor.user_id,
+      endpoint: 'POST /api/v1/job-orders/:job_order_id/complete',
+      idempotencyKey,
+      requestIntent: {
+        job_order_id: jobOrderId,
+        ...request,
+      },
+      now,
+      expiresAt: this.jobOrdersService.getIdempotencyExpiresAt(now),
+    });
+
+    if (idempotency.type === 'replayed') {
+      return idempotency.responseBodyJson as Awaited<
+        ReturnType<JobOrdersService['completeJobOrder']>
+      >;
+    }
+
+    try {
+      const response = await this.jobOrdersService.completeJobOrder(
         jobOrderId,
         request,
         session.tenantContextSession,

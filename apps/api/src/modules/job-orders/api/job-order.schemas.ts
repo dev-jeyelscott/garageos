@@ -181,10 +181,14 @@ export type CreateJobOrderRequest = z.infer<typeof createJobOrderRequestSchema>;
 export type UpdateJobOrderRequest = z.infer<typeof updateJobOrderRequestSchema>;
 export type AssignJobOrderMechanicsRequest = z.infer<typeof assignJobOrderMechanicsRequestSchema>;
 export type TransitionJobOrderStatusRequest = z.infer<typeof transitionJobOrderStatusRequestSchema>;
+export type CompleteJobOrderRequest = z.infer<typeof completeJobOrderRequestSchema>;
 export type AppendJobOrderServiceNoteRequest = z.infer<
   typeof appendJobOrderServiceNoteRequestSchema
 >;
 export type CompleteJobOrderLineRequest = z.infer<typeof completeJobOrderLineRequestSchema>;
+export const completeJobOrderRequestSchema = z.object({
+  lock_version: z.number().int().min(0),
+});
 export type CreateJobOrderAttachmentPlaceholderRequest = z.infer<
   typeof createJobOrderAttachmentPlaceholderRequestSchema
 >;

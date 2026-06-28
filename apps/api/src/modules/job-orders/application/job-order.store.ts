@@ -225,6 +225,19 @@ export interface CompleteJobOrderLineInput {
   readonly completedAt: Date;
 }
 
+export interface ListActiveJobOrderPartLinesForCompletionInput {
+  readonly tenantId: string;
+  readonly jobOrderId: string;
+}
+
+export interface CompleteJobOrderPartLineFromReservationInput {
+  readonly tenantId: string;
+  readonly jobOrderId: string;
+  readonly lineId: string;
+  readonly inventoryReservationId: string;
+  readonly completedAt: Date;
+}
+
 export interface ReplaceJobOrderMechanicsInput {
   readonly tenantId: string;
   readonly jobOrderId: string;
@@ -323,6 +336,16 @@ export abstract class JobOrderStore {
 
   abstract completeJobOrderLine(
     input: CompleteJobOrderLineInput,
+    client: DatabaseQueryClient,
+  ): Promise<JobOrderLineRecord | null>;
+
+  abstract listActiveJobOrderPartLinesForCompletion(
+    input: ListActiveJobOrderPartLinesForCompletionInput,
+    client: DatabaseQueryClient,
+  ): Promise<readonly JobOrderLineRecord[]>;
+
+  abstract completeJobOrderPartLineFromReservation(
+    input: CompleteJobOrderPartLineFromReservationInput,
     client: DatabaseQueryClient,
   ): Promise<JobOrderLineRecord | null>;
 
