@@ -9,7 +9,7 @@ require('dotenv').config({
 const DATABASE_URL = process.env.DATABASE_URL;
 
 const EXPECTED = {
-  migrationCount: 20,
+  migrationCount: 22,
   publicTableCount: 106,
   subscriptionPlans: 3,
   subscriptionPlanLimits: 27,
@@ -234,6 +234,110 @@ async function validateProductCategoriesSchema(client) {
   assertEqual('product categories tenant status index', tenantStatusIndexCount, 1);
 }
 
+async function validateProductsFoundationSchema(client) {
+  const columnCount = await count(
+    client,
+    `
+      select count(*)
+      from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'products'
+        and column_name in (
+          'id',
+          'tenant_id',
+          'category_id',
+          'name',
+          'normalized_name',
+          'sku',
+          'normalized_sku',
+          'barcode',
+          'normalized_barcode',
+          'supplier_code',
+          'brand',
+          'unit_of_measure',
+          'default_cost',
+          'selling_price',
+          'reorder_level',
+          'description',
+          'status',
+          'created_at',
+          'created_by_user_id',
+          'updated_at',
+          'updated_by_user_id',
+          'deactivated_at',
+          'reactivated_at',
+          'lock_version'
+        )
+    `,
+  );
+
+  const statusConstraintCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_constraint
+      where conname = 'chk_products_status'
+    `,
+  );
+
+  const amountConstraintCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_constraint
+      where conname = 'chk_products_amounts'
+    `,
+  );
+
+  const skuIndexCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_indexes
+      where schemaname = 'public'
+        and indexname = 'ux_products_tenant_sku'
+    `,
+  );
+
+  const activeBarcodeIndexCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_indexes
+      where schemaname = 'public'
+        and indexname = 'ux_products_active_barcode'
+    `,
+  );
+
+  const activeCategoryIndexCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_indexes
+      where schemaname = 'public'
+        and indexname = 'idx_products_active_category'
+    `,
+  );
+
+  const searchIdentityIndexCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_indexes
+      where schemaname = 'public'
+        and indexname = 'idx_products_search_identity'
+    `,
+  );
+
+  assertEqual('products foundation columns', columnCount, 24);
+  assertEqual('products status constraint', statusConstraintCount, 1);
+  assertEqual('products amount constraint', amountConstraintCount, 1);
+  assertEqual('products tenant SKU unique index', skuIndexCount, 1);
+  assertEqual('products active barcode unique index', activeBarcodeIndexCount, 1);
+  assertEqual('products active category index', activeCategoryIndexCount, 1);
+  assertEqual('products search identity index', searchIdentityIndexCount, 1);
+}
+
 async function validateEstimatesBaselineSchema(client) {
   const estimateColumnCount = await count(
     client,
@@ -414,6 +518,7 @@ async function main() {
     await validateTenantDuplicateApprovalSchema(client);
     await validateRoleManagementSchema(client);
     await validateProductCategoriesSchema(client);
+    await validateProductsFoundationSchema(client);
     await validateEstimatesBaselineSchema(client);
     await validateMoneyPrecision(client);
     await validateQuantityPrecision(client);
