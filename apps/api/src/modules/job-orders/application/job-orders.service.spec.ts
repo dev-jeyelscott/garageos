@@ -8,8 +8,10 @@ import {
   assertBaselinePartLinesBlocked,
   assertCanAssignJobOrderMechanics,
   assertCanEditJobOrderLines,
+  assertCanTransitionJobOrderStatus,
   assertCanUpdateJobOrderBaseline,
   calculateJobOrderLineAuthorizedAmount,
+  getRequiredJobOrderStatusTransitionPermission,
 } from './job-orders.service';
 
 describe('JobOrdersService baseline helpers', () => {
@@ -68,6 +70,235 @@ describe('job order mechanic assignment validators', () => {
       ).toThrow('One or more fields are invalid.');
     },
   );
+});
+
+describe('job order status transition validators', () => {
+  const completedLine = {
+    id: 'line-1',
+    tenantId: 'tenant-1',
+    jobOrderId: 'job-order-1',
+    lineType: 'service' as const,
+    serviceId: null,
+    productId: null,
+    description: 'Completed service',
+    quantity: '1.000',
+    unitPrice: '100.00',
+    authorizedAmount: '100.00',
+    status: 'completed' as const,
+    inventoryReservationId: null,
+    completedAt: new Date('2026-06-28T00:00:00.000Z'),
+    lineOrder: 0,
+    createdAt: new Date('2026-06-28T00:00:00.000Z'),
+    updatedAt: new Date('2026-06-28T00:00:00.000Z'),
+  };
+
+  const activeLine = {
+    ...completedLine,
+    id: 'line-2',
+    description: 'Active service',
+    status: 'active' as const,
+    completedAt: null,
+  };
+
+  it('requires a primary mechanic before moving pending job order to in progress', () => {
+    expect(() =>
+      assertCanTransitionJobOrderStatus(
+        {
+          status: 'pending',
+          primaryMechanicUserId: null,
+          lines: [],
+        },
+        {
+          toStatus: 'in_progress',
+          reason: null,
+        },
+      ),
+    ).toThrow('A primary mechanic is required before moving a job order to in progress.');
+  });
+
+  it('allows pending job order to move to in progress when primary mechanic exists', () => {
+    expect(() =>
+      assertCanTransitionJobOrderStatus(
+        {
+          status: 'pending',
+          primaryMechanicUserId: 'mechanic-1',
+          lines: [],
+        },
+        {
+          toStatus: 'in_progress',
+          reason: null,
+        },
+      ),
+    ).not.toThrow();
+  });
+
+  it('requires a reason when moving to waiting for parts', () => {
+    expect(() =>
+      assertCanTransitionJobOrderStatus(
+        {
+          status: 'in_progress',
+          primaryMechanicUserId: 'mechanic-1',
+          lines: [],
+        },
+        {
+          toStatus: 'waiting_for_parts',
+          reason: null,
+        },
+      ),
+    ).toThrow('One or more fields are invalid.');
+  });
+
+  it('allows in-progress job order to move to waiting for parts with a reason', () => {
+    expect(() =>
+      assertCanTransitionJobOrderStatus(
+        {
+          status: 'in_progress',
+          primaryMechanicUserId: 'mechanic-1',
+          lines: [],
+        },
+        {
+          toStatus: 'waiting_for_parts',
+          reason: 'Waiting for customer-supplied part.',
+        },
+      ),
+    ).not.toThrow();
+  });
+
+  it('blocks completion when active service or labor lines remain', () => {
+    expect(() =>
+      assertCanTransitionJobOrderStatus(
+        {
+          status: 'in_progress',
+          primaryMechanicUserId: 'mechanic-1',
+          lines: [activeLine],
+        },
+        {
+          toStatus: 'completed',
+          reason: null,
+        },
+      ),
+    ).toThrow(
+      'All required service and labor lines must be completed before completing the job order.',
+    );
+  });
+
+  it('allows completion when service and labor lines are complete or cancelled', () => {
+    expect(() =>
+      assertCanTransitionJobOrderStatus(
+        {
+          status: 'in_progress',
+          primaryMechanicUserId: 'mechanic-1',
+          lines: [completedLine],
+        },
+        {
+          toStatus: 'completed',
+          reason: null,
+        },
+      ),
+    ).not.toThrow();
+  });
+
+  it('requires a correction reason when moving completed job order back to in progress', () => {
+    expect(() =>
+      assertCanTransitionJobOrderStatus(
+        {
+          status: 'completed',
+          primaryMechanicUserId: 'mechanic-1',
+          lines: [completedLine],
+        },
+        {
+          toStatus: 'in_progress',
+          reason: null,
+        },
+      ),
+    ).toThrow('One or more fields are invalid.');
+  });
+
+  it('blocks released and cancelled job orders from further transitions', () => {
+    expect(() =>
+      assertCanTransitionJobOrderStatus(
+        {
+          status: 'released',
+          primaryMechanicUserId: 'mechanic-1',
+          lines: [],
+        },
+        {
+          toStatus: 'in_progress',
+          reason: 'Correction attempt.',
+        },
+      ),
+    ).toThrow('Released job orders are final.');
+
+    expect(() =>
+      assertCanTransitionJobOrderStatus(
+        {
+          status: 'cancelled',
+          primaryMechanicUserId: 'mechanic-1',
+          lines: [],
+        },
+        {
+          toStatus: 'in_progress',
+          reason: 'Correction attempt.',
+        },
+      ),
+    ).toThrow('Cancelled job orders are final.');
+  });
+
+  it('blocks release and cancellation targets until dedicated workflows are implemented', () => {
+    expect(() =>
+      assertCanTransitionJobOrderStatus(
+        {
+          status: 'completed',
+          primaryMechanicUserId: 'mechanic-1',
+          lines: [completedLine],
+        },
+        {
+          toStatus: 'released',
+          reason: 'Release attempt.',
+        },
+      ),
+    ).toThrow(
+      'Release and cancellation require dedicated workflows and are not available through the generic status transition endpoint.',
+    );
+
+    expect(() =>
+      assertCanTransitionJobOrderStatus(
+        {
+          status: 'pending',
+          primaryMechanicUserId: null,
+          lines: [],
+        },
+        {
+          toStatus: 'cancelled',
+          reason: 'Customer cancelled.',
+        },
+      ),
+    ).toThrow(
+      'Release and cancellation require dedicated workflows and are not available through the generic status transition endpoint.',
+    );
+  });
+
+  it('uses correction permission for completed to in progress rollback', () => {
+    expect(
+      getRequiredJobOrderStatusTransitionPermission(
+        {
+          status: 'completed',
+        },
+        'in_progress',
+      ),
+    ).toBe('job_orders.correct_status');
+  });
+
+  it('uses change-status permission for normal operational status changes', () => {
+    expect(
+      getRequiredJobOrderStatusTransitionPermission(
+        {
+          status: 'pending',
+        },
+        'in_progress',
+      ),
+    ).toBe('job_orders.change_status');
+  });
 });
 
 describe('job order line scaffolding validators', () => {

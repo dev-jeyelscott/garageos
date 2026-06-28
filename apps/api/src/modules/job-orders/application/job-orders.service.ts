@@ -29,6 +29,7 @@ import type {
   CreateJobOrderRequest,
   CreateJobOrderServiceLineRequest,
   ListJobOrdersQuery,
+  TransitionJobOrderStatusRequest,
   UpdateJobOrderLineRequest,
   UpdateJobOrderRequest,
 } from '../api/job-order.schemas';
@@ -139,6 +140,12 @@ interface NormalizedMechanicAssignmentInput {
   readonly primaryMechanicUserId: string;
   readonly additionalMechanicUserIds: readonly string[];
   readonly allMechanicUserIds: readonly string[];
+}
+
+interface NormalizedJobOrderStatusTransitionInput {
+  readonly toStatus: JobOrderStatus;
+  readonly reason: string | null;
+  readonly expectedLockVersion: number;
 }
 
 @Injectable()
@@ -461,6 +468,98 @@ export class JobOrdersService {
 
       return {
         job_order: toJobOrderResponse(updated),
+      };
+    });
+  }
+
+  async transitionStatus(
+    jobOrderId: string,
+    request: TransitionJobOrderStatusRequest,
+    session: TenantContextAuthenticatedSession,
+  ): Promise<JobOrderMutationResponse> {
+    const context = resolveTenantContextFromAuthenticatedSession(session);
+    const isShopOwner = await this.jobOrderStore.isActiveShopOwner({
+      tenantId: context.tenantId,
+      userId: context.actorUserId,
+    });
+
+    assertTenantLifecycleAccess({
+      context,
+      isShopOwner,
+      action: TENANT_ACCESS_ACTIONS.OPERATIONAL_WRITE,
+    });
+    assertAnyJobOrderPermission(context, isShopOwner, [
+      'job_orders.change_status',
+      'job_orders.correct_status',
+      'job_orders.cancel',
+      'job_orders.release',
+    ]);
+
+    const input = normalizeJobOrderStatusTransitionInput(request);
+
+    return this.transactionRunner.runInTransaction(async (transaction) => {
+      const existing = await this.jobOrderStore.findJobOrderByIdForUpdate(
+        context.tenantId,
+        jobOrderId.trim(),
+        transaction,
+      );
+
+      if (existing === null) {
+        throw GarageOsApiException.resourceNotFound('Job order was not found.');
+      }
+
+      assertJobOrderBranchAccess(context, existing.branchId);
+
+      const requiredPermission = getRequiredJobOrderStatusTransitionPermission(
+        existing,
+        input.toStatus,
+      );
+      assertJobOrderPermission(context, isShopOwner, requiredPermission);
+      assertCanTransitionJobOrderStatus(existing, {
+        toStatus: input.toStatus,
+        reason: input.reason,
+      });
+
+      const transitionedAt = new Date();
+      const transitioned = await this.jobOrderStore.transitionJobOrderStatus(
+        {
+          tenantId: context.tenantId,
+          jobOrderId: existing.id,
+          fromStatus: existing.status,
+          toStatus: input.toStatus,
+          reason: input.reason,
+          expectedLockVersion: input.expectedLockVersion,
+          transitionedByUserId: context.actorUserId,
+          transitionedAt,
+        },
+        transaction,
+      );
+
+      if (transitioned === null) {
+        throw GarageOsApiException.versionConflict();
+      }
+
+      await this.auditService.record({
+        tenantId: context.tenantId,
+        actorUserId: context.actorUserId,
+        actorType: AUDIT_ACTOR_TYPES.TENANT_USER,
+        action: getJobOrderStatusTransitionAuditAction(existing.status, input.toStatus),
+        entityType: 'job_order',
+        entityId: transitioned.id,
+        branchId: transitioned.branchId,
+        beforeJson: toJobOrderResponse(existing),
+        afterJson: toJobOrderResponse(transitioned),
+        metadataJson: {
+          from_status: existing.status,
+          to_status: input.toStatus,
+          required_permission: requiredPermission,
+        },
+        reason: input.reason ?? 'job_order_status_changed',
+        client: transaction,
+      });
+
+      return {
+        job_order: toJobOrderResponse(transitioned),
       };
     });
   }
@@ -852,6 +951,188 @@ export function assertCanAssignJobOrderMechanics(jobOrder: Pick<JobOrderRecord, 
   }
 }
 
+export function getRequiredJobOrderStatusTransitionPermission(
+  jobOrder: Pick<JobOrderRecord, 'status'>,
+  toStatus: JobOrderStatus,
+): string {
+  if (jobOrder.status === 'completed' && toStatus === 'in_progress') {
+    return 'job_orders.correct_status';
+  }
+
+  if (toStatus === 'cancelled') {
+    return 'job_orders.cancel';
+  }
+
+  if (toStatus === 'released') {
+    return 'job_orders.release';
+  }
+
+  return 'job_orders.change_status';
+}
+
+export function assertCanTransitionJobOrderStatus(
+  jobOrder: Pick<JobOrderRecord, 'status' | 'primaryMechanicUserId' | 'lines'>,
+  input: {
+    readonly toStatus: JobOrderStatus;
+    readonly reason: string | null;
+  },
+): void {
+  if (jobOrder.status === input.toStatus) {
+    throw GarageOsApiException.workflowTransitionBlocked('Job order is already in that status.', [
+      {
+        field: 'to_status',
+        code: 'job_order_status_unchanged',
+        message: 'Job order is already in that status.',
+      },
+    ]);
+  }
+
+  if (jobOrder.status === 'released') {
+    throw GarageOsApiException.workflowTransitionBlocked('Released job orders are final.', [
+      {
+        field: 'status',
+        code: 'job_order_released_final',
+        message: 'Released job orders are final and cannot transition to another status.',
+      },
+    ]);
+  }
+
+  if (jobOrder.status === 'cancelled') {
+    throw GarageOsApiException.workflowTransitionBlocked('Cancelled job orders are final.', [
+      {
+        field: 'status',
+        code: 'job_order_cancelled_final',
+        message: 'Cancelled job orders are final and cannot transition to another status.',
+      },
+    ]);
+  }
+
+  if (input.toStatus === 'released' || input.toStatus === 'cancelled') {
+    throw GarageOsApiException.workflowTransitionBlocked(
+      'Release and cancellation require dedicated workflows and are not available through the generic status transition endpoint.',
+      [
+        {
+          field: 'to_status',
+          code: 'job_order_status_transition_requires_dedicated_workflow',
+          message:
+            'Use the dedicated release or cancellation workflow when that slice is implemented.',
+        },
+      ],
+    );
+  }
+
+  if (jobOrder.status === 'pending' && input.toStatus === 'in_progress') {
+    if (jobOrder.primaryMechanicUserId === null) {
+      throw GarageOsApiException.workflowTransitionBlocked(
+        'A primary mechanic is required before moving a job order to in progress.',
+        [
+          {
+            field: 'primary_mechanic_user_id',
+            code: 'primary_mechanic_required',
+            message: 'Assign a primary mechanic before moving the job order to in progress.',
+          },
+        ],
+      );
+    }
+
+    return;
+  }
+
+  if (jobOrder.status === 'pending' && input.toStatus === 'waiting_for_parts') {
+    assertStatusTransitionReason(input.reason, {
+      code: 'waiting_for_parts_reason_required',
+      message: 'A reason is required when moving a job order to waiting for parts.',
+    });
+
+    return;
+  }
+
+  if (jobOrder.status === 'in_progress' && input.toStatus === 'waiting_for_parts') {
+    assertStatusTransitionReason(input.reason, {
+      code: 'waiting_for_parts_reason_required',
+      message: 'A reason is required when moving a job order to waiting for parts.',
+    });
+
+    return;
+  }
+
+  if (jobOrder.status === 'in_progress' && input.toStatus === 'completed') {
+    assertRequiredServiceAndLaborLinesComplete(jobOrder);
+
+    return;
+  }
+
+  if (jobOrder.status === 'waiting_for_parts' && input.toStatus === 'in_progress') {
+    assertStatusTransitionReason(input.reason, {
+      code: 'resume_from_waiting_for_parts_reason_required',
+      message:
+        'A manual reason is required to resume from waiting for parts until inventory availability checks are implemented.',
+    });
+
+    return;
+  }
+
+  if (jobOrder.status === 'completed' && input.toStatus === 'in_progress') {
+    assertStatusTransitionReason(input.reason, {
+      code: 'status_correction_reason_required',
+      message:
+        'A correction reason is required when moving a completed job order back to in progress.',
+    });
+
+    return;
+  }
+
+  throw GarageOsApiException.workflowTransitionBlocked(
+    'The requested job order status transition is not allowed.',
+    [
+      {
+        field: 'to_status',
+        code: 'job_order_status_transition_not_allowed',
+        message: `Cannot transition job order from ${jobOrder.status} to ${input.toStatus}.`,
+      },
+    ],
+  );
+}
+
+function assertRequiredServiceAndLaborLinesComplete(jobOrder: Pick<JobOrderRecord, 'lines'>): void {
+  const hasActiveRequiredLine = jobOrder.lines.some(
+    (line) =>
+      (line.lineType === 'service' || line.lineType === 'labor') && line.status === 'active',
+  );
+
+  if (hasActiveRequiredLine) {
+    throw GarageOsApiException.workflowTransitionBlocked(
+      'All required service and labor lines must be completed before completing the job order.',
+      [
+        {
+          field: 'lines',
+          code: 'job_order_required_lines_not_completed',
+          message:
+            'Complete or cancel all required active service and labor lines before completing the job order.',
+        },
+      ],
+    );
+  }
+}
+
+function assertStatusTransitionReason(
+  reason: string | null,
+  detail: {
+    readonly code: string;
+    readonly message: string;
+  },
+): void {
+  if (reason === null) {
+    throw GarageOsApiException.validationFailed([
+      {
+        field: 'reason',
+        code: detail.code,
+        message: detail.message,
+      },
+    ]);
+  }
+}
+
 export function assertBaselinePartLinesBlocked(): never {
   throw GarageOsApiException.validationFailed([
     {
@@ -1063,6 +1344,16 @@ function normalizeMechanicAssignmentInput(
   };
 }
 
+function normalizeJobOrderStatusTransitionInput(
+  request: TransitionJobOrderStatusRequest,
+): NormalizedJobOrderStatusTransitionInput {
+  return {
+    toStatus: request.to_status,
+    reason: normalizeNullableText(request.reason),
+    expectedLockVersion: normalizeLockVersion(request.lock_version),
+  };
+}
+
 function normalizeCreateJobOrderInput(
   request: CreateJobOrderRequest,
 ): NormalizedCreateJobOrderInput {
@@ -1155,6 +1446,35 @@ export function calculateJobOrderLineAuthorizedAmount(quantity: string, unitPric
   }
 
   return (Math.round(total * 100) / 100).toFixed(2);
+}
+
+function assertAnyJobOrderPermission(
+  context: ResolvedTenantContext,
+  isShopOwner: boolean,
+  permissions: readonly string[],
+): void {
+  if (isShopOwner) {
+    return;
+  }
+
+  const hasAnyPermission = permissions.some((permission) =>
+    context.effectivePermissions.includes(permission),
+  );
+
+  if (!hasAnyPermission) {
+    throw GarageOsApiException.forbidden(permissions.join('|'));
+  }
+}
+
+function getJobOrderStatusTransitionAuditAction(
+  fromStatus: JobOrderStatus,
+  toStatus: JobOrderStatus,
+): string {
+  if (fromStatus === 'completed' && toStatus === 'in_progress') {
+    return 'job_orders.status_corrected';
+  }
+
+  return 'job_orders.status_changed';
 }
 
 function assertJobOrderPermission(

@@ -27,6 +27,8 @@ import {
   type CreateJobOrderServiceLineRequest,
   listJobOrdersQuerySchema,
   type ListJobOrdersQuery,
+  transitionJobOrderStatusRequestSchema,
+  type TransitionJobOrderStatusRequest,
   updateJobOrderLineRequestSchema,
   type UpdateJobOrderLineRequest,
   updateJobOrderRequestSchema,
@@ -135,6 +137,61 @@ export class JobOrdersController {
     const session = await this.authService.getAuthenticatedRouteSession(authorizationHeader);
 
     return this.jobOrdersService.assignMechanics(jobOrderId, request, session.tenantContextSession);
+  }
+
+  @Post(':job_order_id/status-transitions')
+  async transitionStatus(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Param('job_order_id') jobOrderId: string,
+    @Body(new ZodValidationPipe(transitionJobOrderStatusRequestSchema))
+    request: TransitionJobOrderStatusRequest,
+  ): ReturnType<JobOrdersService['transitionStatus']> {
+    const session = await this.authService.getAuthenticatedRouteSession(authorizationHeader);
+    const now = new Date();
+
+    const idempotency = await this.idempotencyService.begin({
+      tenantId: session.tenantContextSession.actor.tenant_id,
+      userId: session.tenantContextSession.actor.user_id,
+      endpoint: 'POST /api/v1/job-orders/:job_order_id/status-transitions',
+      idempotencyKey,
+      requestIntent: {
+        job_order_id: jobOrderId,
+        ...request,
+      },
+      now,
+      expiresAt: this.jobOrdersService.getIdempotencyExpiresAt(now),
+    });
+
+    if (idempotency.type === 'replayed') {
+      return idempotency.responseBodyJson as Awaited<
+        ReturnType<JobOrdersService['transitionStatus']>
+      >;
+    }
+
+    try {
+      const response = await this.jobOrdersService.transitionStatus(
+        jobOrderId,
+        request,
+        session.tenantContextSession,
+      );
+
+      await this.idempotencyService.completeSucceeded({
+        id: idempotency.record.id,
+        responseStatusCode: 200,
+        responseBodyJson: response,
+        now: new Date(),
+      });
+
+      return response;
+    } catch (error) {
+      await this.idempotencyService.completeFailed({
+        id: idempotency.record.id,
+        now: new Date(),
+      });
+
+      throw error;
+    }
   }
 
   @Post(':job_order_id/service-lines')

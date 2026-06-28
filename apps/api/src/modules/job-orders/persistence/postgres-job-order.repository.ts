@@ -21,6 +21,7 @@ import {
   type ListJobOrdersInput,
   type ReplaceJobOrderMechanicsInput,
   type ServiceSnapshotRecord,
+  type TransitionJobOrderStatusInput,
   type UpdateJobOrderLineInput,
   type UpdatePendingJobOrderInput,
 } from '../application/job-order.store';
@@ -722,6 +723,78 @@ export class PostgresJobOrderRepository extends JobOrderStore {
     }
 
     return updated;
+  }
+
+  async transitionJobOrderStatus(
+    input: TransitionJobOrderStatusInput,
+    client: DatabaseQueryClient,
+  ): Promise<JobOrderRecord | null> {
+    const result = await client.query<JobOrderRow>(
+      `
+        update job_orders
+        set
+          status = $3,
+          completed_at = case
+            when $3::text = 'completed' then $6
+            when status = 'completed' and $3::text <> 'completed' then null
+            else completed_at
+          end,
+          updated_at = $6,
+          lock_version = lock_version + 1
+        where tenant_id = $1
+          and id = $2
+          and status = $4
+          and lock_version = $5
+        returning *
+      `,
+      [
+        input.tenantId,
+        input.jobOrderId,
+        input.toStatus,
+        input.fromStatus,
+        input.expectedLockVersion,
+        input.transitionedAt,
+      ],
+    );
+
+    const updated = result.rows[0];
+
+    if (updated === undefined) {
+      return null;
+    }
+
+    await client.query(
+      `
+        insert into job_order_status_events (
+          id,
+          tenant_id,
+          job_order_id,
+          from_status,
+          to_status,
+          reason,
+          created_by_user_id,
+          created_at
+        )
+        values (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7)
+      `,
+      [
+        input.tenantId,
+        input.jobOrderId,
+        input.fromStatus,
+        input.toStatus,
+        input.reason,
+        input.transitionedByUserId,
+        input.transitionedAt,
+      ],
+    );
+
+    const reloaded = await this.findJobOrderById(input.tenantId, input.jobOrderId, client);
+
+    if (reloaded === null) {
+      throw new Error('Updated job order status could not be loaded.');
+    }
+
+    return reloaded;
   }
 
   async isActiveShopOwner(input: {

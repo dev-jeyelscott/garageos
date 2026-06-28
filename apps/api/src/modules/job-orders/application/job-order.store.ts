@@ -170,6 +170,17 @@ export interface ReplaceJobOrderMechanicsInput {
   readonly assignedAt: Date;
 }
 
+export interface TransitionJobOrderStatusInput {
+  readonly tenantId: string;
+  readonly jobOrderId: string;
+  readonly fromStatus: JobOrderStatus;
+  readonly toStatus: JobOrderStatus;
+  readonly reason: string | null;
+  readonly expectedLockVersion: number;
+  readonly transitionedByUserId: string;
+  readonly transitionedAt: Date;
+}
+
 export abstract class JobOrderStore {
   abstract getTenantTimezone(
     tenantId: string,
@@ -245,6 +256,11 @@ export abstract class JobOrderStore {
     input: ReplaceJobOrderMechanicsInput,
     client: DatabaseQueryClient,
   ): Promise<JobOrderRecord>;
+
+  abstract transitionJobOrderStatus(
+    input: TransitionJobOrderStatusInput,
+    client: DatabaseQueryClient,
+  ): Promise<JobOrderRecord | null>;
 
   abstract isActiveShopOwner(input: {
     readonly tenantId: string;

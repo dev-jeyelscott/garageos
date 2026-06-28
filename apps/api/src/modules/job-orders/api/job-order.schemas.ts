@@ -131,11 +131,31 @@ export const assignJobOrderMechanicsRequestSchema = z
     }
   });
 
+export const transitionJobOrderStatusRequestSchema = z
+  .object({
+    to_status: jobOrderStatusSchema,
+    reason: z.string().trim().min(1).max(1000).nullish(),
+    lock_version: z.number().int().min(0),
+  })
+  .superRefine((value, context) => {
+    if (
+      value.to_status === 'waiting_for_parts' &&
+      (value.reason === null || value.reason === undefined || value.reason.trim().length === 0)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['reason'],
+        message: 'A reason is required when moving a job order to waiting for parts.',
+      });
+    }
+  });
+
 export type JobOrderStatusRequest = z.infer<typeof jobOrderStatusSchema>;
 export type ListJobOrdersQuery = z.infer<typeof listJobOrdersQuerySchema>;
 export type CreateJobOrderRequest = z.infer<typeof createJobOrderRequestSchema>;
 export type UpdateJobOrderRequest = z.infer<typeof updateJobOrderRequestSchema>;
 export type AssignJobOrderMechanicsRequest = z.infer<typeof assignJobOrderMechanicsRequestSchema>;
+export type TransitionJobOrderStatusRequest = z.infer<typeof transitionJobOrderStatusRequestSchema>;
 export type CreateJobOrderServiceLineRequest = z.infer<
   typeof createJobOrderServiceLineRequestSchema
 >;
