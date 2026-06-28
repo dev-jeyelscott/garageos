@@ -10,15 +10,15 @@ export function MarketingCtaSection() {
 
           <div className="relative grid gap-8 lg:grid-cols-[1fr_auto] lg:items-center">
             <div>
-              <p className="text-sm font-black uppercase tracking-[0.2em] text-white/80">
-                Start cleaner operations
+              <p className="text-sm font-black uppercase tracking-[0.2em] text-white/82">
+                Start with the shop workflow
               </p>
-              <h2 className="mt-3 max-w-3xl text-3xl font-black tracking-tight sm:text-4xl">
-                Ready to modernize your motorcycle shop?
+              <h2 className="mt-3 max-w-3xl text-4xl font-black tracking-tight sm:text-5xl">
+                Ready to get service work, stock, and payments in one place?
               </h2>
-              <p className="mt-4 max-w-2xl text-base leading-7 text-white/90">
-                Move from paper, spreadsheets, and scattered updates to one organized GarageOS
-                workspace for service operations.
+              <p className="mt-4 max-w-2xl text-lg leading-8 text-white/92">
+                Create the shop account, set up the workspace, and move daily operations away from
+                paper, spreadsheets, and scattered updates.
               </p>
             </div>
 
@@ -26,15 +26,15 @@ export function MarketingCtaSection() {
               <ButtonLink
                 href="/auth/signup-owner"
                 size="lg"
-                className="border-white bg-white px-6 text-foreground hover:bg-white/90"
+                className="border-white bg-white px-6 font-black text-foreground hover:bg-white/90"
               >
-                Start Owner Signup
+                Create your shop account
               </ButtonLink>
               <ButtonLink
                 href="/auth/login"
                 variant="outline"
                 size="lg"
-                className="border-white/40 bg-white/10 px-6 text-white hover:bg-white/20"
+                className="border-white/45 bg-white/10 px-6 font-black text-white hover:bg-white/20"
               >
                 Log in
               </ButtonLink>

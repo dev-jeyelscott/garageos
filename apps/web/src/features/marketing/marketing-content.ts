@@ -4,6 +4,7 @@ export type Feature = {
   readonly title: string;
   readonly description: string;
   readonly icon: IconName;
+  readonly outcome: string;
 };
 
 export type DashboardMetric = {
@@ -17,11 +18,13 @@ export type DashboardMetric = {
 export type WorkflowStep = {
   readonly title: string;
   readonly description: string;
+  readonly outcome: string;
 };
 
 export type RoleValue = {
   readonly role: string;
   readonly description: string;
+  readonly outcome: string;
   readonly icon: IconName;
 };
 
@@ -31,12 +34,32 @@ export type TrustItem = {
   readonly icon: IconName;
 };
 
+export type ProofPoint = {
+  readonly value: string;
+  readonly label: string;
+};
+
 export const navItems = [
   ['Product', '#product'],
   ['Workflow', '#workflow'],
   ['Features', '#features'],
   ['For Shops', '#roles'],
 ] as const;
+
+export const heroProofPoints: readonly ProofPoint[] = [
+  {
+    value: '1',
+    label: 'workspace for jobs, stock, invoices, and reports',
+  },
+  {
+    value: 'FIFO',
+    label: 'inventory costing and reservation foundation',
+  },
+  {
+    value: 'PWA',
+    label: 'mobile-first access for the shop floor',
+  },
+];
 
 export const dashboardMetrics: readonly DashboardMetric[] = [
   {
@@ -69,37 +92,45 @@ export const dashboardMetrics: readonly DashboardMetric[] = [
 
 export const features: readonly Feature[] = [
   {
-    title: 'Job Orders',
+    title: 'Job orders that stay visible',
     description:
-      'Track repair work from intake, assignment, service progress, completion, and release.',
+      'Create service work, assign mechanics, track progress, record notes, and move jobs through clear workflow actions.',
+    outcome: 'Less guessing about what is waiting, assigned, completed, or ready for release.',
     icon: 'wrench',
   },
   {
-    title: 'Inventory + FIFO',
+    title: 'Inventory with FIFO discipline',
     description:
-      'See on-hand, reserved, available stock, branch balances, FIFO layers, and low-stock alerts.',
+      'Track on-hand, reserved, and available stock by branch while preserving FIFO layers and low-stock visibility.',
+    outcome: 'Know what can be used before a job promises parts the shop does not actually have.',
     icon: 'box',
   },
   {
-    title: 'Invoices + Payments',
-    description: 'Issue invoices, record partial or split payments, and keep receipts immutable.',
+    title: 'Invoices, payments, and receipts',
+    description:
+      'Issue invoices, record partial or split payments, and keep receipt history immutable for cleaner cashier workflows.',
+    outcome: 'Cleaner balances and fewer payment-history disputes.',
     icon: 'receipt',
   },
   {
-    title: 'Customers + Motorcycles',
-    description: 'Keep tenant-wide customer records and branch-aware motorcycle service history.',
+    title: 'Customer and motorcycle history',
+    description:
+      'Keep customer records tenant-wide while preserving motorcycle service history across branch-aware operations.',
+    outcome: 'Advisors can understand the motorcycle before opening the next job.',
     icon: 'shop',
   },
   {
-    title: 'Reports',
+    title: 'Reports for daily control',
     description:
-      'Review operational, sales, inventory, receivables, payables, and branch-aware summaries.',
+      'Review operational, sales, inventory, receivable, payable, and branch-aware summaries from one reporting area.',
+    outcome: 'Owners and managers get the signal without digging through disconnected files.',
     icon: 'chart',
   },
   {
-    title: 'Reminders',
+    title: 'Reminders that support retention',
     description:
-      'Support service follow-ups and customer reminders through plan-supported channels.',
+      'Manage service follow-ups and customer reminders through the notification channels available to the shop plan.',
+    outcome: 'Keep service follow-up from depending on memory or scattered chat threads.',
     icon: 'bell',
   },
 ];
@@ -107,88 +138,120 @@ export const features: readonly Feature[] = [
 export const workflowSteps: readonly WorkflowStep[] = [
   {
     title: 'Intake',
-    description: 'Find or create the customer and motorcycle record.',
+    description: 'Find or create the customer and motorcycle record before work begins.',
+    outcome: 'Start with the right owner, motorcycle, and branch context.',
   },
   {
     title: 'Estimate',
-    description: 'Prepare service, labor, and parts estimate lines.',
+    description: 'Prepare service, labor, and parts lines before the customer approves the work.',
+    outcome: 'Set expectations before converting the quote into active shop work.',
   },
   {
     title: 'Approval',
-    description: 'Capture approval before converting work.',
+    description: 'Capture the approval method before the estimate becomes a job order.',
+    outcome: 'Keep accountability attached to the work that was approved.',
   },
   {
     title: 'Job Order',
-    description: 'Assign mechanics and track repair progress.',
+    description: 'Assign mechanics, track repair progress, and record service notes.',
+    outcome: 'Make the current job state visible to advisors, mechanics, and managers.',
   },
   {
     title: 'Parts Reservation',
-    description: 'Reserve parts without allowing stock over-allocation.',
+    description: 'Reserve needed parts without allowing available stock to be over-promised.',
+    outcome: 'Protect inventory accuracy before parts are consumed.',
   },
   {
     title: 'Invoice',
-    description: 'Bill completed work with clear balances.',
+    description: 'Bill completed work with clear balances and controlled line allocations.',
+    outcome: 'Reduce billing confusion before the customer reaches the cashier.',
   },
   {
     title: 'Payment',
-    description: 'Record payment and generate receipt history.',
+    description: 'Record payments and generate receipt history from the invoice.',
+    outcome: 'Keep payment proof attached to the right customer and invoice.',
   },
   {
     title: 'Reports',
-    description: 'Review sales, inventory, AR/AP, and operations.',
+    description: 'Review service, sales, inventory, AR/AP, and operational summaries.',
+    outcome: 'Turn daily shop activity into management visibility.',
   },
 ];
 
 export const roleValues: readonly RoleValue[] = [
   {
     role: 'Owner / Manager',
-    description: 'Monitor branches, employees, reports, exports, approvals, and audit visibility.',
+    description: 'Monitor branches, employees, reports, approvals, exports, and audit visibility.',
+    outcome: 'See the business without chasing every counter, mechanic, or spreadsheet.',
     icon: 'roles',
   },
   {
     role: 'Service Advisor',
     description:
       'Handle customer lookup, motorcycle intake, estimates, job orders, notes, and history.',
+    outcome: 'Move from customer conversation to service work without losing context.',
     icon: 'checklist',
   },
   {
     role: 'Mechanic',
     description:
       'See assigned jobs, work sessions, repair notes, labor tasks, and service progress.',
+    outcome: 'Focus on the next repair instead of asking what changed.',
     icon: 'wrench',
   },
   {
     role: 'Cashier',
     description: 'Issue invoices, record payments, view receipts, and process permitted refunds.',
+    outcome: 'Keep balances, receipts, and payment history clean at checkout.',
     icon: 'credit-card',
   },
   {
     role: 'Inventory Clerk',
     description:
-      'Lookup products, receive stock, manage transfers, adjustments, and low-stock actions.',
+      'Look up products, receive stock, manage transfers, adjustments, and low-stock actions.',
+    outcome: 'Protect stock accuracy before jobs, purchases, and transfers collide.',
     icon: 'box',
   },
 ];
 
 export const trustItems: readonly TrustItem[] = [
   {
-    title: 'Mobile-first PWA',
-    description: 'Designed for shop-floor use on phones, tablets, and desktops.',
-    icon: 'gauge',
-  },
-  {
     title: 'Tenant and branch aware',
-    description: 'Navigation and records follow tenant, branch, role, and permission context.',
+    description:
+      'Records and navigation are designed around tenant, branch, role, and permission context.',
     icon: 'shield',
   },
   {
-    title: 'Read-only offline safety',
-    description: 'Offline mode keeps recent views readable without allowing offline writes.',
-    icon: 'offline',
+    title: 'Ledger-first inventory',
+    description:
+      'Stock-changing workflows are designed around inventory ledger entries, reservations, and FIFO layers.',
+    icon: 'box',
   },
   {
-    title: 'Audit-friendly workflows',
-    description: 'Critical actions keep status history, actors, timestamps, and reasons visible.',
-    icon: 'audit',
+    title: 'Financial records stay controlled',
+    description:
+      'Invoices, payments, receipts, refunds, and related histories use controlled workflows instead of casual edits.',
+    icon: 'receipt',
+  },
+  {
+    title: 'Read-only offline safety',
+    description:
+      'The PWA can keep recent information readable offline without allowing risky offline operational writes.',
+    icon: 'offline',
+  },
+];
+
+export const operationalProofPoints: readonly ProofPoint[] = [
+  {
+    value: 'Branch',
+    label: 'context stays visible where work is branch-scoped',
+  },
+  {
+    value: 'Role',
+    label: 'navigation follows the user’s operational responsibilities',
+  },
+  {
+    value: 'Audit',
+    label: 'critical workflow history keeps actor and timing context visible',
   },
 ];
