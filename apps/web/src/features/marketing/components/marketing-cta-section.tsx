@@ -26,7 +26,7 @@ export function MarketingCtaSection() {
               <ButtonLink
                 href="/auth/signup-owner"
                 size="lg"
-                className="border-white bg-white px-6 font-black text-foreground hover:bg-white/90"
+                className="w-full border-white bg-white px-6 font-black text-foreground hover:bg-white/90 sm:w-auto"
               >
                 Create your shop account
               </ButtonLink>
@@ -34,7 +34,7 @@ export function MarketingCtaSection() {
                 href="/auth/login"
                 variant="outline"
                 size="lg"
-                className="border-white/45 bg-white/10 px-6 font-black text-white hover:bg-white/20"
+                className="w-full border-white/45 bg-white/10 px-6 font-black text-white hover:bg-white/20 sm:w-auto"
               >
                 Log in
               </ButtonLink>

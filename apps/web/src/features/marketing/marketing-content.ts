@@ -17,8 +17,10 @@ export type DashboardMetric = {
 
 export type WorkflowStep = {
   readonly title: string;
+  readonly phase: string;
   readonly description: string;
   readonly outcome: string;
+  readonly icon: IconName;
 };
 
 export type RoleValue = {
@@ -42,8 +44,8 @@ export type ProofPoint = {
 export const navItems = [
   ['Product', '#product'],
   ['Workflow', '#workflow'],
-  ['Features', '#features'],
   ['For Shops', '#roles'],
+  ['Trust', '#trust'],
 ] as const;
 
 export const heroProofPoints: readonly ProofPoint[] = [
@@ -138,43 +140,59 @@ export const features: readonly Feature[] = [
 export const workflowSteps: readonly WorkflowStep[] = [
   {
     title: 'Intake',
+    phase: 'Customer context',
     description: 'Find or create the customer and motorcycle record before work begins.',
     outcome: 'Start with the right owner, motorcycle, and branch context.',
+    icon: 'shop',
   },
   {
     title: 'Estimate',
+    phase: 'Scope and pricing',
     description: 'Prepare service, labor, and parts lines before the customer approves the work.',
     outcome: 'Set expectations before converting the quote into active shop work.',
+    icon: 'checklist',
   },
   {
     title: 'Approval',
+    phase: 'Accountable approval',
     description: 'Capture the approval method before the estimate becomes a job order.',
     outcome: 'Keep accountability attached to the work that was approved.',
+    icon: 'shield',
   },
   {
     title: 'Job Order',
+    phase: 'Active service work',
     description: 'Assign mechanics, track repair progress, and record service notes.',
     outcome: 'Make the current job state visible to advisors, mechanics, and managers.',
+    icon: 'wrench',
   },
   {
     title: 'Parts Reservation',
+    phase: 'Stock protection',
     description: 'Reserve needed parts without allowing available stock to be over-promised.',
     outcome: 'Protect inventory accuracy before parts are consumed.',
+    icon: 'box',
   },
   {
     title: 'Invoice',
+    phase: 'Controlled billing',
     description: 'Bill completed work with clear balances and controlled line allocations.',
     outcome: 'Reduce billing confusion before the customer reaches the cashier.',
+    icon: 'receipt',
   },
   {
     title: 'Payment',
+    phase: 'Receipt trail',
     description: 'Record payments and generate receipt history from the invoice.',
     outcome: 'Keep payment proof attached to the right customer and invoice.',
+    icon: 'credit-card',
   },
   {
     title: 'Reports',
+    phase: 'Management visibility',
     description: 'Review service, sales, inventory, AR/AP, and operational summaries.',
     outcome: 'Turn daily shop activity into management visibility.',
+    icon: 'chart',
   },
 ];
 

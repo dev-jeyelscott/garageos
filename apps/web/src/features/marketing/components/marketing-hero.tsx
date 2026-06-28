@@ -10,14 +10,14 @@ export function MarketingHero() {
       <div className="absolute right-[-9rem] top-24 -z-10 hidden h-[32rem] w-[32rem] rounded-full bg-primary/10 blur-3xl lg:block" />
       <div className="absolute left-[-12rem] top-[30rem] -z-10 hidden h-[24rem] w-[24rem] rounded-full bg-orange-200/20 blur-3xl lg:block" />
 
-      <Container className="grid gap-12 pb-16 pt-10 lg:grid-cols-[0.92fr_1.08fr] lg:items-center lg:pb-24 lg:pt-18">
+      <Container className="grid gap-12 pb-16 pt-10 lg:grid-cols-[0.92fr_1.08fr] lg:items-center lg:pb-24 lg:pt-20">
         <div className="max-w-2xl">
           <Badge className="border-primary/20 bg-accent px-4 py-2 text-sm font-black text-accent-foreground shadow-sm">
             <span className="mr-2 inline-flex h-2.5 w-2.5 rounded-full bg-primary" />
             Built for motorcycle service shops
           </Badge>
 
-          <h1 className="mt-6 text-5xl font-black leading-[0.94] tracking-tight text-foreground sm:text-6xl lg:text-7xl">
+          <h1 className="mt-6 text-4xl font-black leading-[0.96] tracking-tight text-foreground sm:text-6xl lg:text-7xl">
             Keep every job, part, and payment{' '}
             <span className="block bg-gradient-to-r from-primary via-orange-400 to-amber-300 bg-clip-text text-transparent">
               under control.
@@ -33,14 +33,19 @@ export function MarketingHero() {
             <ButtonLink
               href="/auth/signup-owner"
               size="lg"
-              className="bg-gradient-to-r from-primary to-orange-500 px-6 font-black shadow-[0_18px_35px_rgb(249_115_0_/_0.28)] hover:opacity-95"
+              className="w-full bg-gradient-to-r from-primary to-orange-500 px-6 font-black shadow-[0_18px_35px_rgb(249_115_0_/_0.28)] hover:opacity-95 sm:w-auto"
             >
               Create your shop account
               <span aria-hidden="true" className="ml-2">
                 →
               </span>
             </ButtonLink>
-            <ButtonLink href="#workflow" variant="outline" size="lg" className="bg-card">
+            <ButtonLink
+              href="#workflow"
+              variant="outline"
+              size="lg"
+              className="w-full bg-card sm:w-auto"
+            >
               See the workflow
             </ButtonLink>
           </div>
