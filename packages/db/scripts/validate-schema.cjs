@@ -9,7 +9,7 @@ require('dotenv').config({
 const DATABASE_URL = process.env.DATABASE_URL;
 
 const EXPECTED = {
-  migrationCount: 24,
+  migrationCount: 25,
   publicTableCount: 106,
   subscriptionPlans: 3,
   subscriptionPlanLimits: 27,
@@ -542,6 +542,132 @@ async function validateInventoryLedgerFoundationSchema(client) {
   assertEqual('inventory ledger append-only trigger', appendOnlyTriggerCount, 1);
 }
 
+async function validateFifoLayerFoundationSchema(client) {
+  const columnCount = await count(
+    client,
+    `
+      select count(*)
+      from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'fifo_layers'
+        and column_name in (
+          'id',
+          'tenant_id',
+          'branch_id',
+          'product_id',
+          'quantity_received',
+          'remaining_quantity',
+          'unit_cost',
+          'source_transaction_type',
+          'source_transaction_id',
+          'received_at',
+          'original_source_layer_id'
+        )
+    `,
+  );
+
+  const primaryKeyCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_constraint constraint_definition
+      inner join pg_class table_class
+        on table_class.oid = constraint_definition.conrelid
+      inner join pg_namespace namespace
+        on namespace.oid = table_class.relnamespace
+      where namespace.nspname = 'public'
+        and table_class.relname = 'fifo_layers'
+        and constraint_definition.contype = 'p'
+        and pg_get_constraintdef(constraint_definition.oid) ilike '%PRIMARY KEY (id)%'
+    `,
+  );
+
+  const quantityConstraintCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_constraint
+      where conname = 'chk_fifo_layer_quantities'
+    `,
+  );
+
+  const costConstraintCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_constraint
+      where conname = 'chk_fifo_layer_cost'
+    `,
+  );
+
+  const productForeignKeyCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_constraint constraint_definition
+      inner join pg_class table_class
+        on table_class.oid = constraint_definition.conrelid
+      inner join pg_namespace namespace
+        on namespace.oid = table_class.relnamespace
+      where namespace.nspname = 'public'
+        and table_class.relname = 'fifo_layers'
+        and constraint_definition.contype = 'f'
+        and pg_get_constraintdef(constraint_definition.oid) ilike '%FOREIGN KEY (product_id)%REFERENCES products(id)%'
+    `,
+  );
+
+  const branchForeignKeyCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_constraint constraint_definition
+      inner join pg_class table_class
+        on table_class.oid = constraint_definition.conrelid
+      inner join pg_namespace namespace
+        on namespace.oid = table_class.relnamespace
+      where namespace.nspname = 'public'
+        and table_class.relname = 'fifo_layers'
+        and constraint_definition.contype = 'f'
+        and pg_get_constraintdef(constraint_definition.oid) ilike '%FOREIGN KEY (tenant_id, branch_id)%'
+    `,
+  );
+
+  const originalSourceForeignKeyCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_constraint constraint_definition
+      inner join pg_class table_class
+        on table_class.oid = constraint_definition.conrelid
+      inner join pg_namespace namespace
+        on namespace.oid = table_class.relnamespace
+      where namespace.nspname = 'public'
+        and table_class.relname = 'fifo_layers'
+        and constraint_definition.contype = 'f'
+        and pg_get_constraintdef(constraint_definition.oid) ilike '%FOREIGN KEY (original_source_layer_id)%REFERENCES fifo_layers(id)%'
+    `,
+  );
+
+  const openLayersIndexCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_indexes
+      where schemaname = 'public'
+        and indexname = 'idx_fifo_open_layers'
+    `,
+  );
+
+  assertEqual('fifo layers foundation columns', columnCount, 11);
+  assertEqual('fifo layers primary key', primaryKeyCount, 1);
+  assertEqual('fifo layers quantity constraint', quantityConstraintCount, 1);
+  assertEqual('fifo layers cost constraint', costConstraintCount, 1);
+  assertEqual('fifo layers product foreign key', productForeignKeyCount, 1);
+  assertEqual('fifo layers branch foreign key', branchForeignKeyCount, 1);
+  assertEqual('fifo layers original source foreign key', originalSourceForeignKeyCount, 1);
+  assertEqual('fifo layers open layers index', openLayersIndexCount, 1);
+}
+
 async function validateEstimatesBaselineSchema(client) {
   const estimateColumnCount = await count(
     client,
@@ -725,6 +851,7 @@ async function main() {
     await validateProductsFoundationSchema(client);
     await validateStockBalancesFoundationSchema(client);
     await validateInventoryLedgerFoundationSchema(client);
+    await validateFifoLayerFoundationSchema(client);
     await validateEstimatesBaselineSchema(client);
     await validateMoneyPrecision(client);
     await validateQuantityPrecision(client);
