@@ -23,12 +23,6 @@ import {
   SheetTitle,
   SheetTrigger,
   Skeleton,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
   Tabs,
   TabsContent,
   TabsList,
@@ -50,18 +44,16 @@ import {
 import type { ProtectedRouteKind, SessionLoadState, ShellNavItem } from '../types/app-shell.types';
 import type { TenantMoreMenuItem, TenantPlannedRouteKey } from '../types/tenant-route.types';
 import { PlatformAuditLogsContent } from '../../platform/audit-logs/platform-audit-logs.screen';
+import { PlatformTenantsContent } from '../../platform/tenants/platform-tenants.screen';
 import {
   defaultPlatformSupportAccessEndForm,
   defaultPlatformSupportAccessForm,
   defaultPlatformTenantCreateForm,
   defaultPlatformTenantDeletionJobForm,
   defaultPlatformTenantExportForm,
-  defaultPlatformTenantListFilters,
   defaultPlatformTenantReadOnlyOverrideForm,
   defaultPlatformTenantSubscriptionForm,
   defaultPlatformTenantSuspensionForm,
-  platformTenantListPageSize,
-  tenantStatusFilterOptions,
 } from '../../platform/tenants/platform-tenant.defaults';
 import {
   applyPlatformTenantReadOnlyOverride,
@@ -69,7 +61,6 @@ import {
   createPlatformTenant,
   endPlatformSupportAccessSession,
   getPlatformTenantDetail,
-  getPlatformTenants,
   queuePlatformTenantDeletionJob,
   queuePlatformTenantExport,
   startPlatformSupportAccessSession,
@@ -89,9 +80,7 @@ import type {
   PlatformTenantDetailState,
   PlatformTenantExportForm,
   PlatformTenantExportSubmitState,
-  PlatformTenantListFilters,
   PlatformTenantListItem,
-  PlatformTenantListState,
   PlatformTenantReadOnlyOverrideForm,
   PlatformTenantReadOnlyOverrideSubmitState,
   PlatformTenantStatusFilter,
@@ -310,144 +299,19 @@ export function PlatformOverviewScreen() {
 
 export function PlatformTenantsScreen() {
   const sessionState = useProtectedSession('platform');
-  const [searchDraft, setSearchDraft] = useState('');
-  const [statusDraft, setStatusDraft] = useState<PlatformTenantStatusFilter>('all');
-  const [appliedFilters, setAppliedFilters] = useState<PlatformTenantListFilters>(
-    defaultPlatformTenantListFilters,
-  );
-  const [tenantListState, setTenantListState] = useState<PlatformTenantListState>({
-    status: 'idle',
-    tenants: [],
-    pagination: null,
-  });
-
-  const canReadTenantList =
-    sessionState.status === 'ready' &&
-    hasEffectivePermission(sessionState.session, 'platform.tenants.read');
-
-  const canCreateTenant =
-    sessionState.status === 'ready' &&
-    hasEffectivePermission(sessionState.session, 'platform.tenants.create');
-
-  useEffect(() => {
-    if (sessionState.status !== 'ready' || !canReadTenantList) {
-      return;
-    }
-
-    let active = true;
-
-    async function loadInitialTenants() {
-      setTenantListState({
-        status: 'loading',
-        tenants: [],
-        pagination: null,
-      });
-
-      try {
-        const result = await getPlatformTenants({
-          filters: appliedFilters,
-          limit: platformTenantListPageSize,
-        });
-
-        if (!active) {
-          return;
-        }
-
-        setTenantListState({
-          status: 'loaded',
-          tenants: result.tenants,
-          pagination: result.pagination,
-        });
-      } catch (error) {
-        if (!active) {
-          return;
-        }
-
-        setTenantListState({
-          status: 'error',
-          tenants: [],
-          pagination: null,
-          message: toSafeErrorMessage(error, 'Unable to load platform tenants.'),
-          detail: toSafeErrorDetail(error),
-          code: getApiErrorCode(error),
-        });
-      }
-    }
-
-    void loadInitialTenants();
-
-    return () => {
-      active = false;
-    };
-  }, [appliedFilters, canReadTenantList, sessionState]);
-
-  async function handleLoadMore() {
-    const nextCursor = tenantListState.pagination?.next_cursor ?? null;
-
-    if (nextCursor === null || tenantListState.status === 'loading_more') {
-      return;
-    }
-
-    setTenantListState((current) => ({
-      ...current,
-      status: 'loading_more',
-    }));
-
-    try {
-      const result = await getPlatformTenants({
-        filters: appliedFilters,
-        cursor: nextCursor,
-        limit: platformTenantListPageSize,
-      });
-
-      setTenantListState((current) => ({
-        status: 'loaded',
-        tenants: [...current.tenants, ...result.tenants],
-        pagination: result.pagination,
-      }));
-    } catch (error) {
-      setTenantListState((current) => ({
-        status: 'error',
-        tenants: current.tenants,
-        pagination: current.pagination,
-        message: toSafeErrorMessage(error, 'Unable to load more platform tenants.'),
-        detail: toSafeErrorDetail(error),
-        code: getApiErrorCode(error),
-      }));
-    }
-  }
-
-  function handleFilterSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    setAppliedFilters({
-      q: searchDraft.trim(),
-      status: statusDraft,
-    });
-  }
-
-  function handleResetFilters() {
-    setSearchDraft('');
-    setStatusDraft('all');
-    setAppliedFilters(defaultPlatformTenantListFilters);
-  }
 
   if (sessionState.status !== 'ready') {
     return <SessionStateScreen state={sessionState} area="platform" />;
   }
 
-  const isInitialLoading =
-    tenantListState.status === 'idle' || tenantListState.status === 'loading';
-  const isLoadingMore = tenantListState.status === 'loading_more';
-  const hasMore =
-    tenantListState.pagination?.has_more === true &&
-    tenantListState.pagination.next_cursor !== null;
-  const hasActiveFilters = appliedFilters.q.length > 0 || appliedFilters.status !== 'all';
+  const { session } = sessionState;
+  const canReadTenantList = hasEffectivePermission(session, 'platform.tenants.read');
+  const canCreateTenant = hasEffectivePermission(session, 'platform.tenants.create');
 
   return (
     <AuthenticatedShell
       area="platform"
-      session={sessionState.session}
+      session={session}
       title="Platform Tenants"
       eyebrow="Platform administration"
       description="View tenant lifecycle and subscription status without entering tenant support access."
@@ -468,150 +332,7 @@ export function PlatformTenantsScreen() {
         )
       }
     >
-      {!canReadTenantList ? (
-        <ForbiddenState
-          title="Platform tenant list unavailable"
-          requiredPermission="platform.tenants.read"
-          description="Your platform session does not include permission to view tenant records."
-        />
-      ) : (
-        <>
-          <Alert>
-            <p className="text-sm leading-6">
-              This screen reads the documented platform tenant list only. Tenant creation,
-              subscription overrides, support access, exports, deletion jobs, and audit logs remain
-              separate documented workflows.
-            </p>
-          </Alert>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Tenant list</CardTitle>
-              <CardDescription>
-                Search and filter tenants through the platform list API. Cursor pagination is read
-                from the API response metadata.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-5">
-              <form
-                className="grid gap-3 lg:grid-cols-[1fr_16rem_auto_auto] lg:items-end"
-                onSubmit={handleFilterSubmit}
-              >
-                <label className="grid gap-2">
-                  <span className="text-sm font-bold text-foreground">Search tenants</span>
-                  <Input
-                    value={searchDraft}
-                    onChange={(event) => setSearchDraft(event.currentTarget.value)}
-                    placeholder="Business name, email, timezone..."
-                    disabled={isInitialLoading || isLoadingMore}
-                  />
-                </label>
-
-                <label className="grid gap-2">
-                  <span className="text-sm font-bold text-foreground">Status</span>
-                  <select
-                    value={statusDraft}
-                    onChange={(event) =>
-                      setStatusDraft(event.currentTarget.value as PlatformTenantStatusFilter)
-                    }
-                    disabled={isInitialLoading || isLoadingMore}
-                    className="min-h-11 rounded-xl border border-input bg-background px-3 py-2 text-base text-foreground shadow-sm outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {tenantStatusFilterOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <Button type="submit" disabled={isInitialLoading || isLoadingMore}>
-                  Apply filters
-                </Button>
-
-                <Button
-                  type="button"
-                  variant="secondary"
-                  disabled={isInitialLoading || isLoadingMore}
-                  onClick={handleResetFilters}
-                >
-                  Reset
-                </Button>
-              </form>
-
-              {hasActiveFilters ? (
-                <Alert>
-                  <p className="text-sm leading-6">
-                    Active filters:{' '}
-                    <strong>{appliedFilters.q.length > 0 ? appliedFilters.q : 'No search'}</strong>
-                    {' · '}
-                    <strong>{formatTenantStatusFilter(appliedFilters.status)}</strong>
-                  </p>
-                </Alert>
-              ) : null}
-
-              <div className="grid gap-4">
-                {isInitialLoading ? <TenantListSkeleton /> : null}
-
-                {tenantListState.status === 'error' ? (
-                  tenantListState.code === 'forbidden' ? (
-                    <ForbiddenState
-                      title="Platform tenant list blocked"
-                      requiredPermission="platform.tenants.read"
-                      description={
-                        tenantListState.message ?? 'The platform tenant list is blocked.'
-                      }
-                      detail={tenantListState.detail ?? null}
-                    />
-                  ) : (
-                    <Alert variant="destructive">
-                      <p className="text-sm font-bold">{tenantListState.message}</p>
-                      {tenantListState.detail === null ||
-                      tenantListState.detail === undefined ? null : (
-                        <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                          {tenantListState.detail}
-                        </p>
-                      )}
-                    </Alert>
-                  )
-                ) : null}
-
-                {!isInitialLoading &&
-                tenantListState.status !== 'error' &&
-                tenantListState.tenants.length === 0 ? (
-                  <EmptyState
-                    title={
-                      hasActiveFilters ? 'No tenants match the filters' : 'No tenants returned'
-                    }
-                    description={
-                      hasActiveFilters
-                        ? 'Adjust the search or status filter and try again.'
-                        : 'The platform tenant list endpoint returned an empty list.'
-                    }
-                  />
-                ) : null}
-
-                {tenantListState.tenants.length > 0 ? (
-                  <PlatformTenantTable tenants={tenantListState.tenants} />
-                ) : null}
-
-                {hasMore && tenantListState.status !== 'error' ? (
-                  <div className="flex justify-center">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      disabled={isLoadingMore}
-                      onClick={() => void handleLoadMore()}
-                    >
-                      {isLoadingMore ? 'Loading more tenants...' : 'Load more tenants'}
-                    </Button>
-                  </div>
-                ) : null}
-              </div>
-            </CardContent>
-          </Card>
-        </>
-      )}
+      <PlatformTenantsContent canReadTenantList={canReadTenantList} />
     </AuthenticatedShell>
   );
 }
@@ -2837,115 +2558,6 @@ function createPlatformTenantSubscriptionFormFromTenant(
   };
 }
 
-function PlatformTenantTable({ tenants }: { readonly tenants: readonly PlatformTenantListItem[] }) {
-  return (
-    <div className="grid gap-4">
-      <div className="grid gap-3 lg:hidden">
-        {tenants.map((tenant) => (
-          <PlatformTenantMobileCard key={tenant.id} tenant={tenant} />
-        ))}
-      </div>
-
-      <div className="hidden overflow-hidden rounded-2xl border border-border bg-card lg:block">
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-muted/70 hover:bg-muted/70">
-              <TableHead>Tenant</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Plan</TableHead>
-              <TableHead>Expiration</TableHead>
-              <TableHead>Location</TableHead>
-              <TableHead className="text-right">Action</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {tenants.map((tenant) => {
-              const tenantDetailHref = `/platform/tenants/${tenant.id}`;
-
-              return (
-                <TableRow key={tenant.id}>
-                  <TableCell>
-                    <Link
-                      href={tenantDetailHref}
-                      className="font-bold text-foreground underline-offset-4 hover:underline"
-                    >
-                      {tenant.business_name}
-                    </Link>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {tenant.shop_email ?? 'No shop email returned'}
-                    </p>
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge status={tenant.status} />
-                  </TableCell>
-                  <TableCell className="font-semibold text-foreground">
-                    {formatTenantPlan(tenant)}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {tenant.subscription?.expiration_date ?? 'Expiration not returned'}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {formatTenantLocation(tenant)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <ButtonLink href={tenantDetailHref} variant="secondary" size="sm">
-                      View
-                    </ButtonLink>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </div>
-    </div>
-  );
-}
-
-function PlatformTenantMobileCard({ tenant }: { readonly tenant: PlatformTenantListItem }) {
-  const tenantDetailHref = `/platform/tenants/${tenant.id}`;
-
-  return (
-    <article className="grid gap-4 rounded-2xl border border-border bg-card p-4 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <Link
-            href={tenantDetailHref}
-            className="break-words font-bold text-foreground underline-offset-4 hover:underline"
-          >
-            {tenant.business_name}
-          </Link>
-          <p className="mt-1 break-words text-sm text-muted-foreground">
-            {tenant.shop_email ?? 'No shop email returned'}
-          </p>
-        </div>
-        <StatusBadge status={tenant.status} />
-      </div>
-
-      <dl className="grid gap-3 rounded-2xl border border-border bg-muted/40 p-3 text-sm">
-        <div>
-          <dt className="font-bold text-foreground">Plan</dt>
-          <dd className="mt-1 text-muted-foreground">{formatTenantPlan(tenant)}</dd>
-        </div>
-        <div>
-          <dt className="font-bold text-foreground">Expiration</dt>
-          <dd className="mt-1 text-muted-foreground">
-            {tenant.subscription?.expiration_date ?? 'Expiration not returned'}
-          </dd>
-        </div>
-        <div>
-          <dt className="font-bold text-foreground">Location</dt>
-          <dd className="mt-1 text-muted-foreground">{formatTenantLocation(tenant)}</dd>
-        </div>
-      </dl>
-
-      <ButtonLink href={tenantDetailHref} variant="secondary" size="sm">
-        View tenant
-      </ButtonLink>
-    </article>
-  );
-}
-
 function TenantDetailSkeleton() {
   return (
     <div className="grid gap-4" aria-busy="true" aria-live="polite">
@@ -4817,16 +4429,6 @@ function EmptyState({
     <div className="rounded-2xl border border-dashed border-border bg-muted/50 p-6 text-center">
       <h2 className="font-bold text-foreground">{title}</h2>
       <p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p>
-    </div>
-  );
-}
-
-function TenantListSkeleton() {
-  return (
-    <div className="grid gap-3" aria-busy="true" aria-live="polite">
-      <Skeleton className="h-16 w-full" />
-      <Skeleton className="h-16 w-full" />
-      <Skeleton className="h-16 w-full" />
     </div>
   );
 }
