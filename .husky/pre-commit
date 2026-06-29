@@ -1,3 +1,5 @@
+pnpm format
+git add .
 pnpm lint
 pnpm typecheck
 pnpm test
