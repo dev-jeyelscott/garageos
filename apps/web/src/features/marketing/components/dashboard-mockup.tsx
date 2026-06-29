@@ -8,9 +8,11 @@ import { MarketingIcon } from '../marketing-icons';
 export function DashboardMockup() {
   return (
     <div className="relative mx-auto w-full max-w-3xl">
-      <div className="absolute -inset-4 rounded-[2.25rem] bg-[linear-gradient(135deg,rgb(24_24_27_/_0.12),transparent_36%,rgb(249_115_0_/_0.16))] blur-2xl" />
-
-      <Card className="relative overflow-hidden rounded-[2rem] border-zinc-800 bg-zinc-950 text-white shadow-[0_28px_90px_rgb(24_24_27_/_0.28)]">
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -inset-2 rounded-[2rem] bg-[linear-gradient(135deg,rgb(24_24_27_/_0.08),transparent_42%,rgb(249_115_0_/_0.10))] opacity-70 blur-xl sm:-inset-3 lg:-inset-4 lg:blur-2xl"
+      />
+      <Card className="relative overflow-hidden rounded-[2rem] border-zinc-800 bg-zinc-950 text-white shadow-[0_18px_45px_rgb(24_24_27_/_0.16)] sm:shadow-[0_24px_60px_rgb(24_24_27_/_0.20)]">
         <div className="border-b border-white/10 bg-white/[0.03] px-5 py-4">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
