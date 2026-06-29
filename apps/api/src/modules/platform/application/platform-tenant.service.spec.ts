@@ -26,6 +26,7 @@ import {
   type CreateTenantInput,
   type CreateTenantLifecycleEventInput,
   type CreateTenantSubscriptionInput,
+  type ListTenantLifecycleEvaluationCandidatesInput,
   type ListPlatformTenantsInput,
   type PlatformPlanSummary,
   type PlatformSubscriptionSummary,
@@ -1731,6 +1732,12 @@ class FakePlatformTenantStore extends PlatformTenantStore {
 
   async findTenantById(): Promise<PlatformTenantDetailRecord | null> {
     return this.tenantById;
+  }
+
+  async listTenantLifecycleEvaluationCandidates(
+    _input: ListTenantLifecycleEvaluationCandidatesInput,
+  ): Promise<readonly PlatformTenantDetailRecord[]> {
+    return [];
   }
 
   async findActivePlanById(): Promise<PlatformPlanSummary | null> {

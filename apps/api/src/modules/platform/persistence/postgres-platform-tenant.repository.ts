@@ -12,6 +12,7 @@ import {
   type CreateSubscriptionOverrideInput,
   type CreateTenantInput,
   type CreateTenantLifecycleEventInput,
+  type ListTenantLifecycleEvaluationCandidatesInput,
   type CreateTenantSubscriptionInput,
   type ListPlatformTenantsInput,
   type PlatformPlanCode,
@@ -231,6 +232,34 @@ export class PostgresPlatformTenantRepository extends PlatformTenantStore {
     const row = result.rows[0];
 
     return row === undefined ? null : mapTenantDetailRecord(row);
+  }
+
+  async listTenantLifecycleEvaluationCandidates(
+    input: ListTenantLifecycleEvaluationCandidatesInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<readonly PlatformTenantDetailRecord[]> {
+    const result = await client.query<PlatformTenantRow>(
+      `
+        ${tenantSelectSql()}
+        where ts.status_source = 'system_computed'
+          and ts.expiration_date <= $1::date
+          and t.status in ('active', 'grace_period', 'read_only', 'suspended', 'pending_deletion')
+          and (
+            $2::date is null
+            or (ts.expiration_date, t.id) > ($2::date, $3::uuid)
+          )
+        order by ts.expiration_date asc, t.id asc
+        limit $4
+      `,
+      [
+        input.expirationDateOnOrBefore,
+        input.cursorExpirationDate,
+        input.cursorTenantId,
+        input.limit,
+      ],
+    );
+
+    return result.rows.map(mapTenantDetailRecord);
   }
 
   async findActivePlanById(

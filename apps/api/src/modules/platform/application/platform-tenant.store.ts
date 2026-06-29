@@ -100,6 +100,13 @@ export interface ListPlatformTenantsInput {
   readonly search: string | null;
 }
 
+export interface ListTenantLifecycleEvaluationCandidatesInput {
+  readonly limit: number;
+  readonly expirationDateOnOrBefore: string;
+  readonly cursorExpirationDate: string | null;
+  readonly cursorTenantId: string | null;
+}
+
 export interface PlatformAuditLogRecord {
   readonly id: string;
   readonly platformAdminUserId: string | null;
@@ -238,6 +245,11 @@ export abstract class PlatformTenantStore {
     tenantId: string,
     client?: DatabaseQueryClient,
   ): Promise<PlatformTenantDetailRecord | null>;
+
+  abstract listTenantLifecycleEvaluationCandidates(
+    input: ListTenantLifecycleEvaluationCandidatesInput,
+    client?: DatabaseQueryClient,
+  ): Promise<readonly PlatformTenantDetailRecord[]>;
 
   abstract findActivePlanById(
     planId: string,
