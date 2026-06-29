@@ -34,14 +34,13 @@ import {
   TabsList,
   TabsTrigger,
 } from '../../../components/ui';
-import { getAccessTokenOrRefresh, getAuthJsonEnvelope } from '../../auth/actions/login.action';
 import { getCurrentSession } from '../../auth/queries/get-current-session.query';
 import type { AuthSessionResponseData, AuthTenantStatus } from '../../auth/types/auth-session';
 import {
   isTenantBlockedStatus,
   resolveAuthenticatedRedirect,
 } from '../../auth/utils/resolve-auth-redirect';
-import { isApiClientError, type ApiClientError } from '../../../lib/api-envelope';
+import { isApiClientError } from '../../../lib/api-envelope';
 
 import { platformNavItems, tenantNavItems } from '../constants/app-shell-nav-items';
 import {
@@ -50,6 +49,16 @@ import {
 } from '../constants/tenant-route.constants';
 import type { ProtectedRouteKind, SessionLoadState, ShellNavItem } from '../types/app-shell.types';
 import type { TenantMoreMenuItem, TenantPlannedRouteKey } from '../types/tenant-route.types';
+import { getPlatformAuditLogs } from '../../platform/audit-logs/platform-audit-log.api';
+import {
+  defaultPlatformAuditLogListFilters,
+  platformAuditLogListPageSize,
+} from '../../platform/audit-logs/platform-audit-log.defaults';
+import type {
+  PlatformAuditLogListFilters,
+  PlatformAuditLogListItem,
+  PlatformAuditLogListState,
+} from '../../platform/audit-logs/platform-audit-log.types';
 import {
   defaultPlatformSupportAccessEndForm,
   defaultPlatformSupportAccessForm,
@@ -100,57 +109,6 @@ import type {
   PlatformTenantSuspensionForm,
   PlatformTenantSuspensionSubmitState,
 } from '../../platform/tenants/platform-tenant.types';
-
-type PlatformAuditLogListFilters = {
-  readonly platform_admin_user_id: string;
-  readonly action: string;
-  readonly tenant_id: string;
-  readonly from: string;
-  readonly to: string;
-};
-
-interface PlatformAuditLogListItem {
-  readonly id: string;
-  readonly platform_admin_user_id: string | null;
-  readonly tenant_id: string | null;
-  readonly action: string;
-  readonly entity_type: string;
-  readonly entity_id: string | null;
-  readonly metadata_json: Record<string, unknown> | null;
-  readonly ip_address: string | null;
-  readonly user_agent: string | null;
-  readonly created_at: string;
-}
-
-interface PlatformAuditLogListPagination {
-  readonly limit: number;
-  readonly next_cursor: string | null;
-  readonly has_more: boolean;
-}
-
-interface PlatformAuditLogListResult {
-  readonly audit_logs: readonly PlatformAuditLogListItem[];
-  readonly pagination: PlatformAuditLogListPagination | null;
-}
-
-interface PlatformAuditLogListState {
-  readonly status: 'idle' | 'loading' | 'loaded' | 'loading_more' | 'error';
-  readonly auditLogs: readonly PlatformAuditLogListItem[];
-  readonly pagination: PlatformAuditLogListPagination | null;
-  readonly message?: string;
-  readonly detail?: string | null;
-  readonly code?: string | null;
-}
-
-const platformAuditLogListPageSize = 50;
-
-const defaultPlatformAuditLogListFilters: PlatformAuditLogListFilters = {
-  platform_admin_user_id: '',
-  action: '',
-  tenant_id: '',
-  from: '',
-  to: '',
-};
 
 export function PlatformOverviewScreen() {
   const sessionState = useProtectedSession('platform');
@@ -3170,123 +3128,6 @@ function resolveRouteAccess(
   return resolveAuthenticatedRedirect(session);
 }
 
-async function getPlatformAuditLogs({
-  filters,
-  cursor = null,
-  limit,
-}: {
-  readonly filters: PlatformAuditLogListFilters;
-  readonly cursor?: string | null;
-  readonly limit: number;
-}): Promise<PlatformAuditLogListResult> {
-  const accessToken = await getAccessTokenOrRefresh();
-  const params = new URLSearchParams();
-
-  params.set('limit', String(limit));
-
-  if (filters.platform_admin_user_id.length > 0) {
-    params.set('platform_admin_user_id', filters.platform_admin_user_id);
-  }
-
-  if (filters.action.length > 0) {
-    params.set('action', filters.action);
-  }
-
-  if (filters.tenant_id.length > 0) {
-    params.set('tenant_id', filters.tenant_id);
-  }
-
-  if (filters.from.length > 0) {
-    params.set('from', new Date(filters.from).toISOString());
-  }
-
-  if (filters.to.length > 0) {
-    params.set('to', new Date(filters.to).toISOString());
-  }
-
-  if (cursor !== null && cursor.length > 0) {
-    params.set('cursor', cursor);
-  }
-
-  const envelope = await getAuthJsonEnvelope<unknown>(`/platform/audit-logs?${params.toString()}`, {
-    accessToken,
-  });
-
-  return normalizePlatformAuditLogListPayload(envelope.data, {
-    requestId: readMetaString(envelope.meta.request_id),
-    correlationId: readMetaString(envelope.meta.correlation_id),
-    pagination: normalizePlatformAuditLogPagination(envelope.meta.pagination),
-  });
-}
-
-function normalizePlatformAuditLogListPayload(
-  data: unknown,
-  meta: {
-    readonly requestId: string | null;
-    readonly correlationId: string | null;
-    readonly pagination: PlatformAuditLogListPagination | null;
-  },
-): PlatformAuditLogListResult {
-  if (
-    isObjectRecord(data) &&
-    Array.isArray(data.audit_logs) &&
-    data.audit_logs.every(isPlatformAuditLogListItem)
-  ) {
-    return {
-      audit_logs: data.audit_logs,
-      pagination: normalizePlatformAuditLogPagination(data.pagination) ?? meta.pagination,
-    };
-  }
-
-  throw {
-    code: 'invalid_response',
-    message: 'The platform audit log response was not valid.',
-    status: 200,
-    requestId: meta.requestId,
-    correlationId: meta.correlationId,
-    details: [],
-  } satisfies ApiClientError;
-}
-
-function normalizePlatformAuditLogPagination(
-  value: unknown,
-): PlatformAuditLogListPagination | null {
-  if (!isObjectRecord(value)) {
-    return null;
-  }
-
-  const limit = typeof value.limit === 'number' ? value.limit : null;
-  const nextCursor =
-    typeof value.next_cursor === 'string' || value.next_cursor === null ? value.next_cursor : null;
-  const hasMore = typeof value.has_more === 'boolean' ? value.has_more : null;
-
-  if (limit === null || hasMore === null) {
-    return null;
-  }
-
-  return {
-    limit,
-    next_cursor: nextCursor,
-    has_more: hasMore,
-  };
-}
-
-function isPlatformAuditLogListItem(value: unknown): value is PlatformAuditLogListItem {
-  return (
-    isObjectRecord(value) &&
-    typeof value.id === 'string' &&
-    (typeof value.platform_admin_user_id === 'string' || value.platform_admin_user_id === null) &&
-    (typeof value.tenant_id === 'string' || value.tenant_id === null) &&
-    typeof value.action === 'string' &&
-    typeof value.entity_type === 'string' &&
-    (typeof value.entity_id === 'string' || value.entity_id === null) &&
-    (isObjectRecord(value.metadata_json) || value.metadata_json === null) &&
-    (typeof value.ip_address === 'string' || value.ip_address === null) &&
-    (typeof value.user_agent === 'string' || value.user_agent === null) &&
-    typeof value.created_at === 'string'
-  );
-}
-
 function createPlatformTenantSubscriptionFormFromTenant(
   tenant: PlatformTenantDetail,
 ): PlatformTenantSubscriptionForm {
@@ -4614,14 +4455,6 @@ function PlannedWorkflowCard({
 
 function hasEffectivePermission(session: AuthSessionResponseData, permission: string): boolean {
   return session.effective_permissions.includes(permission);
-}
-
-function isObjectRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
-
-function readMetaString(value: string | undefined): string | null {
-  return value === undefined || value.length === 0 ? null : value;
 }
 
 function getApiErrorCode(error: unknown): string | null {
