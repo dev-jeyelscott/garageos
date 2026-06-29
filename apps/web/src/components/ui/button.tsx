@@ -1,37 +1,48 @@
+import { Slot } from '@radix-ui/react-slot';
+import { cva, type VariantProps } from 'class-variance-authority';
 import Link from 'next/link';
 import type { LinkProps } from 'next/link';
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 
 import { cn } from './utils';
 
-export type ButtonVariant =
-  | 'default'
-  | 'primary'
-  | 'secondary'
-  | 'outline'
-  | 'ghost'
-  | 'destructive';
-export type ButtonSize = 'sm' | 'md' | 'lg';
+const buttonVariants = cva(
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-semibold no-underline transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35 disabled:pointer-events-none disabled:opacity-60 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0',
+  {
+    variants: {
+      variant: {
+        default:
+          'border border-primary bg-primary text-primary-foreground shadow-sm hover:opacity-90',
+        primary:
+          'border border-primary bg-primary text-primary-foreground shadow-sm hover:opacity-90',
+        secondary:
+          'border border-border bg-card text-card-foreground shadow-sm hover:bg-secondary hover:text-secondary-foreground',
+        outline:
+          'border border-border bg-background text-foreground shadow-sm hover:bg-secondary hover:text-secondary-foreground',
+        ghost:
+          'border border-transparent text-foreground hover:bg-secondary hover:text-secondary-foreground',
+        destructive:
+          'border border-destructive bg-destructive text-destructive-foreground shadow-sm hover:opacity-90',
+      },
+      size: {
+        sm: 'min-h-9 px-3',
+        md: 'min-h-11 px-4',
+        lg: 'min-h-12 px-5 text-base',
+        icon: 'h-10 w-10',
+      },
+    },
+    defaultVariants: {
+      variant: 'default',
+      size: 'md',
+    },
+  },
+);
 
-const buttonVariants: Record<ButtonVariant, string> = {
-  default:
-    'border border-primary bg-primary text-primary-foreground shadow-sm hover:opacity-90 focus-visible:outline-ring',
-  primary:
-    'border border-primary bg-primary text-primary-foreground shadow-sm hover:opacity-90 focus-visible:outline-ring',
-  secondary:
-    'border border-border bg-card text-card-foreground shadow-sm hover:bg-secondary focus-visible:outline-ring',
-  outline:
-    'border border-border bg-background text-foreground shadow-sm hover:bg-secondary focus-visible:outline-ring',
-  ghost: 'border border-transparent text-foreground hover:bg-secondary focus-visible:outline-ring',
-  destructive:
-    'border border-destructive bg-destructive text-destructive-foreground shadow-sm hover:opacity-90 focus-visible:outline-ring',
-};
-
-const buttonSizes: Record<ButtonSize, string> = {
-  sm: 'min-h-9 px-3 text-sm',
-  md: 'min-h-11 px-4 text-sm',
-  lg: 'min-h-12 px-5 text-base',
-};
+export type ButtonVariant = Exclude<
+  VariantProps<typeof buttonVariants>['variant'],
+  null | undefined
+>;
+export type ButtonSize = Exclude<VariantProps<typeof buttonVariants>['size'], null | undefined>;
 
 export function buttonClassName({
   variant = 'default',
@@ -42,12 +53,16 @@ export function buttonClassName({
   readonly size?: ButtonSize | undefined;
   readonly className?: string | undefined;
 } = {}) {
-  return cn(
-    'inline-flex items-center justify-center rounded-xl font-semibold no-underline transition disabled:pointer-events-none disabled:opacity-60',
-    buttonVariants[variant],
-    buttonSizes[size],
-    className,
-  );
+  return cn(buttonVariants({ variant, size, className }));
+}
+
+export interface ButtonProps
+  extends
+    ButtonHTMLAttributes<HTMLButtonElement>,
+    Omit<VariantProps<typeof buttonVariants>, 'variant' | 'size'> {
+  readonly variant?: ButtonVariant;
+  readonly size?: ButtonSize;
+  readonly asChild?: boolean;
 }
 
 export function Button({
@@ -55,11 +70,13 @@ export function Button({
   size = 'md',
   className,
   type = 'button',
+  asChild = false,
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & {
-  readonly variant?: ButtonVariant;
-  readonly size?: ButtonSize;
-}) {
+}: ButtonProps) {
+  if (asChild) {
+    return <Slot className={buttonClassName({ variant, size, className })} {...props} />;
+  }
+
   return (
     <button type={type} className={buttonClassName({ variant, size, className })} {...props} />
   );

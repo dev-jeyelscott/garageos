@@ -16,6 +16,12 @@ import {
   CardHeader,
   CardTitle,
   Input,
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
   Skeleton,
 } from '../../../components/ui';
 import {
@@ -380,28 +386,39 @@ interface PlatformTenantListState {
 
 const platformNavItems: readonly ShellNavItem[] = [
   {
+    label: 'Overview',
+    href: '/platform',
+  },
+  {
     label: 'Tenants',
     href: '/platform/tenants',
   },
   {
     label: 'Plans',
-    disabledReason: 'Route comes after the tenant list foundation.',
+    disabledReason: 'Planned route: /platform/plans. Requires platform plan APIs.',
   },
   {
     label: 'Support Access',
-    disabledReason: 'Requires tenant-specific audited support access flow.',
+    disabledReason:
+      'Tenant-specific support access is available from tenant detail. Aggregate route is planned.',
   },
   {
     label: 'Exports',
-    disabledReason: 'Requires tenant export workflow route.',
+    disabledReason:
+      'Tenant export trigger is available from tenant detail. Aggregate export job route is planned.',
   },
   {
     label: 'Deletion Jobs',
-    disabledReason: 'Requires tenant deletion workflow route.',
+    disabledReason:
+      'Tenant deletion job route remains planned until deletion eligibility APIs are wired.',
   },
   {
     label: 'Platform Audit Logs',
-    disabledReason: 'Requires platform audit log route.',
+    disabledReason: 'Planned route: /platform/audit-logs. Requires platform audit log API.',
+  },
+  {
+    label: 'Settings',
+    disabledReason: 'Planned route: /platform/settings. Only documented settings may be added.',
   },
 ];
 
@@ -812,6 +829,213 @@ const tenantStatusFilterOptions: readonly {
   { value: 'pending_deletion', label: 'Pending deletion' },
   { value: 'deleted', label: 'Deleted' },
 ];
+
+export function PlatformOverviewScreen() {
+  const sessionState = useProtectedSession('platform');
+
+  if (sessionState.status !== 'ready') {
+    return <SessionStateScreen state={sessionState} area="platform" />;
+  }
+
+  const { session } = sessionState;
+
+  const platformModules = [
+    {
+      title: 'Tenants',
+      href: '/platform/tenants',
+      status: 'active',
+      requiredPermission: 'platform.tenants.read',
+      description:
+        'Search tenants, review lifecycle status, and open tenant-specific administration workflows.',
+    },
+    {
+      title: 'Create Tenant',
+      href: '/platform/tenants/new',
+      status: 'active',
+      requiredPermission: 'platform.tenants.create',
+      description:
+        'Create platform-managed tenants with subscription dates and owner invitation setup.',
+    },
+    {
+      title: 'Plans',
+      href: undefined,
+      status: 'planned',
+      requiredPermission: 'platform.plans.update',
+      description:
+        'Documented plan-management route for Basic, Mid, High limits and default plan settings.',
+    },
+    {
+      title: 'Support Access',
+      href: undefined,
+      status: 'planned',
+      requiredPermission: 'platform.support_access',
+      description:
+        'Tenant-specific audited support access is available from tenant detail; aggregate session list remains planned.',
+    },
+    {
+      title: 'Exports',
+      href: undefined,
+      status: 'planned',
+      requiredPermission: 'platform.tenants.update',
+      description:
+        'Tenant export queueing is available from tenant detail; aggregate export status route remains planned.',
+    },
+    {
+      title: 'Deletion Jobs',
+      href: undefined,
+      status: 'planned',
+      requiredPermission: 'platform.tenants.update',
+      description:
+        'Deletion job visibility remains planned until deletion eligibility and job list APIs are wired.',
+    },
+    {
+      title: 'Audit Logs',
+      href: undefined,
+      status: 'planned',
+      requiredPermission: 'platform.audit_logs.read',
+      description:
+        'Platform audit log search remains planned until the platform audit log API is wired.',
+    },
+    {
+      title: 'Platform Settings',
+      href: undefined,
+      status: 'planned',
+      requiredPermission: 'platform.tenants.update',
+      description: 'Only documented and API-backed platform settings should be added here.',
+    },
+  ] as const;
+
+  const enabledModules = platformModules.filter(
+    (module) =>
+      module.href !== undefined && hasEffectivePermission(session, module.requiredPermission),
+  );
+
+  return (
+    <AuthenticatedShell
+      area="platform"
+      session={session}
+      title="Platform Admin"
+      eyebrow="Platform workspace"
+      description="Operational command center for GarageOS tenant lifecycle, subscriptions, support access, exports, deletion jobs, plans, and audit visibility."
+      actions={
+        <>
+          <ButtonLink href="/platform/tenants" variant="secondary">
+            View tenants
+          </ButtonLink>
+          {hasEffectivePermission(session, 'platform.tenants.create') ? (
+            <ButtonLink href="/platform/tenants/new" variant="primary">
+              Create tenant
+            </ButtonLink>
+          ) : (
+            <Button
+              type="button"
+              variant="secondary"
+              disabled
+              title="Requires platform.tenants.create."
+            >
+              Create tenant
+            </Button>
+          )}
+        </>
+      }
+    >
+      <Alert>
+        <p className="text-sm font-bold">Source-aligned dashboard foundation</p>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">
+          This overview does not invent platform metrics or unsupported aggregate APIs. It exposes
+          documented module entry points and planned states only.
+        </p>
+      </Alert>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <SummaryCard
+          title="Enabled modules"
+          value={String(enabledModules.length)}
+          description="Counts only linked modules that are available to your current platform permissions."
+        />
+        <SummaryCard
+          title="Platform permissions"
+          value={String(
+            session.effective_permissions.filter((permission) => permission.startsWith('platform.'))
+              .length,
+          )}
+          description="Platform permissions are separate from tenant role permissions."
+        />
+        <SummaryCard
+          title="Support access"
+          value="Explicit only"
+          description="Tenant troubleshooting must use audited support access. Silent impersonation is not allowed."
+        />
+        <SummaryCard
+          title="Workspace width"
+          value="Full"
+          description="Platform pages now use a full-width operations layout instead of a narrow centered page."
+        />
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Platform modules</CardTitle>
+          <CardDescription>
+            Enabled links open implemented route foundations. Planned modules remain disabled until
+            their source-aligned APIs and screens are implemented.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {platformModules.map((module) => {
+              const hasPermission = hasEffectivePermission(session, module.requiredPermission);
+              const isAvailable = module.href !== undefined && hasPermission;
+
+              return (
+                <section
+                  key={module.title}
+                  className="grid gap-4 rounded-2xl border border-border bg-muted/40 p-4"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h2 className="font-bold text-foreground">{module.title}</h2>
+                      <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                        {module.description}
+                      </p>
+                    </div>
+                    <StatusBadge
+                      status={isAvailable ? module.status : hasPermission ? 'planned' : 'forbidden'}
+                    />
+                  </div>
+
+                  <p className="text-xs font-bold text-muted-foreground">
+                    Required permission: {module.requiredPermission}
+                  </p>
+
+                  {isAvailable ? (
+                    <ButtonLink href={module.href} variant="secondary" size="sm">
+                      Open
+                    </ButtonLink>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      disabled
+                      title={
+                        hasPermission
+                          ? 'Route is planned and not yet wired.'
+                          : `Requires ${module.requiredPermission}.`
+                      }
+                    >
+                      {hasPermission ? 'Planned' : 'No access'}
+                    </Button>
+                  )}
+                </section>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+    </AuthenticatedShell>
+  );
+}
 
 export function PlatformTenantsScreen() {
   const sessionState = useProtectedSession('platform');
@@ -4320,29 +4544,33 @@ function AuthenticatedShell({
   readonly children: ReactNode;
 }) {
   const pathname = usePathname();
-  const navItems = area === 'platform' ? platformNavItems : tenantNavItems;
   const networkStatus = useNetworkStatus();
-  const isPlatform = area === 'platform';
+
+  if (area === 'platform') {
+    return (
+      <PlatformAuthenticatedShell
+        session={session}
+        title={title}
+        eyebrow={eyebrow}
+        description={description}
+        actions={actions}
+        pathname={pathname}
+      >
+        {children}
+      </PlatformAuthenticatedShell>
+    );
+  }
 
   return (
-    <main
-      className={
-        isPlatform
-          ? 'min-h-dvh bg-background text-foreground'
-          : 'min-h-dvh bg-background pb-24 text-foreground md:pb-0'
-      }
-    >
+    <main className="min-h-dvh bg-background pb-24 text-foreground md:pb-0">
       <div className="sticky top-0 z-30 border-b border-border bg-card/95 shadow-sm backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-3 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between gap-4">
             <AppBrandLink area={area} session={session} />
 
             <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-              {area === 'tenant' ? <BranchContextBadge session={session} /> : null}
-              <StatusBadge
-                status={session.tenant?.status}
-                fallback={area === 'platform' ? 'platform' : 'unknown'}
-              />
+              <BranchContextBadge session={session} />
+              <StatusBadge status={session.tenant?.status} fallback="unknown" />
               <Badge className="max-w-[12rem] truncate">{session.user.full_name}</Badge>
               <ButtonLink href="/auth/logout" variant="ghost" size="sm">
                 Logout
@@ -4350,24 +4578,13 @@ function AuthenticatedShell({
             </div>
           </div>
 
-          <ShellNavigation area={area} navItems={navItems} pathname={pathname} />
+          <ShellNavigation area={area} navItems={tenantNavItems} pathname={pathname} />
         </div>
       </div>
 
       <div className="mx-auto grid max-w-7xl gap-5 px-4 py-6 sm:px-6 lg:px-8">
-        {area === 'platform' ? (
-          <Alert>
-            <p className="text-sm leading-6">
-              Platform admin context. Tenant support access is not active on this shell and must not
-              be treated as tenant impersonation.
-            </p>
-          </Alert>
-        ) : (
-          <>
-            <TenantStatusBanner session={session} />
-            <OfflineBanner networkStatus={networkStatus} />
-          </>
-        )}
+        <TenantStatusBanner session={session} />
+        <OfflineBanner networkStatus={networkStatus} />
 
         <header className="grid gap-4 rounded-[2rem] border border-border bg-card p-5 shadow-sm sm:p-6 lg:grid-cols-[1fr_auto] lg:items-end">
           <div>
@@ -4388,10 +4605,202 @@ function AuthenticatedShell({
         {children}
       </div>
 
-      {area === 'tenant' ? (
-        <MobileTenantNavigation navItems={tenantNavItems} pathname={pathname} />
-      ) : null}
+      <MobileTenantNavigation navItems={tenantNavItems} pathname={pathname} />
     </main>
+  );
+}
+
+function PlatformAuthenticatedShell({
+  session,
+  title,
+  eyebrow,
+  description,
+  actions,
+  pathname,
+  children,
+}: {
+  readonly session: AuthSessionResponseData;
+  readonly title: string;
+  readonly eyebrow: string;
+  readonly description: string;
+  readonly actions?: ReactNode;
+  readonly pathname: string;
+  readonly children: ReactNode;
+}) {
+  return (
+    <main className="min-h-dvh bg-background text-foreground">
+      <div className="flex min-h-dvh">
+        <PlatformDesktopSidebar session={session} pathname={pathname} />
+
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="sticky top-0 z-30 border-b border-border bg-card/95 shadow-sm backdrop-blur-xl">
+            <div className="flex min-h-16 items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
+              <div className="flex min-w-0 items-center gap-3">
+                <PlatformMobileNavigation session={session} pathname={pathname} />
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-black uppercase tracking-[0.18em] text-muted-foreground">
+                    Platform Admin
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    Full-width operations workspace
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+                <StatusBadge status="platform" />
+                <Badge className="max-w-[12rem] truncate">{session.user.full_name}</Badge>
+                <ButtonLink href="/auth/logout" variant="ghost" size="sm">
+                  Logout
+                </ButtonLink>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid w-full max-w-none gap-5 px-4 py-6 sm:px-6 lg:px-8">
+            <Alert>
+              <p className="text-sm font-bold">Platform admin context</p>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                Tenant support access is not active in this shell. Tenant troubleshooting must use
+                explicit audited support access and must never behave as silent impersonation.
+              </p>
+            </Alert>
+
+            <header className="grid gap-4 rounded-[2rem] border border-border bg-card p-5 shadow-sm sm:p-6 xl:grid-cols-[1fr_auto] xl:items-end">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.22em] text-muted-foreground">
+                  {eyebrow}
+                </p>
+                <h1 className="mt-2 text-3xl font-black tracking-tight text-foreground sm:text-4xl">
+                  {title}
+                </h1>
+                <p className="mt-3 max-w-5xl text-sm leading-6 text-muted-foreground sm:text-base sm:leading-7">
+                  {description}
+                </p>
+              </div>
+
+              {actions === undefined ? null : <div className="flex flex-wrap gap-3">{actions}</div>}
+            </header>
+
+            {children}
+          </div>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+function PlatformDesktopSidebar({
+  session,
+  pathname,
+}: {
+  readonly session: AuthSessionResponseData;
+  readonly pathname: string;
+}) {
+  return (
+    <aside className="sticky top-0 hidden h-dvh w-72 shrink-0 border-r border-border bg-card px-4 py-5 shadow-sm lg:flex lg:flex-col">
+      <AppBrandLink area="platform" session={session} />
+
+      <div className="mt-6 min-h-0 flex-1 overflow-y-auto pr-1">
+        <PlatformShellNavigation navItems={platformNavItems} pathname={pathname} />
+      </div>
+
+      <Alert className="mt-6">
+        <p className="text-sm font-bold">Support access guardrail</p>
+        <p className="mt-2 text-xs leading-5 text-muted-foreground">
+          Support access requires reason, mode, expiry, and backend audit logging.
+        </p>
+      </Alert>
+    </aside>
+  );
+}
+
+function PlatformMobileNavigation({
+  session,
+  pathname,
+}: {
+  readonly session: AuthSessionResponseData;
+  readonly pathname: string;
+}) {
+  return (
+    <Sheet>
+      <SheetTrigger asChild>
+        <Button type="button" variant="secondary" size="sm" className="lg:hidden">
+          Menu
+        </Button>
+      </SheetTrigger>
+      <SheetContent side="left" className="w-[20rem] max-w-[86vw] p-0">
+        <SheetHeader className="border-b border-border p-4 pr-12">
+          <SheetTitle>Platform Admin</SheetTitle>
+        </SheetHeader>
+
+        <div className="grid gap-5 p-4">
+          <AppBrandLink area="platform" session={session} />
+          <PlatformShellNavigation navItems={platformNavItems} pathname={pathname} mobile />
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function PlatformShellNavigation({
+  navItems,
+  pathname,
+  mobile = false,
+}: {
+  readonly navItems: readonly ShellNavItem[];
+  readonly pathname: string;
+  readonly mobile?: boolean;
+}) {
+  return (
+    <nav aria-label="Platform admin navigation">
+      <ul className={mobile ? 'grid gap-2' : 'grid gap-2'}>
+        {navItems.map((item) => (
+          <li key={item.label}>
+            <PlatformShellLink item={item} pathname={pathname} mobile={mobile} />
+          </li>
+        ))}
+      </ul>
+    </nav>
+  );
+}
+
+function PlatformShellLink({
+  item,
+  pathname,
+  mobile,
+}: {
+  readonly item: ShellNavItem;
+  readonly pathname: string;
+  readonly mobile: boolean;
+}) {
+  if (item.href === undefined) {
+    return <PlatformNavDisabledItem item={item} />;
+  }
+
+  const isActive = isShellNavItemActive(pathname, item.href);
+  const linkClassName = isActive
+    ? 'flex min-h-11 items-center rounded-2xl border border-primary/30 bg-primary px-4 text-sm font-black text-primary-foreground no-underline shadow-sm'
+    : 'flex min-h-11 items-center rounded-2xl border border-transparent px-4 text-sm font-semibold text-muted-foreground no-underline transition hover:border-primary/20 hover:bg-accent hover:text-accent-foreground';
+
+  const link = (
+    <Link href={item.href} aria-current={isActive ? 'page' : undefined} className={linkClassName}>
+      {item.label}
+    </Link>
+  );
+
+  return mobile ? <SheetClose asChild>{link}</SheetClose> : link;
+}
+
+function PlatformNavDisabledItem({ item }: { readonly item: ShellNavItem }) {
+  return (
+    <span
+      title={item.disabledReason}
+      aria-disabled="true"
+      className="flex min-h-11 cursor-not-allowed items-center rounded-2xl border border-border bg-muted px-4 text-sm font-semibold text-muted-foreground opacity-75"
+    >
+      {item.label}
+    </span>
   );
 }
 
@@ -4404,7 +4813,7 @@ function AppBrandLink({
 }) {
   return (
     <Link
-      href={area === 'platform' ? '/platform/tenants' : '/dashboard'}
+      href={area === 'platform' ? '/platform' : '/dashboard'}
       aria-label="GarageOS home"
       className="inline-flex min-h-12 min-w-0 items-center gap-3 no-underline"
     >
@@ -4429,9 +4838,6 @@ function AppBrandLink({
             priority
             className="h-auto w-[118px] object-contain md:w-[136px]"
           />
-        </span>
-        <span className="mt-1 block max-w-[13rem] truncate text-xs font-semibold text-muted-foreground sm:max-w-[18rem]">
-          {area === 'platform' ? 'Platform Admin' : (session.tenant?.business_name ?? 'Tenant')}
         </span>
       </span>
     </Link>
@@ -4611,6 +5017,10 @@ function getBranchContextLabel(session: AuthSessionResponseData): string {
 }
 
 function isShellNavItemActive(pathname: string, href: string): boolean {
+  if (href === '/platform') {
+    return pathname === '/platform';
+  }
+
   if (href === '/dashboard') {
     return pathname === '/dashboard' || pathname.startsWith('/dashboard/');
   }
@@ -4650,12 +5060,72 @@ function StatusBadge({
   status,
   fallback = 'unknown',
 }: {
-  readonly status: AuthTenantStatus | undefined;
+  readonly status: string | undefined;
   readonly fallback?: string;
 }) {
-  const label = status === undefined ? fallback : formatTenantStatus(status);
+  const resolvedStatus = status === undefined ? fallback : status;
 
-  return <Badge>{label}</Badge>;
+  return (
+    <Badge variant={getStatusBadgeVariant(resolvedStatus)}>
+      {formatStatusLabel(resolvedStatus)}
+    </Badge>
+  );
+}
+
+function getStatusBadgeVariant(
+  status: string,
+):
+  | 'default'
+  | 'secondary'
+  | 'destructive'
+  | 'outline'
+  | 'success'
+  | 'warning'
+  | 'info'
+  | 'readonly' {
+  switch (status) {
+    case 'active':
+    case 'succeeded':
+      return 'success';
+
+    case 'pending_setup':
+    case 'grace_period':
+    case 'platform_override':
+    case 'planned':
+      return 'warning';
+
+    case 'read_only':
+    case 'system_computed':
+    case 'cancelled':
+      return 'readonly';
+
+    case 'suspended':
+    case 'pending_deletion':
+    case 'deleted':
+    case 'failed':
+    case 'dead_lettered':
+    case 'write_allowed':
+    case 'forbidden':
+      return 'destructive';
+
+    case 'queued':
+    case 'running':
+    case 'platform':
+    case 'platform_admin':
+    case 'tenant_user':
+    case 'system':
+      return 'info';
+
+    default:
+      return 'secondary';
+  }
+}
+
+function formatStatusLabel(status: string): string {
+  return status
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
 }
 
 function SummaryCard({
