@@ -157,7 +157,9 @@ export class InventoryReservationService {
   constructor(
     @Inject(InventoryReservationStore)
     private readonly inventoryReservationStore: InventoryReservationStore,
+    @Inject(InventoryStockBalancesService)
     private readonly inventoryStockBalancesService: InventoryStockBalancesService,
+    @Inject(FifoLayerService)
     private readonly fifoLayerService: FifoLayerService,
     @Inject(FifoReservationAllocationStore)
     private readonly fifoReservationAllocationStore: FifoReservationAllocationStore,
@@ -165,6 +167,7 @@ export class InventoryReservationService {
     private readonly fifoConsumptionStore: FifoConsumptionStore,
     @Inject(StockBalanceStore)
     private readonly stockBalanceStore: StockBalanceStore,
+    @Inject(InventoryLedgerService)
     private readonly inventoryLedgerService: InventoryLedgerService,
     @Inject(API_TRANSACTION_RUNNER)
     private readonly transactionRunner: DatabaseTransactionRunner,

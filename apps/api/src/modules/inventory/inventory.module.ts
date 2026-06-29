@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 
+import { AuditModule } from '../../shared/audit/audit.module';
 import { DatabaseModule } from '../../shared/database/database.module';
 import { AuthModule } from '../auth/auth.module';
 import { InventoryReadController } from './api/inventory-read.controller';
@@ -13,7 +14,7 @@ import { InventoryStockBalancesService } from './application/inventory-stock-bal
 import { INVENTORY_PROVIDERS } from './inventory.providers';
 
 @Module({
-  imports: [AuthModule, DatabaseModule],
+  imports: [AuthModule, AuditModule, DatabaseModule],
   controllers: [InventoryStockBalancesController, InventoryReadController],
   providers: [
     InventoryStockBalancesService,

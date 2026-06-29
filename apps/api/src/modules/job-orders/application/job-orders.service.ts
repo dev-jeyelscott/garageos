@@ -239,6 +239,7 @@ export class JobOrdersService {
   constructor(
     @Inject(JobOrderStore)
     private readonly jobOrderStore: JobOrderStore,
+    @Inject(InventoryReservationService)
     private readonly inventoryReservationService: InventoryReservationService,
     @Inject(API_TRANSACTION_RUNNER)
     private readonly transactionRunner: DatabaseTransactionRunner,

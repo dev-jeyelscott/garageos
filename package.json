@@ -20,6 +20,7 @@
     "db:migrate:create": "node packages/db/scripts/create-migration.cjs",
     "db:migrate:validate": "echo \"Migration validation placeholder: no migrations exist yet. Replace in Milestone 1.\"",
     "db:seed": "pnpm --filter @garageos/db seed",
+    "bootstrap:platform-admin": "dotenv -e .env -- pnpm --filter @garageos/api bootstrap:platform-admin",
     "db:validate": "pnpm --filter @garageos/db validate",
     "dev:web": "pnpm --filter @garageos/web dev",
     "dev:api": "dotenv -e .env -- pnpm --filter @garageos/api dev",
