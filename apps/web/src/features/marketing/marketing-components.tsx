@@ -2,6 +2,7 @@ export { FeatureGrid } from './components/feature-grid';
 export { MarketingCtaSection } from './components/marketing-cta-section';
 export { MarketingFooter } from './components/marketing-footer';
 export { MarketingHeader } from './components/marketing-header';
+export { MarketingReveal } from './components/marketing-reveal';
 export { MarketingHero } from './components/marketing-hero';
 export { OperationalTrustSection } from './components/operational-trust-section';
 export { RoleValueSection } from './components/role-value-section';

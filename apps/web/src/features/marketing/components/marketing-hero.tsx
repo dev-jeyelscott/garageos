@@ -5,10 +5,13 @@ import { DashboardMockup } from './dashboard-mockup';
 
 export function MarketingHero() {
   return (
-    <section id="top" className="relative isolate overflow-hidden bg-background">
-      <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_16%_10%,rgb(255_244_230)_0,transparent_32%),linear-gradient(180deg,rgb(255_255_255)_0%,rgb(var(--background))_64%,rgb(var(--muted))_100%)]" />
-      <div className="absolute right-[-9rem] top-24 -z-10 hidden h-[32rem] w-[32rem] rounded-full bg-primary/10 blur-3xl lg:block" />
-      <div className="absolute left-[-12rem] top-[30rem] -z-10 hidden h-[24rem] w-[24rem] rounded-full bg-orange-200/20 blur-3xl lg:block" />
+    <section
+      id="top"
+      className="relative isolate overflow-hidden bg-[linear-gradient(180deg,#FFF9F2_0%,#FFF6EE_36%,#F7F4EF_100%)]"
+    >
+      <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_12%_14%,rgb(255_233_204)_0,transparent_30%),radial-gradient(circle_at_86%_18%,rgb(255_245_230)_0,transparent_24%),radial-gradient(circle_at_50%_100%,rgb(255_255_255)_0,rgb(247_244_239)_70%)]" />
+      <div className="absolute right-[-8rem] top-20 -z-10 hidden h-[28rem] w-[28rem] rounded-full bg-primary/8 blur-3xl lg:block" />
+      <div className="absolute left-[-10rem] bottom-[-6rem] -z-10 hidden h-[20rem] w-[20rem] rounded-full bg-amber-200/25 blur-3xl lg:block" />
 
       <Container className="grid gap-12 pb-16 pt-10 lg:grid-cols-[0.92fr_1.08fr] lg:items-center lg:pb-24 lg:pt-20">
         <div className="max-w-2xl">
@@ -42,13 +45,13 @@ export function MarketingHero() {
               href="#workflow"
               variant="outline"
               size="lg"
-              className="w-full bg-card sm:w-auto"
+              className="w-full border-zinc-300 bg-zinc-950 text-white hover:bg-zinc-900 sm:w-auto"
             >
               See the workflow
             </ButtonLink>
           </div>
 
-          <div className="mt-8 grid gap-3 text-sm font-bold text-foreground/70 sm:grid-cols-3">
+          <div className="mt-8 grid gap-3 text-sm font-bold text-zinc-800 sm:grid-cols-3">
             {['Repair shops', 'Service centers', 'Tuning + tire shops'].map((item) => (
               <div key={item} className="flex items-center gap-2">
                 <span className="flex h-5 w-5 items-center justify-center rounded-full bg-accent text-primary">
@@ -63,16 +66,18 @@ export function MarketingHero() {
             {heroProofPoints.map((point) => (
               <div
                 key={point.label}
-                className="rounded-2xl border border-border bg-card/80 p-4 shadow-[0_14px_40px_rgb(24_24_27_/_0.05)]"
+                className="rounded-2xl border border-zinc-200 bg-card p-4 shadow-[0_14px_40px_rgb(24_24_27_/_0.05)]"
               >
                 <p className="text-lg font-black text-primary">{point.value}</p>
-                <p className="mt-1 text-sm leading-6 text-foreground/68">{point.label}</p>
+                <p className="mt-1 text-sm leading-6 text-white">{point.label}</p>
               </div>
             ))}
           </div>
         </div>
 
-        <DashboardMockup />
+        <div className="relative z-10">
+          <DashboardMockup />
+        </div>
       </Container>
     </section>
   );

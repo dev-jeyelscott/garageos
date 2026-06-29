@@ -4,6 +4,7 @@ import {
   MarketingFooter,
   MarketingHeader,
   MarketingHero,
+  MarketingReveal,
   OperationalTrustSection,
   RoleValueSection,
   WorkflowPreview,
@@ -14,11 +15,27 @@ export function LandingPage() {
     <main className="min-h-dvh bg-background text-foreground">
       <MarketingHeader />
       <MarketingHero />
-      <FeatureGrid />
-      <WorkflowPreview />
-      <RoleValueSection />
-      <OperationalTrustSection />
-      <MarketingCtaSection />
+
+      <MarketingReveal delayMs={40}>
+        <FeatureGrid />
+      </MarketingReveal>
+
+      <MarketingReveal delayMs={80}>
+        <WorkflowPreview />
+      </MarketingReveal>
+
+      <MarketingReveal delayMs={80}>
+        <RoleValueSection />
+      </MarketingReveal>
+
+      <MarketingReveal delayMs={60}>
+        <OperationalTrustSection />
+      </MarketingReveal>
+
+      <MarketingReveal delayMs={60}>
+        <MarketingCtaSection />
+      </MarketingReveal>
+
       <MarketingFooter />
     </main>
   );
