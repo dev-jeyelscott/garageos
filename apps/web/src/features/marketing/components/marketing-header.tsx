@@ -3,29 +3,38 @@ import Image from 'next/image';
 import { ButtonLink, Container } from '../../../components/ui';
 import { navItems } from '../marketing-content';
 
+function toPublicHref(href: string): string {
+  return href.startsWith('#') ? `/${href}` : href;
+}
+
 export function MarketingHeader() {
   return (
-    <header className="sticky top-0 z-30 border-b border-border/70 bg-background/90 shadow-[0_1px_0_rgb(255_255_255_/_0.75)] backdrop-blur-xl">
-      <Container className="flex min-h-16 items-center justify-between gap-4 py-2">
-        <a href="#top" className="group flex items-center gap-3 font-black tracking-tight">
-          <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-primary/20 bg-accent shadow-sm transition group-hover:border-primary/35">
+    <header className="sticky top-0 z-30 border-b border-border/70 bg-background/92 shadow-[0_1px_0_rgb(255_255_255_/_0.75)] backdrop-blur-xl">
+      <Container className="flex min-h-[4.75rem] items-center justify-between gap-4 py-2">
+        <a
+          href="/"
+          aria-label="GarageOS home"
+          className="group flex min-w-0 items-center gap-3 font-black tracking-tight"
+        >
+          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-primary/20 bg-card shadow-sm transition group-hover:border-primary/40">
             <Image
-              src="/images/favicon-32x32.png"
+              src="/images/logo.png"
               alt=""
-              width={32}
-              height={32}
+              width={96}
+              height={96}
               priority
-              className="h-6 w-6"
+              className="h-12 w-12 object-contain"
             />
           </span>
-          <span>
-            <span className="block text-base font-black tracking-tight sm:text-lg">
-              Garage<span className="text-primary">OS</span>
-            </span>
-            <span className="hidden text-xs font-bold text-muted-foreground xl:block">
-              Motorcycle shop operations
-            </span>
-          </span>
+
+          <Image
+            src="/images/garageos.png"
+            alt="GarageOS"
+            width={224}
+            height={80}
+            priority
+            className="hidden h-8 w-auto object-contain sm:block lg:h-9"
+          />
         </a>
 
         <nav
@@ -35,7 +44,7 @@ export function MarketingHeader() {
           {navItems.map(([label, href]) => (
             <a
               key={label}
-              href={href}
+              href={toPublicHref(href)}
               className="rounded-full px-4 py-2 transition hover:bg-accent hover:text-accent-foreground"
             >
               {label}
@@ -45,7 +54,7 @@ export function MarketingHeader() {
 
         <div className="flex items-center gap-2">
           <ButtonLink
-            href="#workflow"
+            href="/#workflow"
             variant="outline"
             size="sm"
             className="hidden bg-card/80 font-bold md:inline-flex"
