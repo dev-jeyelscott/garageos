@@ -56,6 +56,23 @@ type PlatformSubscriptionStatusSource = 'system_computed' | 'platform_override';
 
 type PlatformTenantStatusFilter = 'all' | AuthTenantStatus;
 
+interface PlatformTenantPlanSummary {
+  readonly id?: string | null;
+  readonly code?: string | null;
+  readonly name?: string | null;
+}
+
+interface PlatformTenantSubscriptionSummary {
+  readonly plan_id?: string | null;
+  readonly plan_code?: string | null;
+  readonly plan_name?: string | null;
+  readonly start_date?: string | null;
+  readonly expiration_date?: string | null;
+  readonly status_source?: PlatformSubscriptionStatusSource | string | null;
+  readonly last_renewal_at?: string | null;
+  readonly updated_at?: string | null;
+}
+
 interface PlatformTenantListItem {
   readonly id: string;
   readonly business_name: string;
@@ -65,20 +82,41 @@ interface PlatformTenantListItem {
   readonly country?: string | null;
   readonly currency?: string | null;
   readonly onboarding_completed_at?: string | null;
-  readonly plan?: {
-    readonly id?: string | null;
-    readonly code?: string | null;
-    readonly name?: string | null;
-  } | null;
-  readonly subscription?: {
-    readonly plan_id?: string | null;
-    readonly plan_code?: string | null;
-    readonly plan_name?: string | null;
-    readonly start_date?: string | null;
-    readonly expiration_date?: string | null;
-    readonly status_source?: PlatformSubscriptionStatusSource | string | null;
-  } | null;
+  readonly plan?: PlatformTenantPlanSummary | null;
+  readonly subscription?: PlatformTenantSubscriptionSummary | null;
 }
+
+interface PlatformTenantDetail {
+  readonly id: string;
+  readonly business_name: string;
+  readonly shop_email?: string | null;
+  readonly status: AuthTenantStatus;
+  readonly timezone?: string | null;
+  readonly country?: string | null;
+  readonly currency?: string | null;
+  readonly onboarding_completed_at?: string | null;
+  readonly deletion_scheduled_for?: string | null;
+  readonly deleted_at?: string | null;
+  readonly created_at?: string | null;
+  readonly updated_at?: string | null;
+  readonly plan?: PlatformTenantPlanSummary | null;
+  readonly subscription?: PlatformTenantSubscriptionSummary | null;
+}
+
+type PlatformTenantDetailState =
+  | {
+      readonly status: 'idle' | 'loading';
+    }
+  | {
+      readonly status: 'loaded';
+      readonly tenant: PlatformTenantDetail;
+    }
+  | {
+      readonly status: 'error';
+      readonly message: string;
+      readonly detail: string | null;
+      readonly code: string | null;
+    };
 
 interface PlatformTenantListFilters {
   readonly q: string;
@@ -571,6 +609,284 @@ export function TenantDashboardScreen() {
   );
 }
 
+export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: string }) {
+  const sessionState = useProtectedSession('platform');
+  const [tenantDetailState, setTenantDetailState] = useState<PlatformTenantDetailState>({
+    status: 'idle',
+  });
+
+  const canReadTenantDetail =
+    sessionState.status === 'ready' &&
+    hasEffectivePermission(sessionState.session, 'platform.tenants.read');
+
+  useEffect(() => {
+    if (sessionState.status !== 'ready' || !canReadTenantDetail || tenantId.length === 0) {
+      return;
+    }
+
+    let active = true;
+
+    async function loadTenantDetail() {
+      setTenantDetailState({ status: 'loading' });
+
+      try {
+        const tenant = await getPlatformTenantDetail(tenantId);
+
+        if (!active) {
+          return;
+        }
+
+        setTenantDetailState({
+          status: 'loaded',
+          tenant,
+        });
+      } catch (error) {
+        if (!active) {
+          return;
+        }
+
+        setTenantDetailState({
+          status: 'error',
+          message: toSafeErrorMessage(error, 'Unable to load platform tenant detail.'),
+          detail: toSafeErrorDetail(error),
+          code: getApiErrorCode(error),
+        });
+      }
+    }
+
+    void loadTenantDetail();
+
+    return () => {
+      active = false;
+    };
+  }, [canReadTenantDetail, sessionState, tenantId]);
+
+  if (sessionState.status !== 'ready') {
+    return <SessionStateScreen state={sessionState} area="platform" />;
+  }
+
+  const isLoadingTenant =
+    tenantDetailState.status === 'idle' || tenantDetailState.status === 'loading';
+
+  return (
+    <AuthenticatedShell
+      area="platform"
+      session={sessionState.session}
+      title="Tenant Detail"
+      eyebrow="Platform administration"
+      description="Read tenant metadata, lifecycle state, and subscription status without entering support access."
+      actions={
+        <>
+          <ButtonLink href="/platform/tenants" variant="secondary">
+            Back to tenants
+          </ButtonLink>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled
+            title="Planned subscription workflow route."
+          >
+            Manage subscription
+          </Button>
+        </>
+      }
+    >
+      {!canReadTenantDetail ? (
+        <ForbiddenState
+          title="Platform tenant detail unavailable"
+          requiredPermission="platform.tenants.read"
+          description="Your platform session does not include permission to view tenant records."
+        />
+      ) : (
+        <>
+          <Alert>
+            <p className="text-sm leading-6">
+              This screen reads the documented platform tenant detail only. Subscription changes,
+              read-only override, suspension, support access, exports, deletion jobs, and platform
+              audit logs remain separate workflow slices.
+            </p>
+          </Alert>
+
+          {isLoadingTenant ? <TenantDetailSkeleton /> : null}
+
+          {tenantDetailState.status === 'error' ? (
+            tenantDetailState.code === 'forbidden' ? (
+              <ForbiddenState
+                title="Platform tenant detail blocked"
+                requiredPermission="platform.tenants.read"
+                description={tenantDetailState.message}
+                detail={tenantDetailState.detail}
+              />
+            ) : (
+              <Alert variant="destructive">
+                <p className="text-sm font-bold">{tenantDetailState.message}</p>
+                {tenantDetailState.detail === null ? null : (
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                    {tenantDetailState.detail}
+                  </p>
+                )}
+              </Alert>
+            )
+          ) : null}
+
+          {tenantDetailState.status === 'loaded' ? (
+            <div className="grid gap-5">
+              <div className="grid gap-4 lg:grid-cols-4">
+                <SummaryCard
+                  title="Tenant status"
+                  value={formatTenantStatus(tenantDetailState.tenant.status)}
+                  description="Lifecycle access remains backend-authoritative."
+                />
+                <SummaryCard
+                  title="Plan"
+                  value={formatTenantPlan(tenantDetailState.tenant)}
+                  description={`Source: ${
+                    tenantDetailState.tenant.subscription?.status_source ?? 'Not returned'
+                  }`}
+                />
+                <SummaryCard
+                  title="Expiration"
+                  value={tenantDetailState.tenant.subscription?.expiration_date ?? 'Not returned'}
+                  description="Subscription lifecycle dates are interpreted by the backend."
+                />
+                <SummaryCard
+                  title="Onboarding"
+                  value={
+                    tenantDetailState.tenant.onboarding_completed_at === null ||
+                    tenantDetailState.tenant.onboarding_completed_at === undefined
+                      ? 'Incomplete or not returned'
+                      : 'Completed'
+                  }
+                  description={
+                    tenantDetailState.tenant.onboarding_completed_at ??
+                    'Completion timestamp not returned'
+                  }
+                />
+              </div>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Tenant metadata</CardTitle>
+                  <CardDescription>
+                    Platform-visible tenant identity and localization fields from the tenant detail
+                    API.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-4 md:grid-cols-2">
+                  <KeyValue label="Tenant ID" value={tenantDetailState.tenant.id} />
+                  <KeyValue label="Business name" value={tenantDetailState.tenant.business_name} />
+                  <KeyValue
+                    label="Shop email"
+                    value={tenantDetailState.tenant.shop_email ?? 'Not returned'}
+                  />
+                  <KeyValue
+                    label="Timezone / Country / Currency"
+                    value={formatTenantLocation(tenantDetailState.tenant)}
+                  />
+                  <KeyValue
+                    label="Created"
+                    value={tenantDetailState.tenant.created_at ?? 'Not returned'}
+                  />
+                  <KeyValue
+                    label="Last updated"
+                    value={tenantDetailState.tenant.updated_at ?? 'Not returned'}
+                  />
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Subscription detail</CardTitle>
+                  <CardDescription>
+                    Read-only subscription summary returned by the platform tenant detail API.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-4 md:grid-cols-2">
+                  <KeyValue
+                    label="Plan ID"
+                    value={
+                      tenantDetailState.tenant.subscription?.plan_id ??
+                      tenantDetailState.tenant.plan?.id ??
+                      'Not returned'
+                    }
+                  />
+                  <KeyValue label="Plan name" value={formatTenantPlan(tenantDetailState.tenant)} />
+                  <KeyValue
+                    label="Start date"
+                    value={tenantDetailState.tenant.subscription?.start_date ?? 'Not returned'}
+                  />
+                  <KeyValue
+                    label="Expiration date"
+                    value={tenantDetailState.tenant.subscription?.expiration_date ?? 'Not returned'}
+                  />
+                  <KeyValue
+                    label="Status source"
+                    value={tenantDetailState.tenant.subscription?.status_source ?? 'Not returned'}
+                  />
+                  <KeyValue
+                    label="Last renewal"
+                    value={tenantDetailState.tenant.subscription?.last_renewal_at ?? 'Not returned'}
+                  />
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Lifecycle detail</CardTitle>
+                  <CardDescription>
+                    Read-only lifecycle fields used for platform operations and deletion safeguards.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-4 md:grid-cols-2">
+                  <KeyValue
+                    label="Current status"
+                    value={formatTenantStatus(tenantDetailState.tenant.status)}
+                  />
+                  <KeyValue
+                    label="Onboarding completed"
+                    value={tenantDetailState.tenant.onboarding_completed_at ?? 'Not returned'}
+                  />
+                  <KeyValue
+                    label="Deletion scheduled for"
+                    value={tenantDetailState.tenant.deletion_scheduled_for ?? 'Not returned'}
+                  />
+                  <KeyValue
+                    label="Deleted at"
+                    value={tenantDetailState.tenant.deleted_at ?? 'Not returned'}
+                  />
+                </CardContent>
+              </Card>
+
+              <div className="grid gap-4 lg:grid-cols-2">
+                <PlannedWorkflowCard
+                  title="Subscription management"
+                  requiredPermission="platform.subscriptions.update"
+                  description="Assigning plans, expiration dates, and status overrides belongs to the dedicated subscription workflow."
+                />
+                <PlannedWorkflowCard
+                  title="Support access"
+                  requiredPermission="platform.support_access"
+                  description="Audited support access must require reason, mode, expiration, and a visible support marker."
+                />
+                <PlannedWorkflowCard
+                  title="Tenant export"
+                  requiredPermission="platform.tenants.update"
+                  description="Tenant export remains a separate async job workflow."
+                />
+                <PlannedWorkflowCard
+                  title="Deletion job"
+                  requiredPermission="platform.tenants.update"
+                  description="Deletion queueing requires eligibility checks and a dedicated confirmation workflow."
+                />
+              </div>
+            </div>
+          ) : null}
+        </>
+      )}
+    </AuthenticatedShell>
+  );
+}
+
 export function OnboardingGateScreen() {
   const sessionState = useProtectedSession('tenant-onboarding');
 
@@ -825,43 +1141,147 @@ async function getPlatformTenants({
   };
 }
 
+async function getPlatformTenantDetail(tenantId: string): Promise<PlatformTenantDetail> {
+  const accessToken = await getAccessTokenOrRefresh();
+
+  const envelope = await getAuthJsonEnvelope<unknown>(
+    `/platform/tenants/${encodeURIComponent(tenantId)}`,
+    {
+      accessToken,
+    },
+  );
+
+  return normalizePlatformTenantDetailPayload(envelope.data, {
+    requestId: readMetaString(envelope.meta.request_id),
+    correlationId: readMetaString(envelope.meta.correlation_id),
+  });
+}
+
+function normalizePlatformTenantDetailPayload(
+  data: unknown,
+  meta: {
+    readonly requestId: string | null;
+    readonly correlationId: string | null;
+  },
+): PlatformTenantDetail {
+  if (isPlatformTenantDetail(data)) {
+    return data;
+  }
+
+  if (isObjectRecord(data) && isPlatformTenantDetail(data.tenant)) {
+    return data.tenant;
+  }
+
+  throw toInvalidTenantDetailResponseError(meta);
+}
+
 function PlatformTenantTable({ tenants }: { readonly tenants: readonly PlatformTenantListItem[] }) {
   return (
     <div className="overflow-hidden rounded-2xl border border-border">
-      <div className="hidden grid-cols-[1.4fr_1fr_0.9fr_0.9fr] gap-4 border-b border-border bg-muted px-4 py-3 text-xs font-black uppercase tracking-[0.16em] text-muted-foreground md:grid">
+      <div className="hidden grid-cols-[1.4fr_1fr_0.9fr_0.9fr_auto] gap-4 border-b border-border bg-muted px-4 py-3 text-xs font-black uppercase tracking-[0.16em] text-muted-foreground md:grid">
         <span>Tenant</span>
         <span>Status</span>
         <span>Plan</span>
         <span>Expiration</span>
+        <span>Action</span>
       </div>
 
       <ul className="divide-y divide-border">
-        {tenants.map((tenant) => (
-          <li
-            key={tenant.id}
-            className="grid gap-3 bg-card p-4 md:grid-cols-[1.4fr_1fr_0.9fr_0.9fr] md:items-center"
-          >
-            <div>
-              <p className="font-bold text-foreground">{tenant.business_name}</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {tenant.shop_email ?? 'No shop email returned'}
+        {tenants.map((tenant) => {
+          const tenantDetailHref = `/platform/tenants/${tenant.id}`;
+
+          return (
+            <li
+              key={tenant.id}
+              className="grid gap-3 bg-card p-4 md:grid-cols-[1.4fr_1fr_0.9fr_0.9fr_auto] md:items-center"
+            >
+              <div>
+                <Link
+                  href={tenantDetailHref}
+                  className="font-bold text-foreground underline-offset-4 hover:underline"
+                >
+                  {tenant.business_name}
+                </Link>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {tenant.shop_email ?? 'No shop email returned'}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">{formatTenantLocation(tenant)}</p>
+              </div>
+
+              <div>
+                <StatusBadge status={tenant.status} />
+              </div>
+
+              <p className="text-sm font-semibold text-foreground">{formatTenantPlan(tenant)}</p>
+
+              <p className="text-sm text-muted-foreground">
+                {tenant.subscription?.expiration_date ?? 'Expiration not returned'}
               </p>
-              <p className="mt-1 text-xs text-muted-foreground">{formatTenantLocation(tenant)}</p>
-            </div>
 
-            <div>
-              <StatusBadge status={tenant.status} />
-            </div>
-
-            <p className="text-sm font-semibold text-foreground">{formatTenantPlan(tenant)}</p>
-
-            <p className="text-sm text-muted-foreground">
-              {tenant.subscription?.expiration_date ?? 'Expiration not returned'}
-            </p>
-          </li>
-        ))}
+              <div>
+                <ButtonLink href={tenantDetailHref} variant="secondary" size="sm">
+                  View
+                </ButtonLink>
+              </div>
+            </li>
+          );
+        })}
       </ul>
     </div>
+  );
+}
+
+function TenantDetailSkeleton() {
+  return (
+    <div className="grid gap-4" aria-busy="true" aria-live="polite">
+      <div className="grid gap-4 lg:grid-cols-4">
+        <Skeleton className="h-28 w-full" />
+        <Skeleton className="h-28 w-full" />
+        <Skeleton className="h-28 w-full" />
+        <Skeleton className="h-28 w-full" />
+      </div>
+      <Skeleton className="h-64 w-full" />
+      <Skeleton className="h-64 w-full" />
+    </div>
+  );
+}
+
+function KeyValue({ label, value }: { readonly label: string; readonly value: string }) {
+  return (
+    <div className="rounded-2xl border border-border bg-muted/50 p-4">
+      <dt className="text-xs font-black uppercase tracking-[0.16em] text-muted-foreground">
+        {label}
+      </dt>
+      <dd className="mt-2 break-words text-sm font-semibold leading-6 text-foreground">{value}</dd>
+    </div>
+  );
+}
+
+function PlannedWorkflowCard({
+  title,
+  requiredPermission,
+  description,
+}: {
+  readonly title: string;
+  readonly requiredPermission: string;
+  readonly description: string;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>{description}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Alert>
+          <p className="text-sm font-bold">Planned workflow</p>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            Required permission: <strong>{requiredPermission}</strong>. This action remains disabled
+            in this read-only detail slice.
+          </p>
+        </Alert>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -923,6 +1343,51 @@ function toInvalidTenantListResponseError({
     requestId,
     correlationId,
   };
+}
+
+function toInvalidTenantDetailResponseError({
+  requestId,
+  correlationId,
+}: {
+  readonly requestId: string | null;
+  readonly correlationId: string | null;
+}): ApiClientError {
+  return {
+    code: 'invalid_api_response',
+    message: 'The platform tenant detail response did not contain a tenant detail payload.',
+    status: 500,
+    details: [],
+    requestId,
+    correlationId,
+  };
+}
+
+function isPlatformTenantDetail(value: unknown): value is PlatformTenantDetail {
+  if (!isObjectRecord(value)) {
+    return false;
+  }
+
+  return (
+    typeof value.id === 'string' &&
+    typeof value.business_name === 'string' &&
+    isTenantStatus(value.status)
+  );
+}
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isTenantStatus(value: unknown): value is AuthTenantStatus {
+  return (
+    value === 'pending_setup' ||
+    value === 'active' ||
+    value === 'grace_period' ||
+    value === 'read_only' ||
+    value === 'suspended' ||
+    value === 'pending_deletion' ||
+    value === 'deleted'
+  );
 }
 
 function readMetaString(value: string | undefined): string | null {
