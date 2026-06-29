@@ -17,4 +17,15 @@ export {
   SheetTitle,
   SheetTrigger,
 } from './sheet';
+export {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableFooter,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from './table';
+export { Tabs, TabsContent, TabsList, TabsTrigger } from './tabs';
 export { cn } from './utils';

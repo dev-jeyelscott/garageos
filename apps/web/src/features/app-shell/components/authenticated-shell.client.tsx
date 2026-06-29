@@ -23,6 +23,16 @@ import {
   SheetTitle,
   SheetTrigger,
   Skeleton,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
 } from '../../../components/ui';
 import {
   getAccessTokenOrRefresh,
@@ -2791,17 +2801,11 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
           </ButtonLink>
           {canUpdateSubscription && tenantDetailState.status === 'loaded' ? (
             <>
-              <ButtonLink href="#tenant-subscription-management" variant="primary">
-                Manage subscription
+              <ButtonLink href="/platform/tenants" variant="secondary">
+                Back to tenants
               </ButtonLink>
-              <ButtonLink href="#tenant-read-only-override" variant="secondary">
-                Apply read-only
-              </ButtonLink>
-              <ButtonLink href="#tenant-suspension" variant="destructive">
-                Suspend tenant
-              </ButtonLink>
-              <ButtonLink href="#tenant-support-access" variant="secondary">
-                Start support access
+              <ButtonLink href="#tenant-detail-tabs" variant="primary">
+                Review sections
               </ButtonLink>
             </>
           ) : (
@@ -2899,210 +2903,364 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
           ) : null}
 
           {tenantDetailState.status === 'loaded' ? (
-            <div className="grid gap-5">
-              <div className="grid gap-4 lg:grid-cols-4">
-                <SummaryCard
-                  title="Tenant status"
-                  value={formatTenantStatus(tenantDetailState.tenant.status)}
-                  description="Lifecycle access remains backend-authoritative."
-                />
-                <SummaryCard
-                  title="Plan"
-                  value={formatTenantPlan(tenantDetailState.tenant)}
-                  description={`Source: ${
-                    tenantDetailState.tenant.subscription?.status_source ?? 'Not returned'
-                  }`}
-                />
-                <SummaryCard
-                  title="Expiration"
-                  value={tenantDetailState.tenant.subscription?.expiration_date ?? 'Not returned'}
-                  description="Subscription lifecycle dates are interpreted by the backend."
-                />
-                <SummaryCard
-                  title="Onboarding"
-                  value={
-                    tenantDetailState.tenant.onboarding_completed_at === null ||
-                    tenantDetailState.tenant.onboarding_completed_at === undefined
-                      ? 'Incomplete or not returned'
-                      : 'Completed'
-                  }
-                  description={
-                    tenantDetailState.tenant.onboarding_completed_at ??
-                    'Completion timestamp not returned'
-                  }
-                />
-              </div>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Tenant metadata</CardTitle>
-                  <CardDescription>
-                    Platform-visible tenant identity and localization fields from the tenant detail
-                    API.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="grid gap-4 md:grid-cols-2">
-                  <KeyValue label="Tenant ID" value={tenantDetailState.tenant.id} />
-                  <KeyValue label="Business name" value={tenantDetailState.tenant.business_name} />
-                  <KeyValue
-                    label="Shop email"
-                    value={tenantDetailState.tenant.shop_email ?? 'Not returned'}
-                  />
-                  <KeyValue
-                    label="Timezone / Country / Currency"
-                    value={formatTenantLocation(tenantDetailState.tenant)}
-                  />
-                  <KeyValue
-                    label="Created"
-                    value={tenantDetailState.tenant.created_at ?? 'Not returned'}
-                  />
-                  <KeyValue
-                    label="Last updated"
-                    value={tenantDetailState.tenant.updated_at ?? 'Not returned'}
-                  />
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Subscription detail</CardTitle>
-                  <CardDescription>
-                    Current subscription summary returned by the platform tenant detail API.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="grid gap-4 md:grid-cols-2">
-                  <KeyValue
-                    label="Plan ID"
-                    value={
-                      tenantDetailState.tenant.subscription?.plan_id ??
-                      tenantDetailState.tenant.plan?.id ??
-                      'Not returned'
-                    }
-                  />
-                  <KeyValue label="Plan name" value={formatTenantPlan(tenantDetailState.tenant)} />
-                  <KeyValue
-                    label="Start date"
-                    value={tenantDetailState.tenant.subscription?.start_date ?? 'Not returned'}
-                  />
-                  <KeyValue
-                    label="Expiration date"
-                    value={tenantDetailState.tenant.subscription?.expiration_date ?? 'Not returned'}
-                  />
-                  <KeyValue
-                    label="Status source"
-                    value={tenantDetailState.tenant.subscription?.status_source ?? 'Not returned'}
-                  />
-                  <KeyValue
-                    label="Last renewal"
-                    value={tenantDetailState.tenant.subscription?.last_renewal_at ?? 'Not returned'}
-                  />
-                  <KeyValue
-                    label="Updated by platform admin"
-                    value={
-                      tenantDetailState.tenant.subscription?.updated_by_platform_admin_user_id ??
-                      'Not returned'
-                    }
-                  />
-                  <KeyValue
-                    label="Subscription updated"
-                    value={tenantDetailState.tenant.subscription?.updated_at ?? 'Not returned'}
-                  />
-                </CardContent>
-              </Card>
-
-              <PlatformTenantSubscriptionManagementPanel
-                tenant={tenantDetailState.tenant}
-                canUpdateSubscription={canUpdateSubscription}
-                form={subscriptionForm}
-                submitState={subscriptionSubmitState}
-                fieldErrors={subscriptionFieldErrors}
-                onChange={updateSubscriptionFormField}
-                onSubmit={handleTenantSubscriptionSubmit}
-              />
-
-              <PlatformTenantReadOnlyOverridePanel
-                tenant={tenantDetailState.tenant}
-                canUpdateSubscription={canUpdateSubscription}
-                form={readOnlyOverrideForm}
-                submitState={readOnlyOverrideSubmitState}
-                fieldErrors={readOnlyOverrideFieldErrors}
-                onChange={updateReadOnlyOverrideFormField}
-                onSubmit={handleTenantReadOnlyOverrideSubmit}
-              />
-
-              <PlatformTenantSuspensionPanel
-                tenant={tenantDetailState.tenant}
-                canUpdateSubscription={canUpdateSubscription}
-                form={tenantSuspensionForm}
-                submitState={tenantSuspensionSubmitState}
-                fieldErrors={tenantSuspensionFieldErrors}
-                onChange={updateTenantSuspensionFormField}
-                onSubmit={handleTenantSuspensionSubmit}
-              />
-
-              <PlatformTenantSupportAccessPanel
-                tenant={tenantDetailState.tenant}
-                canStartSupportAccess={canStartSupportAccess}
-                form={supportAccessForm}
-                submitState={supportAccessSubmitState}
-                fieldErrors={supportAccessFieldErrors}
-                onChange={updateSupportAccessFormField}
-                onSubmit={handleSupportAccessSubmit}
-              />
-
-              <PlatformTenantExportPanel
-                tenant={tenantDetailState.tenant}
-                canQueueTenantExport={canQueueTenantExport}
-                form={tenantExportForm}
-                submitState={tenantExportSubmitState}
-                fieldErrors={tenantExportFieldErrors}
-                onChange={updateTenantExportFormField}
-                onSubmit={handleTenantExportSubmit}
-              />
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Lifecycle detail</CardTitle>
-                  <CardDescription>
-                    Read-only lifecycle fields used for platform operations and deletion safeguards.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="grid gap-4 md:grid-cols-2">
-                  <KeyValue
-                    label="Current status"
-                    value={formatTenantStatus(tenantDetailState.tenant.status)}
-                  />
-                  <KeyValue
-                    label="Onboarding completed"
-                    value={tenantDetailState.tenant.onboarding_completed_at ?? 'Not returned'}
-                  />
-                  <KeyValue
-                    label="Deletion scheduled for"
-                    value={tenantDetailState.tenant.deletion_scheduled_for ?? 'Not returned'}
-                  />
-                  <KeyValue
-                    label="Deleted at"
-                    value={tenantDetailState.tenant.deleted_at ?? 'Not returned'}
-                  />
-                </CardContent>
-              </Card>
-
-              <div className="grid gap-4 lg:grid-cols-3">
-                <PlatformTenantDeletionJobPanel
-                  tenant={tenantDetailState.tenant}
-                  canQueueTenantDeletionJob={canQueueTenantExport}
-                  form={tenantDeletionJobForm}
-                  submitState={tenantDeletionJobSubmitState}
-                  fieldErrors={tenantDeletionJobFieldErrors}
-                  onChange={updateTenantDeletionJobFormField}
-                  onSubmit={handleTenantDeletionJobSubmit}
-                />
-              </div>
-            </div>
+            <PlatformTenantDetailTabs
+              tenant={tenantDetailState.tenant}
+              canUpdateSubscription={canUpdateSubscription}
+              canStartSupportAccess={canStartSupportAccess}
+              canQueueTenantExport={canQueueTenantExport}
+              subscriptionForm={subscriptionForm}
+              subscriptionSubmitState={subscriptionSubmitState}
+              subscriptionFieldErrors={subscriptionFieldErrors}
+              onSubscriptionChange={updateSubscriptionFormField}
+              onSubscriptionSubmit={handleTenantSubscriptionSubmit}
+              readOnlyOverrideForm={readOnlyOverrideForm}
+              readOnlyOverrideSubmitState={readOnlyOverrideSubmitState}
+              readOnlyOverrideFieldErrors={readOnlyOverrideFieldErrors}
+              onReadOnlyOverrideChange={updateReadOnlyOverrideFormField}
+              onReadOnlyOverrideSubmit={handleTenantReadOnlyOverrideSubmit}
+              tenantSuspensionForm={tenantSuspensionForm}
+              tenantSuspensionSubmitState={tenantSuspensionSubmitState}
+              tenantSuspensionFieldErrors={tenantSuspensionFieldErrors}
+              onTenantSuspensionChange={updateTenantSuspensionFormField}
+              onTenantSuspensionSubmit={handleTenantSuspensionSubmit}
+              supportAccessForm={supportAccessForm}
+              supportAccessSubmitState={supportAccessSubmitState}
+              supportAccessFieldErrors={supportAccessFieldErrors}
+              onSupportAccessChange={updateSupportAccessFormField}
+              onSupportAccessSubmit={handleSupportAccessSubmit}
+              tenantExportForm={tenantExportForm}
+              tenantExportSubmitState={tenantExportSubmitState}
+              tenantExportFieldErrors={tenantExportFieldErrors}
+              onTenantExportChange={updateTenantExportFormField}
+              onTenantExportSubmit={handleTenantExportSubmit}
+            />
           ) : null}
         </>
       )}
     </AuthenticatedShell>
+  );
+}
+
+function PlatformTenantDetailTabs({
+  tenant,
+  canUpdateSubscription,
+  canStartSupportAccess,
+  canQueueTenantExport,
+  subscriptionForm,
+  subscriptionSubmitState,
+  subscriptionFieldErrors,
+  onSubscriptionChange,
+  onSubscriptionSubmit,
+  readOnlyOverrideForm,
+  readOnlyOverrideSubmitState,
+  readOnlyOverrideFieldErrors,
+  onReadOnlyOverrideChange,
+  onReadOnlyOverrideSubmit,
+  tenantSuspensionForm,
+  tenantSuspensionSubmitState,
+  tenantSuspensionFieldErrors,
+  onTenantSuspensionChange,
+  onTenantSuspensionSubmit,
+  supportAccessForm,
+  supportAccessSubmitState,
+  supportAccessFieldErrors,
+  onSupportAccessChange,
+  onSupportAccessSubmit,
+  tenantExportForm,
+  tenantExportSubmitState,
+  tenantExportFieldErrors,
+  onTenantExportChange,
+  onTenantExportSubmit,
+}: {
+  readonly tenant: PlatformTenantDetail;
+  readonly canUpdateSubscription: boolean;
+  readonly canStartSupportAccess: boolean;
+  readonly canQueueTenantExport: boolean;
+  readonly subscriptionForm: PlatformTenantSubscriptionForm;
+  readonly subscriptionSubmitState: PlatformTenantSubscriptionSubmitState;
+  readonly subscriptionFieldErrors: Record<string, string>;
+  readonly onSubscriptionChange: <K extends keyof PlatformTenantSubscriptionForm>(
+    field: K,
+    value: PlatformTenantSubscriptionForm[K],
+  ) => void;
+  readonly onSubscriptionSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  readonly readOnlyOverrideForm: PlatformTenantReadOnlyOverrideForm;
+  readonly readOnlyOverrideSubmitState: PlatformTenantReadOnlyOverrideSubmitState;
+  readonly readOnlyOverrideFieldErrors: Record<string, string>;
+  readonly onReadOnlyOverrideChange: <K extends keyof PlatformTenantReadOnlyOverrideForm>(
+    field: K,
+    value: PlatformTenantReadOnlyOverrideForm[K],
+  ) => void;
+  readonly onReadOnlyOverrideSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  readonly tenantSuspensionForm: PlatformTenantSuspensionForm;
+  readonly tenantSuspensionSubmitState: PlatformTenantSuspensionSubmitState;
+  readonly tenantSuspensionFieldErrors: Record<string, string>;
+  readonly onTenantSuspensionChange: <K extends keyof PlatformTenantSuspensionForm>(
+    field: K,
+    value: PlatformTenantSuspensionForm[K],
+  ) => void;
+  readonly onTenantSuspensionSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  readonly supportAccessForm: PlatformSupportAccessForm;
+  readonly supportAccessSubmitState: PlatformSupportAccessSubmitState;
+  readonly supportAccessFieldErrors: Record<string, string>;
+  readonly onSupportAccessChange: <K extends keyof PlatformSupportAccessForm>(
+    field: K,
+    value: PlatformSupportAccessForm[K],
+  ) => void;
+  readonly onSupportAccessSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  readonly tenantExportForm: PlatformTenantExportForm;
+  readonly tenantExportSubmitState: PlatformTenantExportSubmitState;
+  readonly tenantExportFieldErrors: Record<string, string>;
+  readonly onTenantExportChange: <K extends keyof PlatformTenantExportForm>(
+    field: K,
+    value: PlatformTenantExportForm[K],
+  ) => void;
+  readonly onTenantExportSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <div className="grid gap-5">
+      <div className="grid gap-4 lg:grid-cols-4">
+        <SummaryCard
+          title="Tenant status"
+          value={formatTenantStatus(tenant.status)}
+          description="Lifecycle access remains backend-authoritative."
+        />
+        <SummaryCard
+          title="Plan"
+          value={formatTenantPlan(tenant)}
+          description={`Source: ${tenant.subscription?.status_source ?? 'Not returned'}`}
+        />
+        <SummaryCard
+          title="Expiration"
+          value={tenant.subscription?.expiration_date ?? 'Not returned'}
+          description="Subscription lifecycle dates are interpreted by the backend."
+        />
+        <SummaryCard
+          title="Onboarding"
+          value={
+            tenant.onboarding_completed_at === null || tenant.onboarding_completed_at === undefined
+              ? 'Incomplete or not returned'
+              : 'Completed'
+          }
+          description={tenant.onboarding_completed_at ?? 'Completion timestamp not returned'}
+        />
+      </div>
+
+      <Tabs defaultValue="overview" id="tenant-detail-tabs" className="grid gap-5">
+        <TabsList className="flex h-auto flex-wrap justify-start gap-2 rounded-2xl border border-border bg-muted/40 p-2">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="subscription">Subscription</TabsTrigger>
+          <TabsTrigger value="support-access">Support Access</TabsTrigger>
+          <TabsTrigger value="exports">Exports</TabsTrigger>
+          <TabsTrigger value="deletion">Deletion</TabsTrigger>
+          <TabsTrigger value="lifecycle">Lifecycle</TabsTrigger>
+          <TabsTrigger value="audit">Audit</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="grid gap-5">
+          <Card>
+            <CardHeader>
+              <CardTitle>Tenant metadata</CardTitle>
+              <CardDescription>
+                Platform-visible tenant identity and localization fields from the tenant detail API.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-2">
+              <KeyValue label="Tenant ID" value={tenant.id} />
+              <KeyValue label="Business name" value={tenant.business_name} />
+              <KeyValue label="Shop email" value={tenant.shop_email ?? 'Not returned'} />
+              <KeyValue
+                label="Timezone / Country / Currency"
+                value={formatTenantLocation(tenant)}
+              />
+              <KeyValue label="Created" value={tenant.created_at ?? 'Not returned'} />
+              <KeyValue label="Last updated" value={tenant.updated_at ?? 'Not returned'} />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Subscription snapshot</CardTitle>
+              <CardDescription>
+                Current subscription summary returned by the platform tenant detail API.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-2">
+              <KeyValue
+                label="Plan ID"
+                value={tenant.subscription?.plan_id ?? tenant.plan?.id ?? 'Not returned'}
+              />
+              <KeyValue label="Plan name" value={formatTenantPlan(tenant)} />
+              <KeyValue
+                label="Start date"
+                value={tenant.subscription?.start_date ?? 'Not returned'}
+              />
+              <KeyValue
+                label="Expiration date"
+                value={tenant.subscription?.expiration_date ?? 'Not returned'}
+              />
+              <KeyValue
+                label="Status source"
+                value={tenant.subscription?.status_source ?? 'Not returned'}
+              />
+              <KeyValue
+                label="Last renewal"
+                value={tenant.subscription?.last_renewal_at ?? 'Not returned'}
+              />
+              <KeyValue
+                label="Updated by platform admin"
+                value={tenant.subscription?.updated_by_platform_admin_user_id ?? 'Not returned'}
+              />
+              <KeyValue
+                label="Subscription updated"
+                value={tenant.subscription?.updated_at ?? 'Not returned'}
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="subscription" className="grid gap-5">
+          <PlatformTenantSubscriptionManagementPanel
+            tenant={tenant}
+            canUpdateSubscription={canUpdateSubscription}
+            form={subscriptionForm}
+            submitState={subscriptionSubmitState}
+            fieldErrors={subscriptionFieldErrors}
+            onChange={onSubscriptionChange}
+            onSubmit={onSubscriptionSubmit}
+          />
+        </TabsContent>
+
+        <TabsContent value="support-access" className="grid gap-5">
+          <PlatformTenantSupportAccessPanel
+            tenant={tenant}
+            canStartSupportAccess={canStartSupportAccess}
+            form={supportAccessForm}
+            submitState={supportAccessSubmitState}
+            fieldErrors={supportAccessFieldErrors}
+            onChange={onSupportAccessChange}
+            onSubmit={onSupportAccessSubmit}
+          />
+
+          <PlannedWorkflowCard
+            title="End support access session"
+            requiredPermission="platform.support_access"
+            description="Ending an active support access session is documented, but this page should not expose an end button until the active-session read/list workflow is wired."
+            detail="Keep support access explicit, visible, and audited. Do not silently impersonate tenant users."
+          />
+        </TabsContent>
+
+        <TabsContent value="exports" className="grid gap-5">
+          <PlatformTenantExportPanel
+            tenant={tenant}
+            canQueueTenantExport={canQueueTenantExport}
+            form={tenantExportForm}
+            submitState={tenantExportSubmitState}
+            fieldErrors={tenantExportFieldErrors}
+            onChange={onTenantExportChange}
+            onSubmit={onTenantExportSubmit}
+          />
+        </TabsContent>
+
+        <TabsContent value="deletion" className="grid gap-5">
+          <Card>
+            <CardHeader>
+              <CardTitle>Deletion readiness</CardTitle>
+              <CardDescription>
+                Read-only deletion lifecycle fields. Queueing deletion remains disabled until the
+                eligibility API and confirmation workflow are implemented.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-2">
+              <KeyValue label="Current status" value={formatTenantStatus(tenant.status)} />
+              <KeyValue
+                label="Deletion scheduled for"
+                value={tenant.deletion_scheduled_for ?? 'Not returned'}
+              />
+              <KeyValue label="Deleted at" value={tenant.deleted_at ?? 'Not returned'} />
+              <KeyValue
+                label="Required permission"
+                value="platform.tenants.update plus backend eligibility"
+              />
+            </CardContent>
+          </Card>
+
+          <PlannedWorkflowCard
+            title="Deletion job queueing planned"
+            requiredPermission="platform.tenants.update"
+            description="Deletion queueing requires retention eligibility checks, reason capture, confirmation, audit logging, and the documented deletion worker behavior."
+            detail="Do not add a destructive queue-deletion button until the dedicated deletion-job API is wired."
+          />
+        </TabsContent>
+
+        <TabsContent value="lifecycle" className="grid gap-5">
+          <Card>
+            <CardHeader>
+              <CardTitle>Lifecycle detail</CardTitle>
+              <CardDescription>
+                Read-only lifecycle fields used for platform operations and deletion safeguards.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-2">
+              <KeyValue label="Current status" value={formatTenantStatus(tenant.status)} />
+              <KeyValue
+                label="Onboarding completed"
+                value={tenant.onboarding_completed_at ?? 'Not returned'}
+              />
+              <KeyValue
+                label="Deletion scheduled for"
+                value={tenant.deletion_scheduled_for ?? 'Not returned'}
+              />
+              <KeyValue label="Deleted at" value={tenant.deleted_at ?? 'Not returned'} />
+            </CardContent>
+          </Card>
+
+          <PlatformTenantReadOnlyOverridePanel
+            tenant={tenant}
+            canUpdateSubscription={canUpdateSubscription}
+            form={readOnlyOverrideForm}
+            submitState={readOnlyOverrideSubmitState}
+            fieldErrors={readOnlyOverrideFieldErrors}
+            onChange={onReadOnlyOverrideChange}
+            onSubmit={onReadOnlyOverrideSubmit}
+          />
+
+          <PlatformTenantSuspensionPanel
+            tenant={tenant}
+            canUpdateSubscription={canUpdateSubscription}
+            form={tenantSuspensionForm}
+            submitState={tenantSuspensionSubmitState}
+            fieldErrors={tenantSuspensionFieldErrors}
+            onChange={onTenantSuspensionChange}
+            onSubmit={onTenantSuspensionSubmit}
+          />
+        </TabsContent>
+
+        <TabsContent value="audit" className="grid gap-5">
+          <Card>
+            <CardHeader>
+              <CardTitle>Audit placeholders</CardTitle>
+              <CardDescription>
+                Platform audit visibility remains planned until the audit-log API slice is wired.
+                This tab documents placement without inventing audit data.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 lg:grid-cols-2">
+              <PlannedWorkflowCard
+                title="Platform audit log search planned"
+                requiredPermission="platform.audit_logs.read"
+                description="Platform audit log search should use the documented /platform/audit-logs route when the backend API is available."
+              />
+              <PlannedWorkflowCard
+                title="Tenant lifecycle history planned"
+                requiredPermission="platform.tenants.read"
+                description="Lifecycle status history should show actor, timestamp, previous status, next status, and reason only after the backend exposes safe history fields."
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 }
 
@@ -3577,57 +3735,110 @@ function createPlatformTenantSubscriptionFormFromTenant(
 
 function PlatformTenantTable({ tenants }: { readonly tenants: readonly PlatformTenantListItem[] }) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-border">
-      <div className="hidden grid-cols-[1.4fr_1fr_0.9fr_0.9fr_auto] gap-4 border-b border-border bg-muted px-4 py-3 text-xs font-black uppercase tracking-[0.16em] text-muted-foreground md:grid">
-        <span>Tenant</span>
-        <span>Status</span>
-        <span>Plan</span>
-        <span>Expiration</span>
-        <span>Action</span>
+    <div className="grid gap-4">
+      <div className="grid gap-3 lg:hidden">
+        {tenants.map((tenant) => (
+          <PlatformTenantMobileCard key={tenant.id} tenant={tenant} />
+        ))}
       </div>
 
-      <ul className="divide-y divide-border">
-        {tenants.map((tenant) => {
-          const tenantDetailHref = `/platform/tenants/${tenant.id}`;
+      <div className="hidden overflow-hidden rounded-2xl border border-border bg-card lg:block">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/70 hover:bg-muted/70">
+              <TableHead>Tenant</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Plan</TableHead>
+              <TableHead>Expiration</TableHead>
+              <TableHead>Location</TableHead>
+              <TableHead className="text-right">Action</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {tenants.map((tenant) => {
+              const tenantDetailHref = `/platform/tenants/${tenant.id}`;
 
-          return (
-            <li
-              key={tenant.id}
-              className="grid gap-3 bg-card p-4 md:grid-cols-[1.4fr_1fr_0.9fr_0.9fr_auto] md:items-center"
-            >
-              <div>
-                <Link
-                  href={tenantDetailHref}
-                  className="font-bold text-foreground underline-offset-4 hover:underline"
-                >
-                  {tenant.business_name}
-                </Link>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {tenant.shop_email ?? 'No shop email returned'}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">{formatTenantLocation(tenant)}</p>
-              </div>
-
-              <div>
-                <StatusBadge status={tenant.status} />
-              </div>
-
-              <p className="text-sm font-semibold text-foreground">{formatTenantPlan(tenant)}</p>
-
-              <p className="text-sm text-muted-foreground">
-                {tenant.subscription?.expiration_date ?? 'Expiration not returned'}
-              </p>
-
-              <div>
-                <ButtonLink href={tenantDetailHref} variant="secondary" size="sm">
-                  View
-                </ButtonLink>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
+              return (
+                <TableRow key={tenant.id}>
+                  <TableCell>
+                    <Link
+                      href={tenantDetailHref}
+                      className="font-bold text-foreground underline-offset-4 hover:underline"
+                    >
+                      {tenant.business_name}
+                    </Link>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {tenant.shop_email ?? 'No shop email returned'}
+                    </p>
+                  </TableCell>
+                  <TableCell>
+                    <StatusBadge status={tenant.status} />
+                  </TableCell>
+                  <TableCell className="font-semibold text-foreground">
+                    {formatTenantPlan(tenant)}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {tenant.subscription?.expiration_date ?? 'Expiration not returned'}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {formatTenantLocation(tenant)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <ButtonLink href={tenantDetailHref} variant="secondary" size="sm">
+                      View
+                    </ButtonLink>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
     </div>
+  );
+}
+
+function PlatformTenantMobileCard({ tenant }: { readonly tenant: PlatformTenantListItem }) {
+  const tenantDetailHref = `/platform/tenants/${tenant.id}`;
+
+  return (
+    <article className="grid gap-4 rounded-2xl border border-border bg-card p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <Link
+            href={tenantDetailHref}
+            className="break-words font-bold text-foreground underline-offset-4 hover:underline"
+          >
+            {tenant.business_name}
+          </Link>
+          <p className="mt-1 break-words text-sm text-muted-foreground">
+            {tenant.shop_email ?? 'No shop email returned'}
+          </p>
+        </div>
+        <StatusBadge status={tenant.status} />
+      </div>
+
+      <dl className="grid gap-3 rounded-2xl border border-border bg-muted/40 p-3 text-sm">
+        <div>
+          <dt className="font-bold text-foreground">Plan</dt>
+          <dd className="mt-1 text-muted-foreground">{formatTenantPlan(tenant)}</dd>
+        </div>
+        <div>
+          <dt className="font-bold text-foreground">Expiration</dt>
+          <dd className="mt-1 text-muted-foreground">
+            {tenant.subscription?.expiration_date ?? 'Expiration not returned'}
+          </dd>
+        </div>
+        <div>
+          <dt className="font-bold text-foreground">Location</dt>
+          <dd className="mt-1 text-muted-foreground">{formatTenantLocation(tenant)}</dd>
+        </div>
+      </dl>
+
+      <ButtonLink href={tenantDetailHref} variant="secondary" size="sm">
+        View tenant
+      </ButtonLink>
+    </article>
   );
 }
 
@@ -4575,6 +4786,40 @@ function ForbiddenState({
         <p className="mt-2 text-sm leading-6 text-muted-foreground">{detail}</p>
       )}
     </Alert>
+  );
+}
+
+function PlannedWorkflowCard({
+  title,
+  requiredPermission,
+  description,
+  detail = null,
+}: {
+  readonly title: string;
+  readonly requiredPermission: string;
+  readonly description: string;
+  readonly detail?: string | null;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <CardTitle>{title}</CardTitle>
+            <CardDescription>{description}</CardDescription>
+          </div>
+          <Badge variant="outline">Planned</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="grid gap-3">
+        <KeyValue label="Required permission" value={requiredPermission} />
+        {detail === null ? null : (
+          <Alert>
+            <p className="text-sm leading-6 text-muted-foreground">{detail}</p>
+          </Alert>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
