@@ -13,6 +13,7 @@ import { logout, logoutAll } from '../actions/logout.action';
 import { signupOwner } from '../actions/owner-signup.action';
 import { changePassword, forgotPassword, resetPassword } from '../actions/password.action';
 import { getCurrentSession } from '../queries/get-current-session.query';
+import { resolveAuthenticatedRedirect } from '../utils/resolve-auth-redirect';
 import type { ActionState } from '../types/auth-action-state';
 import { initialActionState } from '../types/auth-action-state';
 import type { AuthSessionResponseData } from '../types/auth-session';
@@ -43,21 +44,33 @@ export function LoginScreen() {
     });
 
     try {
-      const data = await login({
+      const loginResult = await login({
         email: getFormValue(formData, 'email'),
         password: getFormValue(formData, 'password'),
         remember_me: formData.get('remember_me') === 'on',
       });
 
+      if (!loginResult.user.email_verified) {
+        setState({
+          ...initialActionState,
+          status: 'success',
+          message: 'Login successful. Please verify your email before operational access.',
+        });
+
+        router.push('/auth/email-verification');
+        return;
+      }
+
+      const session = await getCurrentSession();
+      const redirectTo = resolveAuthenticatedRedirect(session);
+
       setState({
         ...initialActionState,
         status: 'success',
-        message: data.user.email_verified
-          ? 'Login successful. Loading your session...'
-          : 'Login successful. Please verify your email before operational access.',
+        message: 'Login successful. Loading your workspace...',
       });
 
-      router.push(data.user.email_verified ? '/' : '/auth/email-verification');
+      router.push(redirectTo);
     } catch (error) {
       setState(toErrorState(error, 'Login failed.'));
     }
