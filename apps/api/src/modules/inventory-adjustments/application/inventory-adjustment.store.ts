@@ -55,6 +55,7 @@ export interface FindAdjustmentWithLinesInput {
 }
 
 export interface LockAdjustmentWithLinesForPostingInput extends FindAdjustmentWithLinesInput {}
+export interface LockAdjustmentWithLinesForUpdateInput extends FindAdjustmentWithLinesInput {}
 
 export interface InsertStatusEventInput {
   readonly id: string;
@@ -65,6 +66,25 @@ export interface InsertStatusEventInput {
   readonly reason: string | null;
   readonly createdByUserId: string;
   readonly createdAt: Date;
+}
+
+export interface MarkAdjustmentPendingApprovalInput {
+  readonly tenantId: string;
+  readonly adjustmentId: string;
+  readonly updatedAt: Date;
+}
+
+export interface MarkAdjustmentApprovedInput {
+  readonly tenantId: string;
+  readonly adjustmentId: string;
+  readonly approvedByUserId: string;
+  readonly updatedAt: Date;
+}
+
+export interface MarkAdjustmentRejectedInput {
+  readonly tenantId: string;
+  readonly adjustmentId: string;
+  readonly updatedAt: Date;
 }
 
 export interface ListStatusEventsInput {
@@ -134,10 +154,30 @@ export abstract class InventoryAdjustmentStore {
     client: DatabaseQueryClient,
   ): Promise<InventoryAdjustmentWithLinesRecord | null>;
 
+  abstract lockAdjustmentWithLinesForUpdate(
+    input: LockAdjustmentWithLinesForUpdateInput,
+    client: DatabaseQueryClient,
+  ): Promise<InventoryAdjustmentWithLinesRecord | null>;
+
   abstract insertStatusEvent(
     input: InsertStatusEventInput,
     client?: DatabaseQueryClient,
   ): Promise<InventoryAdjustmentStatusEventRecord>;
+
+  abstract markAdjustmentPendingApproval(
+    input: MarkAdjustmentPendingApprovalInput,
+    client?: DatabaseQueryClient,
+  ): Promise<InventoryAdjustmentRecord | null>;
+
+  abstract markAdjustmentApproved(
+    input: MarkAdjustmentApprovedInput,
+    client?: DatabaseQueryClient,
+  ): Promise<InventoryAdjustmentRecord | null>;
+
+  abstract markAdjustmentRejected(
+    input: MarkAdjustmentRejectedInput,
+    client?: DatabaseQueryClient,
+  ): Promise<InventoryAdjustmentRecord | null>;
 
   abstract listStatusEvents(
     input: ListStatusEventsInput,

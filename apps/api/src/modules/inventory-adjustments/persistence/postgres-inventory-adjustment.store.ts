@@ -19,6 +19,10 @@ import {
   type ListFifoCostLayersInput,
   type ListStatusEventsInput,
   type LockAdjustmentWithLinesForPostingInput,
+  type LockAdjustmentWithLinesForUpdateInput,
+  type MarkAdjustmentApprovedInput,
+  type MarkAdjustmentPendingApprovalInput,
+  type MarkAdjustmentRejectedInput,
   type ReplaceDraftAdjustmentLinesInput,
   type UpdateDraftAdjustmentInput,
 } from '../application/inventory-adjustment.store';
@@ -245,7 +249,22 @@ export class PostgresInventoryAdjustmentStore extends InventoryAdjustmentStore {
     input: LockAdjustmentWithLinesForPostingInput,
     client: DatabaseQueryClient,
   ): Promise<InventoryAdjustmentWithLinesRecord | null> {
-    const adjustment = await this.findAdjustment(input, client, true);
+    const adjustment = await this.findAdjustment(input, client, 'posting');
+    if (adjustment === null) {
+      return null;
+    }
+
+    return {
+      adjustment,
+      lines: await this.listLines(input, client),
+    };
+  }
+
+  async lockAdjustmentWithLinesForUpdate(
+    input: LockAdjustmentWithLinesForUpdateInput,
+    client: DatabaseQueryClient,
+  ): Promise<InventoryAdjustmentWithLinesRecord | null> {
+    const adjustment = await this.findAdjustment(input, client, 'update');
     if (adjustment === null) {
       return null;
     }
@@ -297,6 +316,73 @@ export class PostgresInventoryAdjustmentStore extends InventoryAdjustmentStore {
     );
 
     return mapInventoryAdjustmentStatusEventRow(getRequiredRow(result, 'insert status event'));
+  }
+
+  async markAdjustmentPendingApproval(
+    input: MarkAdjustmentPendingApprovalInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<InventoryAdjustmentRecord | null> {
+    const result = await client.query<InventoryAdjustmentRow>(
+      `
+        update inventory_adjustments
+        set status = 'pending_approval',
+            updated_at = $3::timestamptz,
+            lock_version = lock_version + 1
+        where tenant_id = $1::uuid
+          and id = $2::uuid
+          and status = 'draft'
+        returning ${INVENTORY_ADJUSTMENT_COLUMNS}
+      `,
+      [input.tenantId, input.adjustmentId, input.updatedAt],
+    );
+
+    const row = result.rows[0];
+    return row === undefined ? null : mapInventoryAdjustmentRow(row);
+  }
+
+  async markAdjustmentApproved(
+    input: MarkAdjustmentApprovedInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<InventoryAdjustmentRecord | null> {
+    const result = await client.query<InventoryAdjustmentRow>(
+      `
+        update inventory_adjustments
+        set status = 'approved',
+            approved_by_user_id = $3::uuid,
+            updated_at = $4::timestamptz,
+            lock_version = lock_version + 1
+        where tenant_id = $1::uuid
+          and id = $2::uuid
+          and status = 'pending_approval'
+        returning ${INVENTORY_ADJUSTMENT_COLUMNS}
+      `,
+      [input.tenantId, input.adjustmentId, input.approvedByUserId, input.updatedAt],
+    );
+
+    const row = result.rows[0];
+    return row === undefined ? null : mapInventoryAdjustmentRow(row);
+  }
+
+  async markAdjustmentRejected(
+    input: MarkAdjustmentRejectedInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<InventoryAdjustmentRecord | null> {
+    const result = await client.query<InventoryAdjustmentRow>(
+      `
+        update inventory_adjustments
+        set status = 'rejected',
+            updated_at = $3::timestamptz,
+            lock_version = lock_version + 1
+        where tenant_id = $1::uuid
+          and id = $2::uuid
+          and status = 'pending_approval'
+        returning ${INVENTORY_ADJUSTMENT_COLUMNS}
+      `,
+      [input.tenantId, input.adjustmentId, input.updatedAt],
+    );
+
+    const row = result.rows[0];
+    return row === undefined ? null : mapInventoryAdjustmentRow(row);
   }
 
   async listStatusEvents(
@@ -444,16 +530,22 @@ export class PostgresInventoryAdjustmentStore extends InventoryAdjustmentStore {
   private async findAdjustment(
     input: FindAdjustmentWithLinesInput,
     client: DatabaseQueryClient,
-    lockForPosting: boolean,
+    lockMode: false | 'posting' | 'update',
   ): Promise<InventoryAdjustmentRecord | null> {
+    const statusClause =
+      lockMode === 'posting'
+        ? "and status in ('draft', 'approved')"
+        : lockMode === 'update'
+          ? "and status in ('draft', 'pending_approval', 'approved')"
+          : '';
     const result = await client.query<InventoryAdjustmentRow>(
       `
         select ${INVENTORY_ADJUSTMENT_COLUMNS}
         from inventory_adjustments
         where tenant_id = $1::uuid
           and id = $2::uuid
-          ${lockForPosting ? "and status in ('draft', 'approved')" : ''}
-        ${lockForPosting ? 'for update' : ''}
+          ${statusClause}
+        ${lockMode ? 'for update' : ''}
       `,
       [input.tenantId, input.adjustmentId],
     );

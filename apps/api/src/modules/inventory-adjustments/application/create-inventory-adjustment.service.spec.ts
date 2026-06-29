@@ -196,6 +196,10 @@ class FakeInventoryAdjustmentStore extends InventoryAdjustmentStore {
   replaceDraftAdjustmentLines = vi.fn();
   findAdjustmentWithLines = vi.fn();
   lockAdjustmentWithLinesForPosting = vi.fn();
+  lockAdjustmentWithLinesForUpdate = vi.fn();
+  markAdjustmentPendingApproval = vi.fn();
+  markAdjustmentApproved = vi.fn();
+  markAdjustmentRejected = vi.fn();
   listStatusEvents = vi.fn();
   listAdjustments = vi.fn();
 }
