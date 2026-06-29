@@ -71,6 +71,7 @@ interface PlatformTenantSubscriptionSummary {
   readonly expiration_date?: string | null;
   readonly status_source?: PlatformSubscriptionStatusSource | string | null;
   readonly last_renewal_at?: string | null;
+  readonly updated_by_platform_admin_user_id?: string | null;
   readonly updated_at?: string | null;
 }
 
@@ -119,6 +120,35 @@ type PlatformTenantDetailState =
       readonly code: string | null;
     };
 
+interface PlatformTenantSubscriptionForm {
+  readonly plan_id: string;
+  readonly subscription_start_date: string;
+  readonly subscription_expiration_date: string;
+  readonly reason: string;
+}
+
+interface UpdatePlatformTenantSubscriptionResponse {
+  readonly subscription: PlatformTenantSubscriptionSummary;
+}
+
+type PlatformTenantSubscriptionSubmitState =
+  | {
+      readonly status: 'idle';
+    }
+  | {
+      readonly status: 'submitting';
+    }
+  | {
+      readonly status: 'success';
+      readonly message: string;
+    }
+  | {
+      readonly status: 'error';
+      readonly message: string;
+      readonly detail: string | null;
+      readonly code: string | null;
+      readonly fieldErrors: Record<string, string>;
+    };
 interface PlatformTenantCreateForm {
   readonly business_name: string;
   readonly shop_email: string;
@@ -247,6 +277,13 @@ const defaultPlatformTenantCreateForm: PlatformTenantCreateForm = {
   owner_email: '',
   approve_duplicate: false,
   duplicate_approval_reason: '',
+};
+
+const defaultPlatformTenantSubscriptionForm: PlatformTenantSubscriptionForm = {
+  plan_id: '',
+  subscription_start_date: '',
+  subscription_expiration_date: '',
+  reason: '',
 };
 
 const tenantStatusFilterOptions: readonly {
@@ -989,10 +1026,21 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
   const [tenantDetailState, setTenantDetailState] = useState<PlatformTenantDetailState>({
     status: 'idle',
   });
+  const [subscriptionForm, setSubscriptionForm] = useState<PlatformTenantSubscriptionForm>(
+    defaultPlatformTenantSubscriptionForm,
+  );
+  const [subscriptionSubmitState, setSubscriptionSubmitState] =
+    useState<PlatformTenantSubscriptionSubmitState>({
+      status: 'idle',
+    });
 
   const canReadTenantDetail =
     sessionState.status === 'ready' &&
     hasEffectivePermission(sessionState.session, 'platform.tenants.read');
+
+  const canUpdateSubscription =
+    sessionState.status === 'ready' &&
+    hasEffectivePermission(sessionState.session, 'platform.subscriptions.update');
 
   useEffect(() => {
     if (sessionState.status !== 'ready' || !canReadTenantDetail || tenantId.length === 0) {
@@ -1003,6 +1051,7 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
 
     async function loadTenantDetail() {
       setTenantDetailState({ status: 'loading' });
+      setSubscriptionSubmitState({ status: 'idle' });
 
       try {
         const tenant = await getPlatformTenantDetail(tenantId);
@@ -1036,12 +1085,113 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
     };
   }, [canReadTenantDetail, sessionState, tenantId]);
 
+  useEffect(() => {
+    if (tenantDetailState.status !== 'loaded') {
+      return;
+    }
+
+    setSubscriptionForm(createPlatformTenantSubscriptionFormFromTenant(tenantDetailState.tenant));
+  }, [tenantDetailState]);
+
+  function updateSubscriptionFormField<K extends keyof PlatformTenantSubscriptionForm>(
+    field: K,
+    value: PlatformTenantSubscriptionForm[K],
+  ) {
+    setSubscriptionForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }
+
+  async function handleTenantSubscriptionSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (
+      !canUpdateSubscription ||
+      subscriptionSubmitState.status === 'submitting' ||
+      tenantDetailState.status !== 'loaded'
+    ) {
+      return;
+    }
+
+    const nextForm: PlatformTenantSubscriptionForm = {
+      plan_id: subscriptionForm.plan_id.trim(),
+      subscription_start_date: subscriptionForm.subscription_start_date,
+      subscription_expiration_date: subscriptionForm.subscription_expiration_date,
+      reason: subscriptionForm.reason.trim(),
+    };
+
+    const fieldErrors: Record<string, string> = {};
+
+    if (nextForm.plan_id.length === 0) {
+      fieldErrors.plan_id = 'Plan ID is required.';
+    }
+
+    if (nextForm.subscription_start_date.length === 0) {
+      fieldErrors.subscription_start_date = 'Subscription start date is required.';
+    }
+
+    if (nextForm.subscription_expiration_date.length === 0) {
+      fieldErrors.subscription_expiration_date = 'Subscription expiration date is required.';
+    }
+
+    if (
+      nextForm.subscription_start_date.length > 0 &&
+      nextForm.subscription_expiration_date.length > 0 &&
+      nextForm.subscription_expiration_date < nextForm.subscription_start_date
+    ) {
+      fieldErrors.subscription_expiration_date =
+        'Subscription expiration date must be on or after start date.';
+    }
+
+    if (nextForm.reason.length === 0) {
+      fieldErrors.reason = 'Reason is required.';
+    }
+
+    if (Object.keys(fieldErrors).length > 0) {
+      setSubscriptionSubmitState({
+        status: 'error',
+        message: 'Review the subscription update fields.',
+        detail: null,
+        code: 'validation_failed',
+        fieldErrors,
+      });
+      return;
+    }
+
+    setSubscriptionSubmitState({ status: 'submitting' });
+
+    try {
+      await updatePlatformTenantSubscription(tenantId, nextForm);
+      const refreshedTenant = await getPlatformTenantDetail(tenantId);
+
+      setTenantDetailState({
+        status: 'loaded',
+        tenant: refreshedTenant,
+      });
+      setSubscriptionSubmitState({
+        status: 'success',
+        message: 'Tenant subscription was updated and the detail view was refreshed.',
+      });
+    } catch (error) {
+      setSubscriptionSubmitState({
+        status: 'error',
+        message: toSafeErrorMessage(error, 'Unable to update tenant subscription.'),
+        detail: toSafeErrorDetail(error),
+        code: getApiErrorCode(error),
+        fieldErrors: getApiFieldErrors(error),
+      });
+    }
+  }
+
   if (sessionState.status !== 'ready') {
     return <SessionStateScreen state={sessionState} area="platform" />;
   }
 
   const isLoadingTenant =
     tenantDetailState.status === 'idle' || tenantDetailState.status === 'loading';
+  const subscriptionFieldErrors =
+    subscriptionSubmitState.status === 'error' ? subscriptionSubmitState.fieldErrors : {};
 
   return (
     <AuthenticatedShell
@@ -1055,14 +1205,24 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
           <ButtonLink href="/platform/tenants" variant="secondary">
             Back to tenants
           </ButtonLink>
-          <Button
-            type="button"
-            variant="secondary"
-            disabled
-            title="Planned subscription workflow route."
-          >
-            Manage subscription
-          </Button>
+          {canUpdateSubscription && tenantDetailState.status === 'loaded' ? (
+            <ButtonLink href="#tenant-subscription-management" variant="primary">
+              Manage subscription
+            </ButtonLink>
+          ) : (
+            <Button
+              type="button"
+              variant="secondary"
+              disabled
+              title={
+                canUpdateSubscription
+                  ? 'Tenant detail must load before subscription updates.'
+                  : 'Requires platform.subscriptions.update.'
+              }
+            >
+              Manage subscription
+            </Button>
+          )}
         </>
       }
     >
@@ -1076,9 +1236,9 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
         <>
           <Alert>
             <p className="text-sm leading-6">
-              This screen reads the documented platform tenant detail only. Subscription changes,
-              read-only override, suspension, support access, exports, deletion jobs, and platform
-              audit logs remain separate workflow slices.
+              This screen reads platform tenant detail and now wires the documented subscription
+              management workflow. Read-only override, suspension, support access, exports, deletion
+              jobs, and platform audit logs remain separate workflow slices.
             </p>
           </Alert>
 
@@ -1173,7 +1333,7 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
                 <CardHeader>
                   <CardTitle>Subscription detail</CardTitle>
                   <CardDescription>
-                    Read-only subscription summary returned by the platform tenant detail API.
+                    Current subscription summary returned by the platform tenant detail API.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="grid gap-4 md:grid-cols-2">
@@ -1202,8 +1362,29 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
                     label="Last renewal"
                     value={tenantDetailState.tenant.subscription?.last_renewal_at ?? 'Not returned'}
                   />
+                  <KeyValue
+                    label="Updated by platform admin"
+                    value={
+                      tenantDetailState.tenant.subscription?.updated_by_platform_admin_user_id ??
+                      'Not returned'
+                    }
+                  />
+                  <KeyValue
+                    label="Subscription updated"
+                    value={tenantDetailState.tenant.subscription?.updated_at ?? 'Not returned'}
+                  />
                 </CardContent>
               </Card>
+
+              <PlatformTenantSubscriptionManagementPanel
+                tenant={tenantDetailState.tenant}
+                canUpdateSubscription={canUpdateSubscription}
+                form={subscriptionForm}
+                submitState={subscriptionSubmitState}
+                fieldErrors={subscriptionFieldErrors}
+                onChange={updateSubscriptionFormField}
+                onSubmit={handleTenantSubscriptionSubmit}
+              />
 
               <Card>
                 <CardHeader>
@@ -1232,12 +1413,7 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
                 </CardContent>
               </Card>
 
-              <div className="grid gap-4 lg:grid-cols-2">
-                <PlannedWorkflowCard
-                  title="Subscription management"
-                  requiredPermission="platform.subscriptions.update"
-                  description="Assigning plans, expiration dates, and status overrides belongs to the dedicated subscription workflow."
-                />
+              <div className="grid gap-4 lg:grid-cols-3">
                 <PlannedWorkflowCard
                   title="Support access"
                   requiredPermission="platform.support_access"
@@ -1496,24 +1672,15 @@ async function getPlatformTenants({
     params.set('cursor', cursor);
   }
 
-  const envelope = await getAuthJsonEnvelope<readonly PlatformTenantListItem[]>(
-    `/platform/tenants?${params.toString()}`,
-    {
-      accessToken,
-    },
-  );
+  const envelope = await getAuthJsonEnvelope<unknown>(`/platform/tenants?${params.toString()}`, {
+    accessToken,
+  });
 
-  if (!Array.isArray(envelope.data)) {
-    throw toInvalidTenantListResponseError({
-      requestId: readMetaString(envelope.meta.request_id),
-      correlationId: readMetaString(envelope.meta.correlation_id),
-    });
-  }
-
-  return {
-    tenants: envelope.data,
+  return normalizePlatformTenantListPayload(envelope.data, {
+    requestId: readMetaString(envelope.meta.request_id),
+    correlationId: readMetaString(envelope.meta.correlation_id),
     pagination: normalizePlatformTenantPagination(envelope.meta.pagination),
-  };
+  });
 }
 
 async function getPlatformTenantDetail(tenantId: string): Promise<PlatformTenantDetail> {
@@ -1564,6 +1731,54 @@ async function createPlatformTenant(
   );
 }
 
+function normalizePlatformTenantListPayload(
+  data: unknown,
+  meta: {
+    readonly requestId: string | null;
+    readonly correlationId: string | null;
+    readonly pagination: PlatformTenantListPagination | null;
+  },
+): PlatformTenantListResult {
+  if (Array.isArray(data) && data.every(isPlatformTenantListItem)) {
+    return {
+      tenants: data,
+      pagination: meta.pagination,
+    };
+  }
+
+  if (
+    isObjectRecord(data) &&
+    Array.isArray(data.tenants) &&
+    data.tenants.every(isPlatformTenantListItem)
+  ) {
+    return {
+      tenants: data.tenants,
+      pagination: normalizePlatformTenantPagination(data.pagination) ?? meta.pagination,
+    };
+  }
+
+  throw toInvalidTenantListResponseError(meta);
+}
+
+async function updatePlatformTenantSubscription(
+  tenantId: string,
+  form: PlatformTenantSubscriptionForm,
+): Promise<UpdatePlatformTenantSubscriptionResponse> {
+  return postAuthJson<UpdatePlatformTenantSubscriptionResponse>(
+    `/platform/tenants/${encodeURIComponent(tenantId)}/subscription`,
+    {
+      plan_id: form.plan_id.trim(),
+      subscription_start_date: form.subscription_start_date,
+      subscription_expiration_date: form.subscription_expiration_date,
+      reason: form.reason.trim(),
+    },
+    {
+      requiresAuth: true,
+      idempotencyKey: createIdempotencyKey('platform-tenant-subscription-update'),
+    },
+  );
+}
+
 function normalizePlatformTenantDetailPayload(
   data: unknown,
   meta: {
@@ -1580,6 +1795,17 @@ function normalizePlatformTenantDetailPayload(
   }
 
   throw toInvalidTenantDetailResponseError(meta);
+}
+
+function createPlatformTenantSubscriptionFormFromTenant(
+  tenant: PlatformTenantDetail,
+): PlatformTenantSubscriptionForm {
+  return {
+    plan_id: tenant.subscription?.plan_id ?? tenant.plan?.id ?? '',
+    subscription_start_date: tenant.subscription?.start_date ?? '',
+    subscription_expiration_date: tenant.subscription?.expiration_date ?? '',
+    reason: '',
+  };
 }
 
 function PlatformTenantTable({ tenants }: { readonly tenants: readonly PlatformTenantListItem[] }) {
@@ -1664,6 +1890,166 @@ function KeyValue({ label, value }: { readonly label: string; readonly value: st
   );
 }
 
+function PlatformTenantSubscriptionManagementPanel({
+  tenant,
+  canUpdateSubscription,
+  form,
+  submitState,
+  fieldErrors,
+  onChange,
+  onSubmit,
+}: {
+  readonly tenant: PlatformTenantDetail;
+  readonly canUpdateSubscription: boolean;
+  readonly form: PlatformTenantSubscriptionForm;
+  readonly submitState: PlatformTenantSubscriptionSubmitState;
+  readonly fieldErrors: Record<string, string>;
+  readonly onChange: <K extends keyof PlatformTenantSubscriptionForm>(
+    field: K,
+    value: PlatformTenantSubscriptionForm[K],
+  ) => void;
+  readonly onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  const isSubmitting = submitState.status === 'submitting';
+  const currentPlanId = tenant.subscription?.plan_id ?? tenant.plan?.id ?? 'Not returned';
+  const currentStartDate = tenant.subscription?.start_date ?? 'Not returned';
+  const currentExpirationDate = tenant.subscription?.expiration_date ?? 'Not returned';
+
+  return (
+    <Card id="tenant-subscription-management">
+      <CardHeader>
+        <CardTitle>Subscription management</CardTitle>
+        <CardDescription>
+          Update the tenant plan ID and subscription dates after external payment confirmation or
+          platform subscription correction. A reason is required for auditability.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-5">
+        <div className="grid gap-4 md:grid-cols-3">
+          <KeyValue label="Current plan ID" value={currentPlanId} />
+          <KeyValue label="Current start date" value={currentStartDate} />
+          <KeyValue label="Current expiration date" value={currentExpirationDate} />
+        </div>
+
+        {!canUpdateSubscription ? (
+          <Alert>
+            <p className="text-sm font-bold">Subscription update unavailable</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              Your platform session can view tenant subscription data, but it cannot submit
+              subscription updates. Required permission:{' '}
+              <strong>platform.subscriptions.update</strong>.
+            </p>
+          </Alert>
+        ) : null}
+
+        {submitState.status === 'success' ? (
+          <Alert>
+            <p className="text-sm font-bold">Subscription updated</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">{submitState.message}</p>
+          </Alert>
+        ) : null}
+
+        {submitState.status === 'error' ? (
+          <Alert variant="destructive">
+            <p className="text-sm font-bold">{submitState.message}</p>
+            {submitState.detail === null ? null : (
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">{submitState.detail}</p>
+            )}
+            {submitState.code === 'idempotency_conflict' ? (
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                The request was detected as a duplicate or retry conflict. Reload the tenant detail
+                before submitting again.
+              </p>
+            ) : null}
+          </Alert>
+        ) : null}
+
+        <form className="grid gap-5" onSubmit={onSubmit}>
+          <fieldset
+            className="grid gap-5 disabled:pointer-events-none disabled:opacity-70"
+            disabled={!canUpdateSubscription || isSubmitting}
+          >
+            <section className="grid gap-4 rounded-2xl border border-border bg-muted/40 p-4">
+              <div>
+                <h2 className="font-bold text-foreground">Subscription update fields</h2>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                  Use an active Basic, Mid, or High plan ID. The platform plan selector remains a
+                  separate plan-management slice.
+                </p>
+              </div>
+
+              <label className="grid gap-2">
+                <span className="text-sm font-bold text-foreground">Plan ID</span>
+                <Input
+                  value={form.plan_id}
+                  onChange={(event) => onChange('plan_id', event.currentTarget.value)}
+                  required
+                  placeholder="UUID of an active subscription plan"
+                />
+                <FieldError message={fieldErrors.plan_id} />
+              </label>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="grid gap-2">
+                  <span className="text-sm font-bold text-foreground">Subscription start date</span>
+                  <Input
+                    type="date"
+                    value={form.subscription_start_date}
+                    onChange={(event) =>
+                      onChange('subscription_start_date', event.currentTarget.value)
+                    }
+                    required
+                  />
+                  <FieldError message={fieldErrors.subscription_start_date} />
+                </label>
+
+                <label className="grid gap-2">
+                  <span className="text-sm font-bold text-foreground">
+                    Subscription expiration date
+                  </span>
+                  <Input
+                    type="date"
+                    value={form.subscription_expiration_date}
+                    onChange={(event) =>
+                      onChange('subscription_expiration_date', event.currentTarget.value)
+                    }
+                    required
+                  />
+                  <FieldError message={fieldErrors.subscription_expiration_date} />
+                </label>
+              </div>
+
+              <label className="grid gap-2">
+                <span className="text-sm font-bold text-foreground">Reason</span>
+                <textarea
+                  value={form.reason}
+                  onChange={(event) => onChange('reason', event.currentTarget.value)}
+                  required
+                  maxLength={500}
+                  rows={4}
+                  className="min-h-28 rounded-xl border border-input bg-background px-3 py-2 text-base text-foreground shadow-sm outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-60"
+                  placeholder="Example: External subscription payment confirmed for renewal."
+                />
+                <FieldError message={fieldErrors.reason} />
+              </label>
+            </section>
+          </fieldset>
+
+          <div className="flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:justify-end">
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={!canUpdateSubscription || isSubmitting}
+            >
+              {isSubmitting ? 'Updating subscription...' : 'Update subscription'}
+            </Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
 function FieldError({ message }: { readonly message: string | undefined }) {
   if (message === undefined || message.length === 0) {
     return null;
@@ -1730,16 +2116,24 @@ function hasEffectivePermission(session: AuthSessionResponseData, permission: st
 }
 
 function normalizePlatformTenantPagination(
-  pagination: PlatformTenantListPagination | undefined,
+  pagination: unknown,
 ): PlatformTenantListPagination | null {
-  if (pagination === undefined) {
+  if (!isObjectRecord(pagination)) {
     return null;
   }
 
+  const rawLimit = pagination.limit;
+  const limit =
+    typeof rawLimit === 'number'
+      ? rawLimit
+      : typeof rawLimit === 'string'
+        ? Number(rawLimit)
+        : platformTenantListPageSize;
+
   return {
-    limit: pagination.limit,
-    next_cursor: pagination.next_cursor ?? null,
-    has_more: pagination.has_more,
+    limit: Number.isFinite(limit) ? limit : platformTenantListPageSize,
+    next_cursor: typeof pagination.next_cursor === 'string' ? pagination.next_cursor : null,
+    has_more: pagination.has_more === true,
   };
 }
 
@@ -1752,7 +2146,7 @@ function toInvalidTenantListResponseError({
 }): ApiClientError {
   return {
     code: 'invalid_api_response',
-    message: 'The platform tenant list response did not contain an array data payload.',
+    message: 'The platform tenant list response did not contain a valid tenant list payload.',
     status: 500,
     details: [],
     requestId,
@@ -1787,6 +2181,10 @@ function isPlatformTenantDetail(value: unknown): value is PlatformTenantDetail {
     typeof value.business_name === 'string' &&
     isTenantStatus(value.status)
   );
+}
+
+function isPlatformTenantListItem(value: unknown): value is PlatformTenantListItem {
+  return isPlatformTenantDetail(value);
 }
 
 function isObjectRecord(value: unknown): value is Record<string, unknown> {
