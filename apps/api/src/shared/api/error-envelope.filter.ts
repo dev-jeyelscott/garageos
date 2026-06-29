@@ -1,4 +1,12 @@
-import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus } from '@nestjs/common';
+import {
+  ArgumentsHost,
+  Catch,
+  ExceptionFilter,
+  HttpException,
+  HttpStatus,
+  Logger,
+} from '@nestjs/common';
+
 import { API_ERROR_CODES, type ApiErrorCode } from './api-error-code';
 import { GarageOsApiException } from './api-exception';
 import type { ApiErrorDetail } from './api-error-detail';
@@ -22,6 +30,12 @@ interface HttpResponseLike {
   status(code: number): {
     json(body: ErrorResponseBody): void;
   };
+}
+
+interface GarageOsErrorRequest extends GarageOsHttpRequest {
+  readonly method?: string;
+  readonly originalUrl?: string;
+  readonly url?: string;
 }
 
 function defaultErrorCodeForStatus(status: number): ApiErrorCode {
@@ -127,10 +141,12 @@ function extractErrorPayload(
 
 @Catch()
 export class ErrorEnvelopeFilter implements ExceptionFilter {
+  private readonly logger = new Logger(ErrorEnvelopeFilter.name);
+
   catch(exception: unknown, host: ArgumentsHost): void {
     const http = host.switchToHttp();
 
-    const request = http.getRequest<GarageOsHttpRequest>();
+    const request = http.getRequest<GarageOsErrorRequest>();
     const response = http.getResponse<HttpResponseLike>();
 
     const status =
@@ -141,6 +157,15 @@ export class ErrorEnvelopeFilter implements ExceptionFilter {
     const requestId = request.request_id ?? createRequestId();
     const correlationId = request.correlation_id ?? createCorrelationId();
 
+    this.logUnexpectedException({
+      exception,
+      request,
+      status,
+      errorCode: error.code,
+      requestId,
+      correlationId,
+    });
+
     response.status(status).json({
       error: {
         code: error.code,
@@ -150,5 +175,40 @@ export class ErrorEnvelopeFilter implements ExceptionFilter {
         correlation_id: correlationId,
       },
     });
+  }
+
+  private logUnexpectedException(input: {
+    readonly exception: unknown;
+    readonly request: GarageOsErrorRequest;
+    readonly status: number;
+    readonly errorCode: ApiErrorCode;
+    readonly requestId: string;
+    readonly correlationId: string;
+  }): void {
+    if (input.exception instanceof GarageOsApiException) {
+      return;
+    }
+
+    if (input.exception instanceof HttpException && input.status < 500) {
+      return;
+    }
+
+    const method = input.request.method ?? 'UNKNOWN';
+    const url = input.request.originalUrl ?? input.request.url ?? 'UNKNOWN_URL';
+
+    const message = [
+      `Unhandled API exception ${method} ${url}`,
+      `status=${input.status}`,
+      `code=${input.errorCode}`,
+      `request_id=${input.requestId}`,
+      `correlation_id=${input.correlationId}`,
+    ].join(' ');
+
+    if (input.exception instanceof Error) {
+      this.logger.error(message, input.exception.stack);
+      return;
+    }
+
+    this.logger.error(`${message} exception=${String(input.exception)}`);
   }
 }

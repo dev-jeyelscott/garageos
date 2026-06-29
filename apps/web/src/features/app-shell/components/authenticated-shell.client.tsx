@@ -21,6 +21,7 @@ import {
   getAccessTokenOrRefresh,
   getAuthJson,
   getAuthJsonEnvelope,
+  postAuthJson,
 } from '../../auth/actions/login.action';
 import { getCurrentSession } from '../../auth/queries/get-current-session.query';
 import type { AuthSessionResponseData, AuthTenantStatus } from '../../auth/types/auth-session';
@@ -118,6 +119,42 @@ type PlatformTenantDetailState =
       readonly code: string | null;
     };
 
+interface PlatformTenantCreateForm {
+  readonly business_name: string;
+  readonly shop_email: string;
+  readonly plan_id: string;
+  readonly subscription_start_date: string;
+  readonly subscription_expiration_date: string;
+  readonly owner_full_name: string;
+  readonly owner_email: string;
+  readonly approve_duplicate: boolean;
+  readonly duplicate_approval_reason: string;
+}
+
+interface CreatePlatformTenantResponse {
+  readonly tenant: {
+    readonly id: string;
+    readonly business_name: string;
+    readonly status: 'pending_setup';
+  };
+  readonly subscription: PlatformTenantSubscriptionSummary;
+  readonly owner_invitation_sent: boolean;
+}
+
+type PlatformTenantCreateSubmitState =
+  | {
+      readonly status: 'idle';
+    }
+  | {
+      readonly status: 'submitting';
+    }
+  | {
+      readonly status: 'error';
+      readonly message: string;
+      readonly detail: string | null;
+      readonly code: string | null;
+      readonly fieldErrors: Record<string, string>;
+    };
 interface PlatformTenantListFilters {
   readonly q: string;
   readonly status: PlatformTenantStatusFilter;
@@ -200,6 +237,18 @@ const defaultPlatformTenantListFilters: PlatformTenantListFilters = {
   status: 'all',
 };
 
+const defaultPlatformTenantCreateForm: PlatformTenantCreateForm = {
+  business_name: '',
+  shop_email: '',
+  plan_id: '',
+  subscription_start_date: '',
+  subscription_expiration_date: '',
+  owner_full_name: '',
+  owner_email: '',
+  approve_duplicate: false,
+  duplicate_approval_reason: '',
+};
+
 const tenantStatusFilterOptions: readonly {
   readonly value: PlatformTenantStatusFilter;
   readonly label: string;
@@ -230,6 +279,10 @@ export function PlatformTenantsScreen() {
   const canReadTenantList =
     sessionState.status === 'ready' &&
     hasEffectivePermission(sessionState.session, 'platform.tenants.read');
+
+  const canCreateTenant =
+    sessionState.status === 'ready' &&
+    hasEffectivePermission(sessionState.session, 'platform.tenants.create');
 
   useEffect(() => {
     if (sessionState.status !== 'ready' || !canReadTenantList) {
@@ -354,14 +407,20 @@ export function PlatformTenantsScreen() {
       eyebrow="Platform administration"
       description="View tenant lifecycle and subscription status without entering tenant support access."
       actions={
-        <Button
-          type="button"
-          variant="secondary"
-          disabled
-          title="Create tenant route is planned after the tenant list contract wiring."
-        >
-          Create tenant
-        </Button>
+        canCreateTenant ? (
+          <ButtonLink href="/platform/tenants/new" variant="primary">
+            Create tenant
+          </ButtonLink>
+        ) : (
+          <Button
+            type="button"
+            variant="secondary"
+            disabled
+            title="Requires platform.tenants.create."
+          >
+            Create tenant
+          </Button>
+        )
       }
     >
       {!canReadTenantList ? (
@@ -605,6 +664,322 @@ export function TenantDashboardScreen() {
           </InfoBlock>
         </CardContent>
       </Card>
+    </AuthenticatedShell>
+  );
+}
+
+export function PlatformTenantCreateScreen() {
+  const router = useRouter();
+  const sessionState = useProtectedSession('platform');
+  const [form, setForm] = useState<PlatformTenantCreateForm>(defaultPlatformTenantCreateForm);
+  const [submitState, setSubmitState] = useState<PlatformTenantCreateSubmitState>({
+    status: 'idle',
+  });
+
+  const canCreateTenant =
+    sessionState.status === 'ready' &&
+    hasEffectivePermission(sessionState.session, 'platform.tenants.create');
+
+  function updateFormField<K extends keyof PlatformTenantCreateForm>(
+    field: K,
+    value: PlatformTenantCreateForm[K],
+  ) {
+    setForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }
+
+  async function handleCreateTenantSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!canCreateTenant || submitState.status === 'submitting') {
+      return;
+    }
+
+    setSubmitState({ status: 'submitting' });
+
+    try {
+      const response = await createPlatformTenant(form);
+      router.push(`/platform/tenants/${response.tenant.id}`);
+    } catch (error) {
+      setSubmitState({
+        status: 'error',
+        message: toSafeErrorMessage(error, 'Unable to create platform tenant.'),
+        detail: toSafeErrorDetail(error),
+        code: getApiErrorCode(error),
+        fieldErrors: getApiFieldErrors(error),
+      });
+    }
+  }
+
+  if (sessionState.status !== 'ready') {
+    return <SessionStateScreen state={sessionState} area="platform" />;
+  }
+
+  const isSubmitting = submitState.status === 'submitting';
+  const fieldErrors = submitState.status === 'error' ? submitState.fieldErrors : {};
+
+  return (
+    <AuthenticatedShell
+      area="platform"
+      session={sessionState.session}
+      title="Create Tenant"
+      eyebrow="Platform administration"
+      description="Create a platform-managed tenant with an assigned plan, subscription dates, and a shop owner invitation."
+      actions={
+        <ButtonLink href="/platform/tenants" variant="secondary">
+          Back to tenants
+        </ButtonLink>
+      }
+    >
+      {!canCreateTenant ? (
+        <ForbiddenState
+          title="Platform tenant creation unavailable"
+          requiredPermission="platform.tenants.create"
+          description="Your platform session does not include permission to create tenant records."
+        />
+      ) : (
+        <>
+          <Alert>
+            <p className="text-sm leading-6">
+              This screen wires only the documented platform-created tenant flow. It creates a
+              pending-setup tenant, assigns the selected plan ID and subscription dates, and sends a
+              shop owner invitation. Subscription overrides, support access, exports, deletion jobs,
+              and platform audit log search remain separate workflow slices.
+            </p>
+          </Alert>
+
+          {submitState.status === 'error' ? (
+            <Alert variant="destructive">
+              <p className="text-sm font-bold">{submitState.message}</p>
+              {submitState.detail === null ? null : (
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">{submitState.detail}</p>
+              )}
+              {submitState.code === 'duplicate_resource' ? (
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  A matching non-deleted tenant already exists. Review the tenant carefully before
+                  enabling duplicate approval and providing an approval reason.
+                </p>
+              ) : null}
+            </Alert>
+          ) : null}
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Tenant setup</CardTitle>
+              <CardDescription>
+                Enter the tenant identity, subscription baseline, and owner invitation details
+                required by the platform tenant creation API.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form className="grid gap-6" onSubmit={handleCreateTenantSubmit}>
+                <fieldset
+                  className="grid gap-6 disabled:pointer-events-none disabled:opacity-70"
+                  disabled={isSubmitting}
+                >
+                  <section className="grid gap-4 rounded-2xl border border-border bg-muted/40 p-4">
+                    <div>
+                      <h2 className="font-bold text-foreground">Business information</h2>
+                      <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                        Tenant identity fields are used for duplicate detection and platform
+                        administration.
+                      </p>
+                    </div>
+
+                    <label className="grid gap-2">
+                      <span className="text-sm font-bold text-foreground">Business name</span>
+                      <Input
+                        value={form.business_name}
+                        onChange={(event) =>
+                          updateFormField('business_name', event.currentTarget.value)
+                        }
+                        required
+                        maxLength={200}
+                        placeholder="Example Moto Garage"
+                      />
+                      <FieldError message={fieldErrors.business_name} />
+                    </label>
+
+                    <label className="grid gap-2">
+                      <span className="text-sm font-bold text-foreground">Shop email</span>
+                      <Input
+                        type="email"
+                        value={form.shop_email}
+                        onChange={(event) =>
+                          updateFormField('shop_email', event.currentTarget.value)
+                        }
+                        required
+                        placeholder="owner@example.com"
+                      />
+                      <FieldError message={fieldErrors.shop_email} />
+                    </label>
+                  </section>
+
+                  <section className="grid gap-4 rounded-2xl border border-border bg-muted/40 p-4">
+                    <div>
+                      <h2 className="font-bold text-foreground">Subscription baseline</h2>
+                      <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                        Use an active Basic, Mid, or High plan ID. A plan selector should replace
+                        this field when the platform plan management/list API is wired.
+                      </p>
+                    </div>
+
+                    <label className="grid gap-2">
+                      <span className="text-sm font-bold text-foreground">Plan ID</span>
+                      <Input
+                        value={form.plan_id}
+                        onChange={(event) => updateFormField('plan_id', event.currentTarget.value)}
+                        required
+                        placeholder="UUID of an active subscription plan"
+                      />
+                      <FieldError message={fieldErrors.plan_id} />
+                    </label>
+
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <label className="grid gap-2">
+                        <span className="text-sm font-bold text-foreground">
+                          Subscription start date
+                        </span>
+                        <Input
+                          type="date"
+                          value={form.subscription_start_date}
+                          onChange={(event) =>
+                            updateFormField('subscription_start_date', event.currentTarget.value)
+                          }
+                          required
+                        />
+                        <FieldError message={fieldErrors.subscription_start_date} />
+                      </label>
+
+                      <label className="grid gap-2">
+                        <span className="text-sm font-bold text-foreground">
+                          Subscription expiration date
+                        </span>
+                        <Input
+                          type="date"
+                          value={form.subscription_expiration_date}
+                          onChange={(event) =>
+                            updateFormField(
+                              'subscription_expiration_date',
+                              event.currentTarget.value,
+                            )
+                          }
+                          required
+                        />
+                        <FieldError message={fieldErrors.subscription_expiration_date} />
+                      </label>
+                    </div>
+                  </section>
+
+                  <section className="grid gap-4 rounded-2xl border border-border bg-muted/40 p-4">
+                    <div>
+                      <h2 className="font-bold text-foreground">Shop owner invitation</h2>
+                      <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                        The current backend contract creates a single-use owner invitation for the
+                        tenant. Temporary plaintext passwords are not displayed.
+                      </p>
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <label className="grid gap-2">
+                        <span className="text-sm font-bold text-foreground">Owner full name</span>
+                        <Input
+                          value={form.owner_full_name}
+                          onChange={(event) =>
+                            updateFormField('owner_full_name', event.currentTarget.value)
+                          }
+                          required
+                          maxLength={200}
+                          placeholder="Juan Dela Cruz"
+                        />
+                        <FieldError
+                          message={fieldErrors.owner_full_name ?? fieldErrors['owner.full_name']}
+                        />
+                      </label>
+
+                      <label className="grid gap-2">
+                        <span className="text-sm font-bold text-foreground">Owner email</span>
+                        <Input
+                          type="email"
+                          value={form.owner_email}
+                          onChange={(event) =>
+                            updateFormField('owner_email', event.currentTarget.value)
+                          }
+                          required
+                          placeholder="owner@example.com"
+                        />
+                        <FieldError
+                          message={fieldErrors.owner_email ?? fieldErrors['owner.email']}
+                        />
+                      </label>
+                    </div>
+                  </section>
+
+                  <section className="grid gap-4 rounded-2xl border border-border bg-muted/40 p-4">
+                    <div>
+                      <h2 className="font-bold text-foreground">Duplicate approval</h2>
+                      <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                        Use this only when a platform admin intentionally approves a tenant with the
+                        same normalized business name and shop email combination.
+                      </p>
+                    </div>
+
+                    <label className="flex items-start gap-3 rounded-2xl border border-border bg-card p-4">
+                      <input
+                        type="checkbox"
+                        checked={form.approve_duplicate}
+                        onChange={(event) =>
+                          updateFormField('approve_duplicate', event.currentTarget.checked)
+                        }
+                        className="mt-1 h-5 w-5 rounded border border-input"
+                      />
+                      <span>
+                        <span className="block text-sm font-bold text-foreground">
+                          Approve duplicate tenant
+                        </span>
+                        <span className="mt-1 block text-sm leading-6 text-muted-foreground">
+                          Requires a clear reason and will be audited by the backend.
+                        </span>
+                      </span>
+                    </label>
+                    <FieldError message={fieldErrors.approve_duplicate} />
+
+                    <label className="grid gap-2">
+                      <span className="text-sm font-bold text-foreground">
+                        Duplicate approval reason
+                      </span>
+                      <textarea
+                        value={form.duplicate_approval_reason}
+                        onChange={(event) =>
+                          updateFormField('duplicate_approval_reason', event.currentTarget.value)
+                        }
+                        required={form.approve_duplicate}
+                        disabled={!form.approve_duplicate || isSubmitting}
+                        maxLength={500}
+                        rows={4}
+                        className="min-h-28 rounded-xl border border-input bg-background px-3 py-2 text-base text-foreground shadow-sm outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-60"
+                        placeholder="Reason for approving the duplicate tenant..."
+                      />
+                      <FieldError message={fieldErrors.duplicate_approval_reason} />
+                    </label>
+                  </section>
+                </fieldset>
+
+                <div className="flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:justify-end">
+                  <ButtonLink href="/platform/tenants" variant="secondary">
+                    Cancel
+                  </ButtonLink>
+                  <Button type="submit" variant="primary" disabled={isSubmitting}>
+                    {isSubmitting ? 'Creating tenant...' : 'Create tenant and invite owner'}
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </>
+      )}
     </AuthenticatedShell>
   );
 }
@@ -1157,6 +1532,38 @@ async function getPlatformTenantDetail(tenantId: string): Promise<PlatformTenant
   });
 }
 
+async function createPlatformTenant(
+  form: PlatformTenantCreateForm,
+): Promise<CreatePlatformTenantResponse> {
+  const duplicateApprovalReason = form.duplicate_approval_reason.trim();
+
+  return postAuthJson<CreatePlatformTenantResponse>(
+    '/platform/tenants',
+    {
+      business_name: form.business_name.trim(),
+      shop_email: form.shop_email.trim(),
+      plan_id: form.plan_id.trim(),
+      subscription_start_date: form.subscription_start_date,
+      subscription_expiration_date: form.subscription_expiration_date,
+      owner: {
+        full_name: form.owner_full_name.trim(),
+        email: form.owner_email.trim(),
+        send_invitation: true,
+      },
+      ...(form.approve_duplicate
+        ? {
+            approve_duplicate: true,
+            duplicate_approval_reason: duplicateApprovalReason,
+          }
+        : {}),
+    },
+    {
+      requiresAuth: true,
+      idempotencyKey: createIdempotencyKey('platform-tenant-create'),
+    },
+  );
+}
+
 function normalizePlatformTenantDetailPayload(
   data: unknown,
   meta: {
@@ -1255,6 +1662,14 @@ function KeyValue({ label, value }: { readonly label: string; readonly value: st
       <dd className="mt-2 break-words text-sm font-semibold leading-6 text-foreground">{value}</dd>
     </div>
   );
+}
+
+function FieldError({ message }: { readonly message: string | undefined }) {
+  if (message === undefined || message.length === 0) {
+    return null;
+  }
+
+  return <p className="text-sm font-semibold text-destructive">{message}</p>;
 }
 
 function PlannedWorkflowCard({
@@ -1394,8 +1809,29 @@ function readMetaString(value: string | undefined): string | null {
   return value === undefined || value.length === 0 ? null : value;
 }
 
+function createIdempotencyKey(prefix: string): string {
+  const randomId =
+    globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+  return `${prefix}-${randomId}`;
+}
+
 function getApiErrorCode(error: unknown): string | null {
   return isApiClientError(error) ? error.code : null;
+}
+
+function getApiFieldErrors(error: unknown): Record<string, string> {
+  if (!isApiClientError(error)) {
+    return {};
+  }
+
+  return error.details.reduce<Record<string, string>>((fieldErrors, detail) => {
+    if (typeof detail.field === 'string' && typeof detail.message === 'string') {
+      fieldErrors[detail.field] = detail.message;
+    }
+
+    return fieldErrors;
+  }, {});
 }
 
 function formatTenantStatusFilter(status: PlatformTenantStatusFilter): string {

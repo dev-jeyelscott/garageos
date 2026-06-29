@@ -4,6 +4,7 @@ import {
   Get,
   Headers,
   HttpCode,
+  Inject,
   Ip,
   Param,
   Post,
@@ -30,7 +31,9 @@ import {
 @UseGuards(AccessTokenAuthGuard)
 export class PlatformTenantController {
   constructor(
+    @Inject(PlatformTenantService)
     private readonly platformTenantService: PlatformTenantService,
+    @Inject(IdempotencyService)
     private readonly idempotencyService: IdempotencyService,
   ) {}
 
