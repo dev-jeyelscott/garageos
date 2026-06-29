@@ -98,7 +98,7 @@ export function LoginScreen() {
         />
 
         <label className={styles.checkboxLabel}>
-          <input name="remember_me" type="checkbox" />
+          <input name="remember_me" type="checkbox" className={styles.checkboxControl} />
           Remember me on this device
         </label>
 
@@ -187,6 +187,7 @@ export function OwnerSignupScreen() {
 
 export function EmailVerificationRequiredScreen() {
   const [state, setState] = useState<ActionState>(initialActionState);
+  const isSubmitting = state.status === 'submitting';
 
   async function handleResend() {
     setState({
@@ -241,10 +242,10 @@ export function EmailVerificationRequiredScreen() {
       </InfoPanel>
 
       <div className={styles.buttonRow}>
-        <Button type="button" onClick={handleResend}>
+        <Button type="button" onClick={handleResend} disabled={isSubmitting}>
           Resend verification email
         </Button>
-        <Button type="button" variant="secondary" onClick={handleLogout}>
+        <Button type="button" variant="secondary" onClick={handleLogout} disabled={isSubmitting}>
           Logout
         </Button>
       </div>
@@ -540,6 +541,7 @@ export function HomeSessionScreen() {
 export function LogoutScreen() {
   const router = useRouter();
   const [state, setState] = useState<ActionState>(initialActionState);
+  const isSubmitting = state.status === 'submitting';
 
   async function handleLogoutCurrentDevice() {
     setState({
@@ -592,10 +594,15 @@ export function LogoutScreen() {
       secondaryActions={<AuthLink href="/">Cancel</AuthLink>}
     >
       <div className={styles.buttonRow}>
-        <Button type="button" onClick={handleLogoutCurrentDevice}>
+        <Button type="button" onClick={handleLogoutCurrentDevice} disabled={isSubmitting}>
           Logout current device
         </Button>
-        <Button type="button" variant="secondary" onClick={handleLogoutAllDevices}>
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={handleLogoutAllDevices}
+          disabled={isSubmitting}
+        >
           Logout all devices
         </Button>
       </div>

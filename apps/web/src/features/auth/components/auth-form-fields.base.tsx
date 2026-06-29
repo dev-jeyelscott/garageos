@@ -42,7 +42,7 @@ export function InputField({
         defaultValue={defaultValue}
         placeholder={placeholder}
         inputMode={inputMode}
-        className="bg-card/80"
+        className="min-h-12 bg-background/80 px-4 shadow-sm"
       />
     </label>
   );
@@ -74,7 +74,7 @@ export function PrimaryButton({
       type="submit"
       disabled={disabled}
       size="lg"
-      className="w-full shadow-[0_16px_34px_rgb(249_115_0_/_0.24)]"
+      className="w-full shadow-[0_16px_34px_rgb(249_115_0_/_0.22)]"
     >
       {children}
     </Button>
