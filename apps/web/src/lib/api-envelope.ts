@@ -1,6 +1,13 @@
+export interface ApiPaginationMeta {
+  readonly limit: number;
+  readonly next_cursor: string | null;
+  readonly has_more: boolean;
+}
+
 export interface ApiMeta {
-  readonly request_id: string;
-  readonly correlation_id: string;
+  readonly request_id?: string;
+  readonly correlation_id?: string;
+  readonly pagination?: ApiPaginationMeta;
 }
 
 export interface ApiSuccessResponse<TData> {
@@ -34,7 +41,9 @@ export interface ApiClientError {
   readonly correlationId: string | null;
 }
 
-export async function readApiResponse<TData>(response: Response): Promise<TData> {
+export async function readApiEnvelope<TData>(
+  response: Response,
+): Promise<ApiSuccessResponse<TData>> {
   const body = await readJsonBody(response);
 
   if (!response.ok) {
@@ -42,7 +51,7 @@ export async function readApiResponse<TData>(response: Response): Promise<TData>
   }
 
   if (isApiSuccessResponse<TData>(body)) {
-    return body.data;
+    return body;
   }
 
   throw {
@@ -53,6 +62,11 @@ export async function readApiResponse<TData>(response: Response): Promise<TData>
     requestId: null,
     correlationId: null,
   } satisfies ApiClientError;
+}
+
+export async function readApiResponse<TData>(response: Response): Promise<TData> {
+  const envelope = await readApiEnvelope<TData>(response);
+  return envelope.data;
 }
 
 export function isApiClientError(error: unknown): error is ApiClientError {

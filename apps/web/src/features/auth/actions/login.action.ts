@@ -1,4 +1,9 @@
-import { type ApiClientError, readApiResponse } from '../../../lib/api-envelope';
+import {
+  type ApiClientError,
+  type ApiSuccessResponse,
+  readApiEnvelope,
+  readApiResponse,
+} from '../../../lib/api-envelope';
 import type { AuthLoginResponseData, AuthRefreshResponseData } from '../types/auth-session';
 
 let accessTokenCache: string | null = null;
@@ -68,6 +73,29 @@ export async function getAuthJson<TData>(
   });
 
   return readApiResponse<TData>(response);
+}
+
+export async function getAuthJsonEnvelope<TData>(
+  path: string,
+  options: {
+    readonly accessToken?: string;
+  } = {},
+): Promise<ApiSuccessResponse<TData>> {
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+  };
+
+  if (options.accessToken !== undefined) {
+    headers.Authorization = `Bearer ${options.accessToken}`;
+  }
+
+  const response = await fetch(buildApiUrl(path), {
+    method: 'GET',
+    headers,
+    credentials: 'include',
+  });
+
+  return readApiEnvelope<TData>(response);
 }
 
 export async function postAuthJson<TData>(

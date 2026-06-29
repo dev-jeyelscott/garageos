@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 
 import {
   Alert,
@@ -14,16 +14,21 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  Input,
   Skeleton,
 } from '../../../components/ui';
-import { getAccessTokenOrRefresh, getAuthJson } from '../../auth/actions/login.action';
+import {
+  getAccessTokenOrRefresh,
+  getAuthJson,
+  getAuthJsonEnvelope,
+} from '../../auth/actions/login.action';
 import { getCurrentSession } from '../../auth/queries/get-current-session.query';
 import type { AuthSessionResponseData, AuthTenantStatus } from '../../auth/types/auth-session';
 import {
   isTenantBlockedStatus,
   resolveAuthenticatedRedirect,
 } from '../../auth/utils/resolve-auth-redirect';
-import { isApiClientError } from '../../../lib/api-envelope';
+import { isApiClientError, type ApiClientError } from '../../../lib/api-envelope';
 
 type ProtectedRouteKind = 'platform' | 'tenant-dashboard' | 'tenant-onboarding' | 'tenant-status';
 
@@ -47,34 +52,58 @@ interface ShellNavItem {
   readonly disabledReason?: string;
 }
 
+type PlatformSubscriptionStatusSource = 'system_computed' | 'platform_override';
+
+type PlatformTenantStatusFilter = 'all' | AuthTenantStatus;
+
 interface PlatformTenantListItem {
   readonly id: string;
   readonly business_name: string;
   readonly shop_email?: string | null;
   readonly status: AuthTenantStatus;
   readonly timezone?: string | null;
+  readonly country?: string | null;
+  readonly currency?: string | null;
+  readonly onboarding_completed_at?: string | null;
   readonly plan?: {
+    readonly id?: string | null;
+    readonly code?: string | null;
     readonly name?: string | null;
   } | null;
   readonly subscription?: {
+    readonly plan_id?: string | null;
+    readonly plan_code?: string | null;
     readonly plan_name?: string | null;
+    readonly start_date?: string | null;
     readonly expiration_date?: string | null;
+    readonly status_source?: PlatformSubscriptionStatusSource | string | null;
   } | null;
 }
 
-type PlatformTenantListState =
-  | {
-      readonly status: 'idle' | 'loading';
-    }
-  | {
-      readonly status: 'loaded';
-      readonly tenants: readonly PlatformTenantListItem[];
-    }
-  | {
-      readonly status: 'error';
-      readonly message: string;
-      readonly detail: string | null;
-    };
+interface PlatformTenantListFilters {
+  readonly q: string;
+  readonly status: PlatformTenantStatusFilter;
+}
+
+interface PlatformTenantListPagination {
+  readonly limit: number;
+  readonly next_cursor: string | null;
+  readonly has_more: boolean;
+}
+
+interface PlatformTenantListResult {
+  readonly tenants: readonly PlatformTenantListItem[];
+  readonly pagination: PlatformTenantListPagination | null;
+}
+
+interface PlatformTenantListState {
+  readonly status: 'idle' | 'loading' | 'loaded' | 'loading_more' | 'error';
+  readonly tenants: readonly PlatformTenantListItem[];
+  readonly pagination: PlatformTenantListPagination | null;
+  readonly message?: string;
+  readonly detail?: string | null;
+  readonly code?: string | null;
+}
 
 const platformNavItems: readonly ShellNavItem[] = [
   {
@@ -126,25 +155,63 @@ const tenantNavItems: readonly ShellNavItem[] = [
   },
 ];
 
+const platformTenantListPageSize = 50;
+
+const defaultPlatformTenantListFilters: PlatformTenantListFilters = {
+  q: '',
+  status: 'all',
+};
+
+const tenantStatusFilterOptions: readonly {
+  readonly value: PlatformTenantStatusFilter;
+  readonly label: string;
+}[] = [
+  { value: 'all', label: 'All statuses' },
+  { value: 'pending_setup', label: 'Pending setup' },
+  { value: 'active', label: 'Active' },
+  { value: 'grace_period', label: 'Grace period' },
+  { value: 'read_only', label: 'Read-only' },
+  { value: 'suspended', label: 'Suspended' },
+  { value: 'pending_deletion', label: 'Pending deletion' },
+  { value: 'deleted', label: 'Deleted' },
+];
+
 export function PlatformTenantsScreen() {
   const sessionState = useProtectedSession('platform');
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchDraft, setSearchDraft] = useState('');
+  const [statusDraft, setStatusDraft] = useState<PlatformTenantStatusFilter>('all');
+  const [appliedFilters, setAppliedFilters] = useState<PlatformTenantListFilters>(
+    defaultPlatformTenantListFilters,
+  );
   const [tenantListState, setTenantListState] = useState<PlatformTenantListState>({
     status: 'idle',
+    tenants: [],
+    pagination: null,
   });
 
+  const canReadTenantList =
+    sessionState.status === 'ready' &&
+    hasEffectivePermission(sessionState.session, 'platform.tenants.read');
+
   useEffect(() => {
-    if (sessionState.status !== 'ready') {
+    if (sessionState.status !== 'ready' || !canReadTenantList) {
       return;
     }
 
     let active = true;
 
-    async function loadTenants() {
-      setTenantListState({ status: 'loading' });
+    async function loadInitialTenants() {
+      setTenantListState({
+        status: 'loading',
+        tenants: [],
+        pagination: null,
+      });
 
       try {
-        const tenants = await getPlatformTenants();
+        const result = await getPlatformTenants({
+          filters: appliedFilters,
+          limit: platformTenantListPageSize,
+        });
 
         if (!active) {
           return;
@@ -152,7 +219,8 @@ export function PlatformTenantsScreen() {
 
         setTenantListState({
           status: 'loaded',
-          tenants,
+          tenants: result.tenants,
+          pagination: result.pagination,
         });
       } catch (error) {
         if (!active) {
@@ -161,49 +229,84 @@ export function PlatformTenantsScreen() {
 
         setTenantListState({
           status: 'error',
+          tenants: [],
+          pagination: null,
           message: toSafeErrorMessage(error, 'Unable to load platform tenants.'),
           detail: toSafeErrorDetail(error),
+          code: getApiErrorCode(error),
         });
       }
     }
 
-    void loadTenants();
+    void loadInitialTenants();
 
     return () => {
       active = false;
     };
-  }, [sessionState]);
+  }, [appliedFilters, canReadTenantList, sessionState]);
 
-  const filteredTenants = useMemo(() => {
-    if (tenantListState.status !== 'loaded') {
-      return [];
+  async function handleLoadMore() {
+    const nextCursor = tenantListState.pagination?.next_cursor ?? null;
+
+    if (nextCursor === null || tenantListState.status === 'loading_more') {
+      return;
     }
 
-    const normalizedSearchTerm = searchTerm.trim().toLowerCase();
+    setTenantListState((current) => ({
+      ...current,
+      status: 'loading_more',
+    }));
 
-    if (normalizedSearchTerm.length === 0) {
-      return tenantListState.tenants;
+    try {
+      const result = await getPlatformTenants({
+        filters: appliedFilters,
+        cursor: nextCursor,
+        limit: platformTenantListPageSize,
+      });
+
+      setTenantListState((current) => ({
+        status: 'loaded',
+        tenants: [...current.tenants, ...result.tenants],
+        pagination: result.pagination,
+      }));
+    } catch (error) {
+      setTenantListState((current) => ({
+        status: 'error',
+        tenants: current.tenants,
+        pagination: current.pagination,
+        message: toSafeErrorMessage(error, 'Unable to load more platform tenants.'),
+        detail: toSafeErrorDetail(error),
+        code: getApiErrorCode(error),
+      }));
     }
+  }
 
-    return tenantListState.tenants.filter((tenant) => {
-      const haystack = [
-        tenant.business_name,
-        tenant.shop_email ?? '',
-        tenant.status,
-        tenant.timezone ?? '',
-        tenant.subscription?.plan_name ?? '',
-        tenant.plan?.name ?? '',
-      ]
-        .join(' ')
-        .toLowerCase();
+  function handleFilterSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
 
-      return haystack.includes(normalizedSearchTerm);
+    setAppliedFilters({
+      q: searchDraft.trim(),
+      status: statusDraft,
     });
-  }, [searchTerm, tenantListState]);
+  }
+
+  function handleResetFilters() {
+    setSearchDraft('');
+    setStatusDraft('all');
+    setAppliedFilters(defaultPlatformTenantListFilters);
+  }
 
   if (sessionState.status !== 'ready') {
     return <SessionStateScreen state={sessionState} area="platform" />;
   }
+
+  const isInitialLoading =
+    tenantListState.status === 'idle' || tenantListState.status === 'loading';
+  const isLoadingMore = tenantListState.status === 'loading_more';
+  const hasMore =
+    tenantListState.pagination?.has_more === true &&
+    tenantListState.pagination.next_cursor !== null;
+  const hasActiveFilters = appliedFilters.q.length > 0 || appliedFilters.status !== 'all';
 
   return (
     <AuthenticatedShell
@@ -217,105 +320,156 @@ export function PlatformTenantsScreen() {
           type="button"
           variant="secondary"
           disabled
-          title="Create tenant route is not wired yet."
+          title="Create tenant route is planned after the tenant list contract wiring."
         >
           Create tenant
         </Button>
       }
     >
-      <Alert>
-        <p className="text-sm leading-6">
-          This page uses the documented platform tenant list endpoint only. Subscription overrides,
-          support access, exports, deletion jobs, and platform audit log workflows remain navigation
-          placeholders until their routes are implemented.
-        </p>
-      </Alert>
+      {!canReadTenantList ? (
+        <ForbiddenState
+          title="Platform tenant list unavailable"
+          requiredPermission="platform.tenants.read"
+          description="Your platform session does not include permission to view tenant records."
+        />
+      ) : (
+        <>
+          <Alert>
+            <p className="text-sm leading-6">
+              This screen reads the documented platform tenant list only. Tenant creation,
+              subscription overrides, support access, exports, deletion jobs, and audit logs remain
+              separate documented workflows.
+            </p>
+          </Alert>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Tenant list</CardTitle>
-          <CardDescription>
-            Search loaded tenants by business name, email, status, plan, or timezone.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <label className="grid gap-2">
-            <span className="text-sm font-bold text-foreground">Search tenants</span>
-            <input
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.currentTarget.value)}
-              className="min-h-11 rounded-xl border border-input bg-background px-3 text-sm text-foreground shadow-sm"
-              placeholder="Search tenant name, email, status, plan..."
-            />
-          </label>
+          <Card>
+            <CardHeader>
+              <CardTitle>Tenant list</CardTitle>
+              <CardDescription>
+                Search and filter tenants through the platform list API. Cursor pagination is read
+                from the API response metadata.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-5">
+              <form
+                className="grid gap-3 lg:grid-cols-[1fr_16rem_auto_auto] lg:items-end"
+                onSubmit={handleFilterSubmit}
+              >
+                <label className="grid gap-2">
+                  <span className="text-sm font-bold text-foreground">Search tenants</span>
+                  <Input
+                    value={searchDraft}
+                    onChange={(event) => setSearchDraft(event.currentTarget.value)}
+                    placeholder="Business name, email, timezone..."
+                    disabled={isInitialLoading || isLoadingMore}
+                  />
+                </label>
 
-          <div className="mt-5">
-            {tenantListState.status === 'idle' || tenantListState.status === 'loading' ? (
-              <TenantListSkeleton />
-            ) : null}
+                <label className="grid gap-2">
+                  <span className="text-sm font-bold text-foreground">Status</span>
+                  <select
+                    value={statusDraft}
+                    onChange={(event) =>
+                      setStatusDraft(event.currentTarget.value as PlatformTenantStatusFilter)
+                    }
+                    disabled={isInitialLoading || isLoadingMore}
+                    className="min-h-11 rounded-xl border border-input bg-background px-3 py-2 text-base text-foreground shadow-sm outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {tenantStatusFilterOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
 
-            {tenantListState.status === 'error' ? (
-              <Alert variant="destructive">
-                <p className="text-sm font-bold">{tenantListState.message}</p>
-                {tenantListState.detail === null ? null : (
-                  <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                    {tenantListState.detail}
+                <Button type="submit" disabled={isInitialLoading || isLoadingMore}>
+                  Apply filters
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={isInitialLoading || isLoadingMore}
+                  onClick={handleResetFilters}
+                >
+                  Reset
+                </Button>
+              </form>
+
+              {hasActiveFilters ? (
+                <Alert>
+                  <p className="text-sm leading-6">
+                    Active filters:{' '}
+                    <strong>{appliedFilters.q.length > 0 ? appliedFilters.q : 'No search'}</strong>
+                    {' · '}
+                    <strong>{formatTenantStatusFilter(appliedFilters.status)}</strong>
                   </p>
-                )}
-              </Alert>
-            ) : null}
+                </Alert>
+              ) : null}
 
-            {tenantListState.status === 'loaded' && filteredTenants.length === 0 ? (
-              <EmptyState
-                title="No tenants found"
-                description="No platform tenants matched the current search or the tenant list is empty."
-              />
-            ) : null}
+              <div className="grid gap-4">
+                {isInitialLoading ? <TenantListSkeleton /> : null}
 
-            {tenantListState.status === 'loaded' && filteredTenants.length > 0 ? (
-              <div className="overflow-hidden rounded-2xl border border-border">
-                <div className="hidden grid-cols-[1.4fr_1fr_0.8fr_0.8fr] gap-4 border-b border-border bg-muted px-4 py-3 text-xs font-black uppercase tracking-[0.16em] text-muted-foreground md:grid">
-                  <span>Tenant</span>
-                  <span>Status</span>
-                  <span>Plan</span>
-                  <span>Expiration</span>
-                </div>
+                {tenantListState.status === 'error' ? (
+                  tenantListState.code === 'forbidden' ? (
+                    <ForbiddenState
+                      title="Platform tenant list blocked"
+                      requiredPermission="platform.tenants.read"
+                      description={
+                        tenantListState.message ?? 'The platform tenant list is blocked.'
+                      }
+                      detail={tenantListState.detail ?? null}
+                    />
+                  ) : (
+                    <Alert variant="destructive">
+                      <p className="text-sm font-bold">{tenantListState.message}</p>
+                      {tenantListState.detail === null ||
+                      tenantListState.detail === undefined ? null : (
+                        <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                          {tenantListState.detail}
+                        </p>
+                      )}
+                    </Alert>
+                  )
+                ) : null}
 
-                <ul className="divide-y divide-border">
-                  {filteredTenants.map((tenant) => (
-                    <li
-                      key={tenant.id}
-                      className="grid gap-3 bg-card p-4 md:grid-cols-[1.4fr_1fr_0.8fr_0.8fr] md:items-center"
+                {!isInitialLoading &&
+                tenantListState.status !== 'error' &&
+                tenantListState.tenants.length === 0 ? (
+                  <EmptyState
+                    title={
+                      hasActiveFilters ? 'No tenants match the filters' : 'No tenants returned'
+                    }
+                    description={
+                      hasActiveFilters
+                        ? 'Adjust the search or status filter and try again.'
+                        : 'The platform tenant list endpoint returned an empty list.'
+                    }
+                  />
+                ) : null}
+
+                {tenantListState.tenants.length > 0 ? (
+                  <PlatformTenantTable tenants={tenantListState.tenants} />
+                ) : null}
+
+                {hasMore && tenantListState.status !== 'error' ? (
+                  <div className="flex justify-center">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      disabled={isLoadingMore}
+                      onClick={() => void handleLoadMore()}
                     >
-                      <div>
-                        <p className="font-bold text-foreground">{tenant.business_name}</p>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                          {tenant.shop_email ?? 'No shop email returned'}
-                        </p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {tenant.timezone ?? 'Timezone not returned'}
-                        </p>
-                      </div>
-
-                      <div>
-                        <StatusBadge status={tenant.status} />
-                      </div>
-
-                      <p className="text-sm font-semibold text-foreground">
-                        {tenant.subscription?.plan_name ?? tenant.plan?.name ?? 'Plan not returned'}
-                      </p>
-
-                      <p className="text-sm text-muted-foreground">
-                        {tenant.subscription?.expiration_date ?? 'Expiration not returned'}
-                      </p>
-                    </li>
-                  ))}
-                </ul>
+                      {isLoadingMore ? 'Loading more tenants...' : 'Load more tenants'}
+                    </Button>
+                  </div>
+                ) : null}
               </div>
-            ) : null}
-          </div>
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+        </>
+      )}
     </AuthenticatedShell>
   );
 }
@@ -625,13 +779,180 @@ function resolveRouteAccess(
   return resolveAuthenticatedRedirect(session);
 }
 
-async function getPlatformTenants(): Promise<readonly PlatformTenantListItem[]> {
+async function getPlatformTenants({
+  filters,
+  cursor = null,
+  limit,
+}: {
+  readonly filters: PlatformTenantListFilters;
+  readonly cursor?: string | null;
+  readonly limit: number;
+}): Promise<PlatformTenantListResult> {
   const accessToken = await getAccessTokenOrRefresh();
-  const data = await getAuthJson<readonly PlatformTenantListItem[]>('/platform/tenants', {
-    accessToken,
-  });
+  const params = new URLSearchParams();
 
-  return Array.isArray(data) ? data : [];
+  params.set('limit', String(limit));
+
+  if (filters.q.length > 0) {
+    params.set('q', filters.q);
+  }
+
+  if (filters.status !== 'all') {
+    params.set('status', filters.status);
+  }
+
+  if (cursor !== null && cursor.length > 0) {
+    params.set('cursor', cursor);
+  }
+
+  const envelope = await getAuthJsonEnvelope<readonly PlatformTenantListItem[]>(
+    `/platform/tenants?${params.toString()}`,
+    {
+      accessToken,
+    },
+  );
+
+  if (!Array.isArray(envelope.data)) {
+    throw toInvalidTenantListResponseError({
+      requestId: readMetaString(envelope.meta.request_id),
+      correlationId: readMetaString(envelope.meta.correlation_id),
+    });
+  }
+
+  return {
+    tenants: envelope.data,
+    pagination: normalizePlatformTenantPagination(envelope.meta.pagination),
+  };
+}
+
+function PlatformTenantTable({ tenants }: { readonly tenants: readonly PlatformTenantListItem[] }) {
+  return (
+    <div className="overflow-hidden rounded-2xl border border-border">
+      <div className="hidden grid-cols-[1.4fr_1fr_0.9fr_0.9fr] gap-4 border-b border-border bg-muted px-4 py-3 text-xs font-black uppercase tracking-[0.16em] text-muted-foreground md:grid">
+        <span>Tenant</span>
+        <span>Status</span>
+        <span>Plan</span>
+        <span>Expiration</span>
+      </div>
+
+      <ul className="divide-y divide-border">
+        {tenants.map((tenant) => (
+          <li
+            key={tenant.id}
+            className="grid gap-3 bg-card p-4 md:grid-cols-[1.4fr_1fr_0.9fr_0.9fr] md:items-center"
+          >
+            <div>
+              <p className="font-bold text-foreground">{tenant.business_name}</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {tenant.shop_email ?? 'No shop email returned'}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">{formatTenantLocation(tenant)}</p>
+            </div>
+
+            <div>
+              <StatusBadge status={tenant.status} />
+            </div>
+
+            <p className="text-sm font-semibold text-foreground">{formatTenantPlan(tenant)}</p>
+
+            <p className="text-sm text-muted-foreground">
+              {tenant.subscription?.expiration_date ?? 'Expiration not returned'}
+            </p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function ForbiddenState({
+  title,
+  requiredPermission,
+  description,
+  detail = null,
+}: {
+  readonly title: string;
+  readonly requiredPermission: string;
+  readonly description: string;
+  readonly detail?: string | null;
+}) {
+  return (
+    <Alert variant="destructive">
+      <p className="text-sm font-bold">{title}</p>
+      <p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p>
+      <p className="mt-2 text-sm leading-6 text-muted-foreground">
+        Required permission: <strong>{requiredPermission}</strong>
+      </p>
+      {detail === null ? null : (
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">{detail}</p>
+      )}
+    </Alert>
+  );
+}
+
+function hasEffectivePermission(session: AuthSessionResponseData, permission: string): boolean {
+  return session.effective_permissions.includes(permission);
+}
+
+function normalizePlatformTenantPagination(
+  pagination: PlatformTenantListPagination | undefined,
+): PlatformTenantListPagination | null {
+  if (pagination === undefined) {
+    return null;
+  }
+
+  return {
+    limit: pagination.limit,
+    next_cursor: pagination.next_cursor ?? null,
+    has_more: pagination.has_more,
+  };
+}
+
+function toInvalidTenantListResponseError({
+  requestId,
+  correlationId,
+}: {
+  readonly requestId: string | null;
+  readonly correlationId: string | null;
+}): ApiClientError {
+  return {
+    code: 'invalid_api_response',
+    message: 'The platform tenant list response did not contain an array data payload.',
+    status: 500,
+    details: [],
+    requestId,
+    correlationId,
+  };
+}
+
+function readMetaString(value: string | undefined): string | null {
+  return value === undefined || value.length === 0 ? null : value;
+}
+
+function getApiErrorCode(error: unknown): string | null {
+  return isApiClientError(error) ? error.code : null;
+}
+
+function formatTenantStatusFilter(status: PlatformTenantStatusFilter): string {
+  return status === 'all' ? 'All statuses' : formatTenantStatus(status);
+}
+
+function formatTenantPlan(tenant: PlatformTenantListItem): string {
+  return (
+    tenant.subscription?.plan_name ??
+    tenant.plan?.name ??
+    tenant.subscription?.plan_code?.toUpperCase() ??
+    tenant.plan?.code?.toUpperCase() ??
+    'Plan not returned'
+  );
+}
+
+function formatTenantLocation(tenant: PlatformTenantListItem): string {
+  const locationParts = [tenant.timezone, tenant.country, tenant.currency].filter(
+    (part): part is string => part !== null && part !== undefined && part.length > 0,
+  );
+
+  return locationParts.length === 0 ? 'Timezone not returned' : locationParts.join(' · ');
 }
 
 function SessionStateScreen({
