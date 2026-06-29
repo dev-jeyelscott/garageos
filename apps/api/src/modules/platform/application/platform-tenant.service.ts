@@ -20,6 +20,7 @@ import type {
   StartPlatformSupportAccessSessionRequest,
   UpdatePlatformTenantSubscriptionRequest,
   QueuePlatformTenantDeletionJobRequest,
+  EndPlatformSupportAccessSessionRequest,
 } from '../api/platform-tenant.schemas';
 import {
   type PlatformPlanSummary,
@@ -99,6 +100,10 @@ export interface ApplyPlatformTenantSuspensionResponse {
 }
 
 export interface StartPlatformSupportAccessSessionResponse {
+  readonly support_access_session: PlatformSupportAccessSessionResponse;
+}
+
+export interface EndPlatformSupportAccessSessionResponse {
   readonly support_access_session: PlatformSupportAccessSessionResponse;
 }
 
@@ -878,6 +883,68 @@ export class PlatformTenantService {
     });
   }
 
+  async endSupportAccessSession(
+    supportAccessSessionId: string,
+    request: EndPlatformSupportAccessSessionRequest,
+    session: AuthSessionResponseData,
+    auditContext: PlatformRequestAuditContext,
+  ): Promise<EndPlatformSupportAccessSessionResponse> {
+    this.assertPlatformPermission(session, PLATFORM_PERMISSIONS.SUPPORT_ACCESS);
+
+    const reason = normalizeRequiredReason(request.reason, 'reason');
+    const now = new Date();
+
+    return this.transactionRunner.runInTransaction(async (transaction) => {
+      const supportAccessSession = await this.tenantStore.findPlatformSupportAccessSessionById(
+        supportAccessSessionId,
+        transaction,
+      );
+
+      if (supportAccessSession === null) {
+        throw GarageOsApiException.resourceNotFound('Support access session was not found.');
+      }
+
+      if (supportAccessSession.endedAt !== null) {
+        throw GarageOsApiException.workflowTransitionBlocked(
+          'Support access session has already ended.',
+        );
+      }
+
+      const tenant = await this.tenantStore.findTenantById(
+        supportAccessSession.tenantId,
+        transaction,
+      );
+
+      if (tenant === null) {
+        throw GarageOsApiException.resourceNotFound(
+          'Tenant for support access session was not found.',
+        );
+      }
+
+      const endedSupportAccessSession = await this.tenantStore.endPlatformSupportAccessSession(
+        {
+          id: supportAccessSessionId,
+          endedAt: now,
+        },
+        transaction,
+      );
+
+      await this.auditSupportAccessSessionEnded({
+        tenant,
+        supportAccessSessionBefore: supportAccessSession,
+        supportAccessSessionAfter: endedSupportAccessSession,
+        session,
+        auditContext,
+        reason,
+        client: transaction,
+      });
+
+      return {
+        support_access_session: toSupportAccessSessionResponse(endedSupportAccessSession),
+      };
+    });
+  }
+
   assertPlatformPermission(session: AuthSessionResponseData, permission: string): void {
     if (session.user.user_type !== 'platform_admin') {
       throw GarageOsApiException.forbidden(permission);
@@ -1168,6 +1235,50 @@ export class PlatformTenantService {
         started_at: input.supportAccessSession.startedAt.toISOString(),
         expires_at: input.supportAccessSession.expiresAt.toISOString(),
         ended_at: input.supportAccessSession.endedAt?.toISOString() ?? null,
+      },
+      metadataJson: {
+        tenant_status: input.tenant.status,
+        tenant_business_name: input.tenant.businessName,
+      },
+      reason: input.reason,
+    });
+  }
+
+  private async auditSupportAccessSessionEnded(input: {
+    readonly tenant: PlatformTenantDetailRecord;
+    readonly supportAccessSessionBefore: PlatformSupportAccessSessionSummary;
+    readonly supportAccessSessionAfter: PlatformSupportAccessSessionSummary;
+    readonly session: AuthSessionResponseData;
+    readonly auditContext: PlatformRequestAuditContext;
+    readonly reason: string;
+    readonly client: DatabaseQueryClient;
+  }): Promise<void> {
+    await this.auditService.record({
+      tenantId: input.tenant.id,
+      actorUserId: input.session.user.id,
+      actorType: AUDIT_ACTOR_TYPES.PLATFORM_ADMIN,
+      supportAccessSessionId: input.supportAccessSessionAfter.id,
+      ipAddress: input.auditContext.ipAddress,
+      userAgent: input.auditContext.userAgent,
+      client: input.client,
+      action: 'platform.support_access_session.ended',
+      entityType: 'platform_support_access_session',
+      entityId: input.supportAccessSessionAfter.id,
+      beforeJson: {
+        tenant_id: input.tenant.id,
+        platform_admin_user_id: input.supportAccessSessionBefore.platformAdminUserId,
+        mode: input.supportAccessSessionBefore.accessMode,
+        started_at: input.supportAccessSessionBefore.startedAt.toISOString(),
+        expires_at: input.supportAccessSessionBefore.expiresAt.toISOString(),
+        ended_at: input.supportAccessSessionBefore.endedAt?.toISOString() ?? null,
+      },
+      afterJson: {
+        tenant_id: input.tenant.id,
+        platform_admin_user_id: input.supportAccessSessionAfter.platformAdminUserId,
+        mode: input.supportAccessSessionAfter.accessMode,
+        started_at: input.supportAccessSessionAfter.startedAt.toISOString(),
+        expires_at: input.supportAccessSessionAfter.expiresAt.toISOString(),
+        ended_at: input.supportAccessSessionAfter.endedAt?.toISOString() ?? null,
       },
       metadataJson: {
         tenant_status: input.tenant.status,

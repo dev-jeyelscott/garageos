@@ -212,6 +212,10 @@ interface PlatformSupportAccessForm {
   readonly expires_at: string;
 }
 
+interface PlatformSupportAccessEndForm {
+  readonly reason: string;
+}
+
 type PlatformTenantReadOnlyOverrideSubmitState =
   | {
       readonly status: 'idle';
@@ -270,6 +274,26 @@ type PlatformSupportAccessSubmitState =
       readonly fieldErrors: Record<string, string>;
     };
 
+type PlatformSupportAccessEndSubmitState =
+  | {
+      readonly status: 'idle';
+    }
+  | {
+      readonly status: 'submitting';
+    }
+  | {
+      readonly status: 'success';
+      readonly message: string;
+      readonly session: PlatformSupportAccessSessionSummary;
+    }
+  | {
+      readonly status: 'error';
+      readonly message: string;
+      readonly detail: string | null;
+      readonly code: string | null;
+      readonly fieldErrors: Record<string, string>;
+    };
+
 interface PlatformSupportAccessSessionSummary {
   readonly id: string;
   readonly tenant_id: string;
@@ -290,6 +314,10 @@ interface ApplyPlatformTenantSuspensionResponse {
 }
 
 interface StartPlatformSupportAccessSessionResponse {
+  readonly support_access_session: PlatformSupportAccessSessionSummary;
+}
+
+interface EndPlatformSupportAccessSessionResponse {
   readonly support_access_session: PlatformSupportAccessSessionSummary;
 }
 
@@ -854,6 +882,10 @@ const defaultPlatformSupportAccessForm: PlatformSupportAccessForm = {
   mode: 'read_only',
   reason: '',
   expires_at: '',
+};
+
+const defaultPlatformSupportAccessEndForm: PlatformSupportAccessEndForm = {
+  reason: '',
 };
 
 const defaultPlatformTenantExportForm: PlatformTenantExportForm = {
@@ -2213,6 +2245,14 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
       status: 'idle',
     });
 
+  const [supportAccessEndForm, setSupportAccessEndForm] = useState<PlatformSupportAccessEndForm>(
+    defaultPlatformSupportAccessEndForm,
+  );
+  const [supportAccessEndSubmitState, setSupportAccessEndSubmitState] =
+    useState<PlatformSupportAccessEndSubmitState>({
+      status: 'idle',
+    });
+
   const canReadTenantDetail =
     sessionState.status === 'ready' &&
     hasEffectivePermission(sessionState.session, 'platform.tenants.read');
@@ -2260,6 +2300,7 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
       setReadOnlyOverrideSubmitState({ status: 'idle' });
       setTenantSuspensionSubmitState({ status: 'idle' });
       setSupportAccessSubmitState({ status: 'idle' });
+      setSupportAccessEndSubmitState({ status: 'idle' });
       setTenantExportSubmitState({ status: 'idle' });
       setTenantDeletionJobSubmitState({ status: 'idle' });
 
@@ -2624,6 +2665,93 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
     }
   }
 
+  function updateSupportAccessEndFormField<K extends keyof PlatformSupportAccessEndForm>(
+    field: K,
+    value: PlatformSupportAccessEndForm[K],
+  ) {
+    setSupportAccessEndForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }
+
+  async function handleSupportAccessEndSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!canStartSupportAccess || supportAccessEndSubmitState.status === 'submitting') {
+      return;
+    }
+
+    const activeSupportAccessSession =
+      supportAccessSubmitState.status === 'success' &&
+      supportAccessSubmitState.session.ended_at === null
+        ? supportAccessSubmitState.session
+        : null;
+
+    if (activeSupportAccessSession === null) {
+      setSupportAccessEndSubmitState({
+        status: 'error',
+        message: 'No active support access session is available to end from this screen.',
+        detail:
+          'Start a support access session first, or reload once an active support-session list API is available.',
+        code: 'workflow_transition_blocked',
+        fieldErrors: {},
+      });
+      return;
+    }
+
+    const nextForm: PlatformSupportAccessEndForm = {
+      reason: supportAccessEndForm.reason.trim(),
+    };
+
+    const fieldErrors: Record<string, string> = {};
+
+    if (nextForm.reason.length === 0) {
+      fieldErrors.reason = 'Reason is required.';
+    }
+
+    if (Object.keys(fieldErrors).length > 0) {
+      setSupportAccessEndSubmitState({
+        status: 'error',
+        message: 'Review the support access end fields.',
+        detail: null,
+        code: 'validation_failed',
+        fieldErrors,
+      });
+      return;
+    }
+
+    setSupportAccessEndSubmitState({ status: 'submitting' });
+
+    try {
+      const response = await endPlatformSupportAccessSession(
+        activeSupportAccessSession.id,
+        nextForm,
+      );
+
+      setSupportAccessEndForm(defaultPlatformSupportAccessEndForm);
+      setSupportAccessEndSubmitState({
+        status: 'success',
+        message: 'Support access session was ended and the visible marker was updated.',
+        session: response.support_access_session,
+      });
+      setSupportAccessSubmitState({
+        status: 'success',
+        message:
+          'Support access session has ended. Start a new explicit session only if continued support work is required.',
+        session: response.support_access_session,
+      });
+    } catch (error) {
+      setSupportAccessEndSubmitState({
+        status: 'error',
+        message: toSafeErrorMessage(error, 'Unable to end support access session.'),
+        detail: toSafeErrorDetail(error),
+        code: getApiErrorCode(error),
+        fieldErrors: getApiFieldErrors(error),
+      });
+    }
+  }
+
   function updateTenantExportFormField<K extends keyof PlatformTenantExportForm>(
     field: K,
     value: PlatformTenantExportForm[K],
@@ -2781,6 +2909,9 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
   const supportAccessFieldErrors =
     supportAccessSubmitState.status === 'error' ? supportAccessSubmitState.fieldErrors : {};
 
+  const supportAccessEndFieldErrors =
+    supportAccessEndSubmitState.status === 'error' ? supportAccessEndSubmitState.fieldErrors : {};
+
   const tenantExportFieldErrors =
     tenantExportSubmitState.status === 'error' ? tenantExportSubmitState.fieldErrors : {};
 
@@ -2799,66 +2930,20 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
           <ButtonLink href="/platform/tenants" variant="secondary">
             Back to tenants
           </ButtonLink>
-          {canUpdateSubscription && tenantDetailState.status === 'loaded' ? (
-            <>
-              <ButtonLink href="/platform/tenants" variant="secondary">
-                Back to tenants
-              </ButtonLink>
-              <ButtonLink href="#tenant-detail-tabs" variant="primary">
-                Review sections
-              </ButtonLink>
-            </>
+
+          {tenantDetailState.status === 'loaded' ? (
+            <ButtonLink href="#tenant-detail-tabs" variant="primary">
+              Review sections
+            </ButtonLink>
           ) : (
-            <>
-              <Button
-                type="button"
-                variant="secondary"
-                disabled
-                title={
-                  canUpdateSubscription
-                    ? 'Tenant detail must load before subscription updates.'
-                    : 'Requires platform.subscriptions.update.'
-                }
-              >
-                Manage subscription
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                disabled
-                title={
-                  canUpdateSubscription
-                    ? 'Tenant detail must load before read-only override.'
-                    : 'Requires platform.subscriptions.update.'
-                }
-              >
-                Apply read-only
-              </Button>
-              <Button
-                type="button"
-                variant="destructive"
-                disabled
-                title={
-                  canUpdateSubscription
-                    ? 'Tenant detail must load before suspension.'
-                    : 'Requires platform.subscriptions.update.'
-                }
-              >
-                Suspend tenant
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                disabled
-                title={
-                  canStartSupportAccess
-                    ? 'Tenant detail must load before support access.'
-                    : 'Requires platform.support_access.'
-                }
-              >
-                Start support access
-              </Button>
-            </>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled
+              title="Tenant detail must load before section review."
+            >
+              Review sections
+            </Button>
           )}
         </>
       }
@@ -2874,9 +2959,9 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
           <Alert>
             <p className="text-sm leading-6">
               This screen reads platform tenant detail and now wires the documented subscription
-              management, read-only override, suspension, support access session, and tenant export
-              job trigger workflows. Deletion jobs, plan management, platform audit logs, and full
-              export packaging remain separate workflow slices.
+              management, read-only override, suspension, support access session, tenant export job
+              trigger, and tenant deletion job queueing workflows. Plan management, platform audit
+              logs, and full export packaging remain separate workflow slices.
             </p>
           </Alert>
 
@@ -2926,13 +3011,23 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
               supportAccessForm={supportAccessForm}
               supportAccessSubmitState={supportAccessSubmitState}
               supportAccessFieldErrors={supportAccessFieldErrors}
+              supportAccessEndForm={supportAccessEndForm}
+              supportAccessEndSubmitState={supportAccessEndSubmitState}
+              supportAccessEndFieldErrors={supportAccessEndFieldErrors}
               onSupportAccessChange={updateSupportAccessFormField}
               onSupportAccessSubmit={handleSupportAccessSubmit}
+              onSupportAccessEndChange={updateSupportAccessEndFormField}
+              onSupportAccessEndSubmit={handleSupportAccessEndSubmit}
               tenantExportForm={tenantExportForm}
               tenantExportSubmitState={tenantExportSubmitState}
               tenantExportFieldErrors={tenantExportFieldErrors}
               onTenantExportChange={updateTenantExportFormField}
               onTenantExportSubmit={handleTenantExportSubmit}
+              tenantDeletionJobForm={tenantDeletionJobForm}
+              tenantDeletionJobSubmitState={tenantDeletionJobSubmitState}
+              tenantDeletionJobFieldErrors={tenantDeletionJobFieldErrors}
+              onTenantDeletionJobChange={updateTenantDeletionJobFormField}
+              onTenantDeletionJobSubmit={handleTenantDeletionJobSubmit}
             />
           ) : null}
         </>
@@ -2964,13 +3059,23 @@ function PlatformTenantDetailTabs({
   supportAccessForm,
   supportAccessSubmitState,
   supportAccessFieldErrors,
+  supportAccessEndForm,
+  supportAccessEndSubmitState,
+  supportAccessEndFieldErrors,
   onSupportAccessChange,
   onSupportAccessSubmit,
+  onSupportAccessEndChange,
+  onSupportAccessEndSubmit,
   tenantExportForm,
   tenantExportSubmitState,
   tenantExportFieldErrors,
   onTenantExportChange,
   onTenantExportSubmit,
+  tenantDeletionJobForm,
+  tenantDeletionJobSubmitState,
+  tenantDeletionJobFieldErrors,
+  onTenantDeletionJobChange,
+  onTenantDeletionJobSubmit,
 }: {
   readonly tenant: PlatformTenantDetail;
   readonly canUpdateSubscription: boolean;
@@ -3003,11 +3108,19 @@ function PlatformTenantDetailTabs({
   readonly supportAccessForm: PlatformSupportAccessForm;
   readonly supportAccessSubmitState: PlatformSupportAccessSubmitState;
   readonly supportAccessFieldErrors: Record<string, string>;
+  readonly supportAccessEndForm: PlatformSupportAccessEndForm;
+  readonly supportAccessEndSubmitState: PlatformSupportAccessEndSubmitState;
+  readonly supportAccessEndFieldErrors: Record<string, string>;
   readonly onSupportAccessChange: <K extends keyof PlatformSupportAccessForm>(
     field: K,
     value: PlatformSupportAccessForm[K],
   ) => void;
   readonly onSupportAccessSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  readonly onSupportAccessEndChange: <K extends keyof PlatformSupportAccessEndForm>(
+    field: K,
+    value: PlatformSupportAccessEndForm[K],
+  ) => void;
+  readonly onSupportAccessEndSubmit: (event: FormEvent<HTMLFormElement>) => void;
   readonly tenantExportForm: PlatformTenantExportForm;
   readonly tenantExportSubmitState: PlatformTenantExportSubmitState;
   readonly tenantExportFieldErrors: Record<string, string>;
@@ -3016,6 +3129,14 @@ function PlatformTenantDetailTabs({
     value: PlatformTenantExportForm[K],
   ) => void;
   readonly onTenantExportSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  readonly tenantDeletionJobForm: PlatformTenantDeletionJobForm;
+  readonly tenantDeletionJobSubmitState: PlatformTenantDeletionJobSubmitState;
+  readonly tenantDeletionJobFieldErrors: Record<string, string>;
+  readonly onTenantDeletionJobChange: <K extends keyof PlatformTenantDeletionJobForm>(
+    field: K,
+    value: PlatformTenantDeletionJobForm[K],
+  ) => void;
+  readonly onTenantDeletionJobSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   return (
     <div className="grid gap-5">
@@ -3138,15 +3259,13 @@ function PlatformTenantDetailTabs({
             form={supportAccessForm}
             submitState={supportAccessSubmitState}
             fieldErrors={supportAccessFieldErrors}
+            endForm={supportAccessEndForm}
+            endSubmitState={supportAccessEndSubmitState}
+            endFieldErrors={supportAccessEndFieldErrors}
             onChange={onSupportAccessChange}
             onSubmit={onSupportAccessSubmit}
-          />
-
-          <PlannedWorkflowCard
-            title="End support access session"
-            requiredPermission="platform.support_access"
-            description="Ending an active support access session is documented, but this page should not expose an end button until the active-session read/list workflow is wired."
-            detail="Keep support access explicit, visible, and audited. Do not silently impersonate tenant users."
+            onEndChange={onSupportAccessEndChange}
+            onEndSubmit={onSupportAccessEndSubmit}
           />
         </TabsContent>
 
@@ -3167,8 +3286,8 @@ function PlatformTenantDetailTabs({
             <CardHeader>
               <CardTitle>Deletion readiness</CardTitle>
               <CardDescription>
-                Read-only deletion lifecycle fields. Queueing deletion remains disabled until the
-                eligibility API and confirmation workflow are implemented.
+                Read-only deletion lifecycle fields. Queueing is available below only when the
+                backend confirms the tenant is pending deletion with a scheduled deletion timestamp.
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2">
@@ -3185,11 +3304,14 @@ function PlatformTenantDetailTabs({
             </CardContent>
           </Card>
 
-          <PlannedWorkflowCard
-            title="Deletion job queueing planned"
-            requiredPermission="platform.tenants.update"
-            description="Deletion queueing requires retention eligibility checks, reason capture, confirmation, audit logging, and the documented deletion worker behavior."
-            detail="Do not add a destructive queue-deletion button until the dedicated deletion-job API is wired."
+          <PlatformTenantDeletionJobPanel
+            tenant={tenant}
+            canQueueTenantDeletionJob={canQueueTenantExport}
+            form={tenantDeletionJobForm}
+            submitState={tenantDeletionJobSubmitState}
+            fieldErrors={tenantDeletionJobFieldErrors}
+            onChange={onTenantDeletionJobChange}
+            onSubmit={onTenantDeletionJobSubmit}
           />
         </TabsContent>
 
@@ -3667,6 +3789,22 @@ async function startPlatformSupportAccessSession(
     {
       requiresAuth: true,
       idempotencyKey: createIdempotencyKey('platform-support-access-session'),
+    },
+  );
+}
+
+async function endPlatformSupportAccessSession(
+  supportAccessSessionId: string,
+  form: PlatformSupportAccessEndForm,
+): Promise<EndPlatformSupportAccessSessionResponse> {
+  return postAuthJson<EndPlatformSupportAccessSessionResponse>(
+    `/platform/support-access-sessions/${encodeURIComponent(supportAccessSessionId)}/end`,
+    {
+      reason: form.reason.trim(),
+    },
+    {
+      requiresAuth: true,
+      idempotencyKey: createIdempotencyKey('platform-support-access-session-end'),
     },
   );
 }
@@ -4303,22 +4441,40 @@ function PlatformTenantSupportAccessPanel({
   form,
   submitState,
   fieldErrors,
+  endForm,
+  endSubmitState,
+  endFieldErrors,
   onChange,
   onSubmit,
+  onEndChange,
+  onEndSubmit,
 }: {
   readonly tenant: PlatformTenantDetail;
   readonly canStartSupportAccess: boolean;
   readonly form: PlatformSupportAccessForm;
   readonly submitState: PlatformSupportAccessSubmitState;
   readonly fieldErrors: Record<string, string>;
+  readonly endForm: PlatformSupportAccessEndForm;
+  readonly endSubmitState: PlatformSupportAccessEndSubmitState;
+  readonly endFieldErrors: Record<string, string>;
   readonly onChange: <K extends keyof PlatformSupportAccessForm>(
     field: K,
     value: PlatformSupportAccessForm[K],
   ) => void;
   readonly onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  readonly onEndChange: <K extends keyof PlatformSupportAccessEndForm>(
+    field: K,
+    value: PlatformSupportAccessEndForm[K],
+  ) => void;
+  readonly onEndSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   const isSubmitting = submitState.status === 'submitting';
+  const isEnding = endSubmitState.status === 'submitting';
   const isWriteAllowed = form.mode === 'write_allowed';
+  const visibleSupportAccessState = submitState.status === 'success' ? submitState : null;
+  const visibleSupportAccessSession = visibleSupportAccessState?.session ?? null;
+  const visibleSupportAccessMessage = visibleSupportAccessState?.message ?? null;
+  const canEndVisibleSession = visibleSupportAccessSession?.ended_at === null;
 
   return (
     <Card id="tenant-support-access">
@@ -4346,15 +4502,25 @@ function PlatformTenantSupportAccessPanel({
           </Alert>
         ) : null}
 
-        {submitState.status === 'success' ? (
+        {visibleSupportAccessSession !== null ? (
           <Alert>
-            <p className="text-sm font-bold">Visible support access marker</p>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">{submitState.message}</p>
+            <p className="text-sm font-bold">
+              {visibleSupportAccessSession.ended_at === null
+                ? 'Visible support access marker'
+                : 'Support access session ended'}
+            </p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              {visibleSupportAccessMessage}
+            </p>
             <div className="mt-4 grid gap-3 md:grid-cols-2">
-              <KeyValue label="Session ID" value={submitState.session.id} />
-              <KeyValue label="Mode" value={formatSupportAccessMode(submitState.session.mode)} />
-              <KeyValue label="Started" value={submitState.session.started_at} />
-              <KeyValue label="Expires" value={submitState.session.expires_at} />
+              <KeyValue label="Session ID" value={visibleSupportAccessSession.id} />
+              <KeyValue
+                label="Mode"
+                value={formatSupportAccessMode(visibleSupportAccessSession.mode)}
+              />
+              <KeyValue label="Started" value={visibleSupportAccessSession.started_at} />
+              <KeyValue label="Expires" value={visibleSupportAccessSession.expires_at} />
+              <KeyValue label="Ended" value={visibleSupportAccessSession.ended_at ?? 'Active'} />
             </div>
           </Alert>
         ) : null}
@@ -4383,6 +4549,77 @@ function PlatformTenantSupportAccessPanel({
               remain authoritative.
             </p>
           </Alert>
+        ) : null}
+
+        {endSubmitState.status === 'success' ? (
+          <Alert>
+            <p className="text-sm font-bold">Support access ended</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">{endSubmitState.message}</p>
+          </Alert>
+        ) : null}
+
+        {endSubmitState.status === 'error' ? (
+          <Alert variant="destructive">
+            <p className="text-sm font-bold">{endSubmitState.message}</p>
+            {endSubmitState.detail === null ? null : (
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                {endSubmitState.detail}
+              </p>
+            )}
+          </Alert>
+        ) : null}
+
+        {visibleSupportAccessSession !== null ? (
+          <form className="grid gap-5" onSubmit={onEndSubmit}>
+            <fieldset
+              className="grid gap-5 disabled:pointer-events-none disabled:opacity-70"
+              disabled={!canStartSupportAccess || !canEndVisibleSession || isEnding}
+            >
+              <section className="grid gap-4 rounded-2xl border border-border bg-muted/40 p-4">
+                <div>
+                  <h2 className="font-bold text-foreground">End current support access</h2>
+                  <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                    End the currently visible support access session when support, investigation,
+                    compliance, or recovery work is complete. A reason is required for auditability.
+                  </p>
+                </div>
+
+                {!canEndVisibleSession ? (
+                  <Alert>
+                    <p className="text-sm font-bold">Session is not active</p>
+                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                      This support access session has already ended or is no longer available from
+                      this screen.
+                    </p>
+                  </Alert>
+                ) : null}
+
+                <label className="grid gap-2">
+                  <span className="text-sm font-bold text-foreground">End reason</span>
+                  <textarea
+                    value={endForm.reason}
+                    onChange={(event) => onEndChange('reason', event.currentTarget.value)}
+                    required
+                    maxLength={500}
+                    rows={3}
+                    className="min-h-24 rounded-xl border border-input bg-background px-3 py-2 text-base text-foreground shadow-sm outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-60"
+                    placeholder="Example: Support investigation completed."
+                  />
+                  <FieldError message={endFieldErrors.reason} />
+                </label>
+              </section>
+            </fieldset>
+
+            <div className="flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:justify-end">
+              <Button
+                type="submit"
+                variant="destructive"
+                disabled={!canStartSupportAccess || !canEndVisibleSession || isEnding}
+              >
+                {isEnding ? 'Ending support access...' : 'End support access'}
+              </Button>
+            </div>
+          </form>
         ) : null}
 
         <form className="grid gap-5" onSubmit={onSubmit}>

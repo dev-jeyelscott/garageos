@@ -173,6 +173,11 @@ export interface CreatePlatformSupportAccessSessionInput {
   readonly expiresAt: Date;
 }
 
+export interface EndPlatformSupportAccessSessionInput {
+  readonly id: string;
+  readonly endedAt: Date;
+}
+
 export interface QueueTenantExportJobInput {
   readonly id: string;
   readonly tenantId: string;
@@ -266,6 +271,16 @@ export abstract class PlatformTenantStore {
 
   abstract createPlatformSupportAccessSession(
     input: CreatePlatformSupportAccessSessionInput,
+    client: DatabaseQueryClient,
+  ): Promise<PlatformSupportAccessSessionSummary>;
+
+  abstract findPlatformSupportAccessSessionById(
+    supportAccessSessionId: string,
+    client?: DatabaseQueryClient,
+  ): Promise<PlatformSupportAccessSessionSummary | null>;
+
+  abstract endPlatformSupportAccessSession(
+    input: EndPlatformSupportAccessSessionInput,
     client: DatabaseQueryClient,
   ): Promise<PlatformSupportAccessSessionSummary>;
 

@@ -35,6 +35,8 @@ import {
   updatePlatformTenantSubscriptionRequestSchema,
   type QueuePlatformTenantDeletionJobRequest,
   queuePlatformTenantDeletionJobRequestSchema,
+  type EndPlatformSupportAccessSessionRequest,
+  endPlatformSupportAccessSessionRequestSchema,
 } from './platform-tenant.schemas';
 
 @Controller('platform')
@@ -472,6 +474,68 @@ export class PlatformTenantController {
       await this.idempotencyService.completeSucceeded({
         id: idempotency.record.id,
         responseStatusCode: 201,
+        responseBodyJson: response,
+        now: new Date(),
+      });
+
+      return response;
+    } catch (error) {
+      await this.idempotencyService.completeFailed({
+        id: idempotency.record.id,
+        now: new Date(),
+      });
+
+      throw error;
+    }
+  }
+
+  @Post('support-access-sessions/:supportAccessSessionId/end')
+  @HttpCode(200)
+  async endSupportAccessSession(
+    @Param('supportAccessSessionId') supportAccessSessionId: string,
+    @Body(new ZodValidationPipe(endPlatformSupportAccessSessionRequestSchema))
+    request: EndPlatformSupportAccessSessionRequest,
+    @CurrentAuthSessionResponse() session: AuthSessionResponseData,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Headers('user-agent') userAgent: string | undefined,
+    @Ip() ipAddress: string | undefined,
+  ): ReturnType<PlatformTenantService['endSupportAccessSession']> {
+    const now = new Date();
+    const requestIntent = {
+      support_access_session_id: supportAccessSessionId,
+      ...request,
+    };
+
+    const idempotency = await this.idempotencyService.begin({
+      tenantId: null,
+      userId: session.user.id,
+      endpoint: 'POST /api/v1/platform/support-access-sessions/{id}/end',
+      idempotencyKey,
+      requestIntent,
+      now,
+      expiresAt: this.platformTenantService.getIdempotencyExpiresAt(now),
+    });
+
+    if (idempotency.type === 'replayed') {
+      return idempotency.responseBodyJson as Awaited<
+        ReturnType<PlatformTenantService['endSupportAccessSession']>
+      >;
+    }
+
+    try {
+      const response = await this.platformTenantService.endSupportAccessSession(
+        supportAccessSessionId,
+        request,
+        session,
+        {
+          ipAddress: ipAddress ?? null,
+          userAgent: userAgent ?? null,
+        },
+      );
+
+      await this.idempotencyService.completeSucceeded({
+        id: idempotency.record.id,
+        responseStatusCode: 200,
         responseBodyJson: response,
         now: new Date(),
       });

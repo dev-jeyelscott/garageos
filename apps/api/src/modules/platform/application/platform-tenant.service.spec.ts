@@ -34,6 +34,7 @@ import {
   type QueueTenantExportJobInput,
   type PlatformTenantDeletionJobSummary,
   type QueueTenantDeletionJobInput,
+  EndPlatformSupportAccessSessionInput,
 } from './platform-tenant.store';
 import { PLATFORM_PERMISSIONS, PlatformTenantService } from './platform-tenant.service';
 
@@ -298,6 +299,196 @@ describe('PlatformTenantService', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('ends an active platform support access session and writes audit log', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+
+    try {
+      const { service, store, auditService } = createService();
+      const supportAccessSessionId = '55555555-5555-4555-8555-555555555555';
+
+      store.tenantById = createTenantRecord({
+        status: 'read_only',
+      });
+      store.supportAccessSessionById = createSupportAccessSessionRecord({
+        id: supportAccessSessionId,
+        accessMode: 'write_allowed',
+        reason: 'Investigate support ticket without tenant impersonation.',
+      });
+
+      const response = await service.endSupportAccessSession(
+        supportAccessSessionId,
+        {
+          reason: 'Support investigation completed.',
+        },
+        createPlatformSession([PLATFORM_PERMISSIONS.SUPPORT_ACCESS]),
+        {
+          ipAddress: '127.0.0.1',
+          userAgent: 'vitest',
+        },
+      );
+
+      expect(response.support_access_session).toMatchObject({
+        id: supportAccessSessionId,
+        tenant_id: TENANT_ID,
+        platform_admin_user_id: PLATFORM_ADMIN_USER_ID,
+        mode: 'write_allowed',
+        reason: 'Investigate support ticket without tenant impersonation.',
+        ended_at: NOW.toISOString(),
+      });
+
+      expect(store.endedSupportAccessSessions[0]).toMatchObject({
+        id: supportAccessSessionId,
+        endedAt: NOW,
+      });
+
+      expect(auditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'platform.support_access_session.ended',
+          entityType: 'platform_support_access_session',
+          tenantId: TENANT_ID,
+          actorUserId: PLATFORM_ADMIN_USER_ID,
+          actorType: 'platform_admin',
+          supportAccessSessionId,
+          beforeJson: expect.objectContaining({
+            tenant_id: TENANT_ID,
+            platform_admin_user_id: PLATFORM_ADMIN_USER_ID,
+            mode: 'write_allowed',
+            ended_at: null,
+          }),
+          afterJson: expect.objectContaining({
+            tenant_id: TENANT_ID,
+            platform_admin_user_id: PLATFORM_ADMIN_USER_ID,
+            mode: 'write_allowed',
+            ended_at: NOW.toISOString(),
+          }),
+          metadataJson: expect.objectContaining({
+            tenant_status: 'read_only',
+            tenant_business_name: 'Moto Garage',
+          }),
+          reason: 'Support investigation completed.',
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('blocks ending an already ended platform support access session', async () => {
+    const { service, store } = createService();
+    const supportAccessSessionId = '55555555-5555-4555-8555-555555555555';
+
+    store.supportAccessSessionById = createSupportAccessSessionRecord({
+      id: supportAccessSessionId,
+      endedAt: new Date('2026-06-27T12:00:00.000Z'),
+    });
+
+    await expect(
+      service.endSupportAccessSession(
+        supportAccessSessionId,
+        {
+          reason: 'Support investigation completed.',
+        },
+        createPlatformSession([PLATFORM_PERMISSIONS.SUPPORT_ACCESS]),
+        {
+          ipAddress: null,
+          userAgent: null,
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.WORKFLOW_TRANSITION_BLOCKED,
+    });
+
+    expect(store.endedSupportAccessSessions).toEqual([]);
+  });
+
+  it('returns not_found when ending a missing platform support access session', async () => {
+    const { service, store } = createService();
+
+    await expect(
+      service.endSupportAccessSession(
+        '55555555-5555-4555-8555-555555555555',
+        {
+          reason: 'Support investigation completed.',
+        },
+        createPlatformSession([PLATFORM_PERMISSIONS.SUPPORT_ACCESS]),
+        {
+          ipAddress: null,
+          userAgent: null,
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.RESOURCE_NOT_FOUND,
+    });
+
+    expect(store.endedSupportAccessSessions).toEqual([]);
+  });
+
+  it('requires platform.support_access before ending support access session', async () => {
+    const { service, store } = createService();
+    const supportAccessSessionId = '55555555-5555-4555-8555-555555555555';
+
+    store.supportAccessSessionById = createSupportAccessSessionRecord({
+      id: supportAccessSessionId,
+    });
+
+    await expect(
+      service.endSupportAccessSession(
+        supportAccessSessionId,
+        {
+          reason: 'Support investigation completed.',
+        },
+        createPlatformSession([PLATFORM_PERMISSIONS.TENANTS_READ]),
+        {
+          ipAddress: null,
+          userAgent: null,
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.FORBIDDEN,
+      details: [
+        {
+          required_permission: PLATFORM_PERMISSIONS.SUPPORT_ACCESS,
+        },
+      ],
+    });
+
+    expect(store.endedSupportAccessSessions).toEqual([]);
+  });
+
+  it('requires a reason before ending support access session', async () => {
+    const { service, store } = createService();
+    const supportAccessSessionId = '55555555-5555-4555-8555-555555555555';
+
+    store.supportAccessSessionById = createSupportAccessSessionRecord({
+      id: supportAccessSessionId,
+    });
+
+    await expect(
+      service.endSupportAccessSession(
+        supportAccessSessionId,
+        {
+          reason: '   ',
+        },
+        createPlatformSession([PLATFORM_PERMISSIONS.SUPPORT_ACCESS]),
+        {
+          ipAddress: null,
+          userAgent: null,
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.VALIDATION_FAILED,
+      details: [
+        expect.objectContaining({
+          field: 'reason',
+          code: 'required',
+        }),
+      ],
+    });
+
+    expect(store.endedSupportAccessSessions).toEqual([]);
   });
 
   it('requires a reason before updating tenant subscription', async () => {
@@ -1283,6 +1474,21 @@ function createTenantDeletionJobRecord(
   };
 }
 
+function createSupportAccessSessionRecord(
+  overrides: Partial<PlatformSupportAccessSessionSummary> = {},
+): PlatformSupportAccessSessionSummary {
+  return {
+    id: overrides.id ?? '55555555-5555-4555-8555-555555555555',
+    tenantId: overrides.tenantId ?? TENANT_ID,
+    platformAdminUserId: overrides.platformAdminUserId ?? PLATFORM_ADMIN_USER_ID,
+    accessMode: overrides.accessMode ?? 'read_only',
+    reason: overrides.reason ?? 'Investigate support ticket without tenant impersonation.',
+    startedAt: overrides.startedAt ?? NOW,
+    expiresAt: overrides.expiresAt ?? new Date('2026-06-28T00:00:00.000Z'),
+    endedAt: overrides.endedAt ?? null,
+  };
+}
+
 function expectForbidden(action: () => unknown, requiredPermission: string): void {
   try {
     action();
@@ -1327,6 +1533,7 @@ class FakePlatformTenantStore extends PlatformTenantStore {
   };
   duplicate: PlatformTenantDetailRecord | null = null;
   tenantById: PlatformTenantDetailRecord | null = null;
+  supportAccessSessionById: PlatformSupportAccessSessionSummary | null = null;
   activeTenantDeletionJob: PlatformTenantDeletionJobSummary | null = null;
   readonly queuedTenantDeletionJobs: QueueTenantDeletionJobInput[] = [];
   readonly listInputs: ListPlatformTenantsInput[] = [];
@@ -1336,6 +1543,7 @@ class FakePlatformTenantStore extends PlatformTenantStore {
   readonly updatedTenantStatuses: UpdateTenantStatusInput[] = [];
   readonly subscriptionOverrides: CreateSubscriptionOverrideInput[] = [];
   readonly supportAccessSessions: CreatePlatformSupportAccessSessionInput[] = [];
+  readonly endedSupportAccessSessions: EndPlatformSupportAccessSessionInput[] = [];
   readonly queuedTenantExportJobs: QueueTenantExportJobInput[] = [];
   readonly createdInvitations: CreateOwnerInvitationInput[] = [];
   readonly lifecycleEvents: CreateTenantLifecycleEventInput[] = [];
@@ -1435,6 +1643,25 @@ class FakePlatformTenantStore extends PlatformTenantStore {
       expiresAt: input.expiresAt,
       endedAt: null,
     };
+  }
+
+  async findPlatformSupportAccessSessionById(): Promise<PlatformSupportAccessSessionSummary | null> {
+    return this.supportAccessSessionById;
+  }
+
+  async endPlatformSupportAccessSession(
+    input: EndPlatformSupportAccessSessionInput,
+  ): Promise<PlatformSupportAccessSessionSummary> {
+    this.endedSupportAccessSessions.push(input);
+
+    const currentSession = this.supportAccessSessionById ?? createSupportAccessSessionRecord();
+
+    this.supportAccessSessionById = {
+      ...currentSession,
+      endedAt: input.endedAt,
+    };
+
+    return this.supportAccessSessionById;
   }
 
   async queueTenantExportJob(

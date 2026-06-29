@@ -119,6 +119,12 @@ export const startPlatformSupportAccessSessionRequestSchema = z
   })
   .strict();
 
+export const endPlatformSupportAccessSessionRequestSchema = z
+  .object({
+    reason: z.string().trim().min(1).max(500),
+  })
+  .strict();
+
 export type ListPlatformTenantsQuery = z.infer<typeof listPlatformTenantsQuerySchema>;
 
 export type CreatePlatformTenantRequest = z.infer<typeof createPlatformTenantRequestSchema>;
@@ -147,4 +153,8 @@ export type PlatformSupportAccessMode = z.infer<typeof platformSupportAccessMode
 
 export type StartPlatformSupportAccessSessionRequest = z.infer<
   typeof startPlatformSupportAccessSessionRequestSchema
+>;
+
+export type EndPlatformSupportAccessSessionRequest = z.infer<
+  typeof endPlatformSupportAccessSessionRequestSchema
 >;

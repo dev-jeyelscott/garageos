@@ -31,6 +31,7 @@ import {
   type QueueTenantExportJobInput,
   type PlatformTenantDeletionJobSummary,
   type QueueTenantDeletionJobInput,
+  type EndPlatformSupportAccessSessionInput,
 } from '../application/platform-tenant.store';
 
 interface PlatformTenantRow extends DatabaseRow {
@@ -484,6 +485,60 @@ export class PostgresPlatformTenantRepository extends PlatformTenantStore {
 
     return mapPlatformSupportAccessSessionRow(
       getRequiredRow(result, 'create platform support access session'),
+    );
+  }
+
+  async findPlatformSupportAccessSessionById(
+    supportAccessSessionId: string,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<PlatformSupportAccessSessionSummary | null> {
+    const result = await client.query<PlatformSupportAccessSessionRow>(
+      `
+        select
+          id,
+          tenant_id,
+          platform_admin_user_id,
+          access_mode,
+          reason,
+          started_at,
+          expires_at,
+          ended_at
+        from platform_support_access_sessions
+        where id = $1
+        limit 1
+      `,
+      [supportAccessSessionId],
+    );
+
+    const row = result.rows[0];
+
+    return row === undefined ? null : mapPlatformSupportAccessSessionRow(row);
+  }
+
+  async endPlatformSupportAccessSession(
+    input: EndPlatformSupportAccessSessionInput,
+    client: DatabaseQueryClient,
+  ): Promise<PlatformSupportAccessSessionSummary> {
+    const result = await client.query<PlatformSupportAccessSessionRow>(
+      `
+        update platform_support_access_sessions
+        set ended_at = $2
+        where id = $1
+        returning
+          id,
+          tenant_id,
+          platform_admin_user_id,
+          access_mode,
+          reason,
+          started_at,
+          expires_at,
+          ended_at
+      `,
+      [input.id, input.endedAt],
+    );
+
+    return mapPlatformSupportAccessSessionRow(
+      getRequiredRow(result, 'end platform support access session'),
     );
   }
 
