@@ -834,7 +834,7 @@ function StatusBadge({
 }: {
   readonly status: AuthTenantStatus | undefined;
   readonly fallback?: string;
-}) {    
+}) {
   const label = status === undefined ? fallback : formatTenantStatus(status);
 
   return <Badge>{label}</Badge>;
