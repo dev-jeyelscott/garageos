@@ -328,6 +328,7 @@ interface PlatformTenantExportForm {
 
 interface PlatformTenantDeletionJobForm {
   readonly reason: string;
+  readonly confirmation: string;
 }
 
 interface PlatformTenantDeletionJobSummary {
@@ -895,6 +896,7 @@ const defaultPlatformTenantExportForm: PlatformTenantExportForm = {
 
 const defaultPlatformTenantDeletionJobForm: PlatformTenantDeletionJobForm = {
   reason: '',
+  confirmation: '',
 };
 
 const tenantStatusFilterOptions: readonly {
@@ -2269,6 +2271,10 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
     sessionState.status === 'ready' &&
     hasEffectivePermission(sessionState.session, 'platform.tenants.update');
 
+  const canQueueTenantDeletionJob =
+    sessionState.status === 'ready' &&
+    hasEffectivePermission(sessionState.session, 'platform.tenants.update');
+
   const [tenantExportForm, setTenantExportForm] = useState<PlatformTenantExportForm>(
     defaultPlatformTenantExportForm,
   );
@@ -2832,7 +2838,7 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
     event.preventDefault();
 
     if (
-      !canQueueTenantExport ||
+      !canQueueTenantDeletionJob ||
       tenantDeletionJobSubmitState.status === 'submitting' ||
       tenantDetailState.status !== 'loaded'
     ) {
@@ -2841,23 +2847,30 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
 
     const nextForm: PlatformTenantDeletionJobForm = {
       reason: tenantDeletionJobForm.reason.trim(),
+      confirmation: tenantDeletionJobForm.confirmation.trim(),
     };
 
     const fieldErrors: Record<string, string> = {};
+    const expectedConfirmation = tenantDetailState.tenant.business_name;
 
     if (nextForm.reason.length === 0) {
       fieldErrors.reason = 'Reason is required.';
     }
 
+    if (nextForm.confirmation !== expectedConfirmation) {
+      fieldErrors.confirmation = `Type "${expectedConfirmation}" to confirm deletion job queueing.`;
+    }
+
     if (tenantDetailState.tenant.status !== 'pending_deletion') {
-      fieldErrors.reason = 'Tenant must be pending deletion before a deletion job can be queued.';
+      fieldErrors.confirmation =
+        'Tenant must be pending deletion before a deletion job can be queued.';
     }
 
     if (
       tenantDetailState.tenant.deletion_scheduled_for === null ||
       tenantDetailState.tenant.deletion_scheduled_for === undefined
     ) {
-      fieldErrors.reason =
+      fieldErrors.confirmation =
         'Tenant must have deletion_scheduled_for before a deletion job can be queued.';
     }
 
@@ -2993,6 +3006,7 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
               canUpdateSubscription={canUpdateSubscription}
               canStartSupportAccess={canStartSupportAccess}
               canQueueTenantExport={canQueueTenantExport}
+              canQueueTenantDeletionJob={canQueueTenantDeletionJob}
               subscriptionForm={subscriptionForm}
               subscriptionSubmitState={subscriptionSubmitState}
               subscriptionFieldErrors={subscriptionFieldErrors}
@@ -3041,6 +3055,7 @@ function PlatformTenantDetailTabs({
   canUpdateSubscription,
   canStartSupportAccess,
   canQueueTenantExport,
+  canQueueTenantDeletionJob,
   subscriptionForm,
   subscriptionSubmitState,
   subscriptionFieldErrors,
@@ -3081,6 +3096,7 @@ function PlatformTenantDetailTabs({
   readonly canUpdateSubscription: boolean;
   readonly canStartSupportAccess: boolean;
   readonly canQueueTenantExport: boolean;
+  readonly canQueueTenantDeletionJob: boolean;
   readonly subscriptionForm: PlatformTenantSubscriptionForm;
   readonly subscriptionSubmitState: PlatformTenantSubscriptionSubmitState;
   readonly subscriptionFieldErrors: Record<string, string>;
@@ -3306,7 +3322,7 @@ function PlatformTenantDetailTabs({
 
           <PlatformTenantDeletionJobPanel
             tenant={tenant}
-            canQueueTenantDeletionJob={canQueueTenantExport}
+            canQueueTenantDeletionJob={canQueueTenantDeletionJob}
             form={tenantDeletionJobForm}
             submitState={tenantDeletionJobSubmitState}
             fieldErrors={tenantDeletionJobFieldErrors}
@@ -4881,7 +4897,11 @@ function PlatformTenantDeletionJobPanel({
     tenant.status === 'pending_deletion' &&
     tenant.deletion_scheduled_for !== null &&
     tenant.deletion_scheduled_for !== undefined;
-  const isSubmitDisabled = !canQueueTenantDeletionJob || isSubmitting || !isEligible;
+  const expectedConfirmation = tenant.business_name;
+  const confirmationValue = form.confirmation.trim();
+  const hasConfirmation = confirmationValue === expectedConfirmation;
+  const isFormDisabled = !canQueueTenantDeletionJob || isSubmitting || !isEligible;
+  const isSubmitDisabled = isFormDisabled || !hasConfirmation;
 
   return (
     <Card id="tenant-deletion-job">
@@ -4924,6 +4944,16 @@ function PlatformTenantDeletionJobPanel({
           </Alert>
         ) : null}
 
+        {isEligible ? (
+          <Alert variant="destructive">
+            <p className="text-sm font-bold">Deletion job confirmation required</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              Queueing a deletion job is a high-risk platform workflow. Type the tenant business
+              name exactly before submitting: <strong>{expectedConfirmation}</strong>.
+            </p>
+          </Alert>
+        ) : null}
+
         {submitState.status === 'success' ? (
           <Alert>
             <p className="text-sm font-bold">Tenant deletion job queued</p>
@@ -4955,7 +4985,7 @@ function PlatformTenantDeletionJobPanel({
         <form className="grid gap-5" onSubmit={onSubmit}>
           <fieldset
             className="grid gap-5 disabled:pointer-events-none disabled:opacity-70"
-            disabled={isSubmitDisabled}
+            disabled={isFormDisabled}
           >
             <section className="grid gap-4 rounded-2xl border border-border bg-muted/40 p-4">
               <div>
@@ -4978,6 +5008,28 @@ function PlatformTenantDeletionJobPanel({
                   placeholder="Example: Retention window completed and tenant is eligible for deletion."
                 />
                 <FieldError message={fieldErrors.reason} />
+              </label>
+
+              <label className="grid gap-2">
+                <span className="text-sm font-bold text-foreground">
+                  Confirm tenant business name
+                </span>
+                <Input
+                  value={form.confirmation}
+                  onChange={(event) => onChange('confirmation', event.currentTarget.value)}
+                  required
+                  placeholder={expectedConfirmation}
+                />
+                <p className="text-sm leading-6 text-muted-foreground">
+                  Type <strong>{expectedConfirmation}</strong> exactly to enable deletion job
+                  queueing.
+                </p>
+                {confirmationValue.length > 0 && !hasConfirmation ? (
+                  <p className="text-sm font-semibold text-destructive">
+                    Confirmation does not match the tenant business name.
+                  </p>
+                ) : null}
+                <FieldError message={fieldErrors.confirmation} />
               </label>
             </section>
           </fieldset>
