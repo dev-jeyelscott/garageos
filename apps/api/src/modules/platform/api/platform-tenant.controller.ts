@@ -33,6 +33,8 @@ import {
   startPlatformSupportAccessSessionRequestSchema,
   type UpdatePlatformTenantSubscriptionRequest,
   updatePlatformTenantSubscriptionRequestSchema,
+  type QueuePlatformTenantDeletionJobRequest,
+  queuePlatformTenantDeletionJobRequestSchema,
 } from './platform-tenant.schemas';
 
 @Controller('platform')
@@ -334,6 +336,68 @@ export class PlatformTenantController {
 
     try {
       const response = await this.platformTenantService.queueTenantExport(
+        tenantId,
+        request,
+        session,
+        {
+          ipAddress: ipAddress ?? null,
+          userAgent: userAgent ?? null,
+        },
+      );
+
+      await this.idempotencyService.completeSucceeded({
+        id: idempotency.record.id,
+        responseStatusCode: 202,
+        responseBodyJson: response,
+        now: new Date(),
+      });
+
+      return response;
+    } catch (error) {
+      await this.idempotencyService.completeFailed({
+        id: idempotency.record.id,
+        now: new Date(),
+      });
+
+      throw error;
+    }
+  }
+
+  @Post('tenants/:tenantId/deletion-jobs')
+  @HttpCode(202)
+  async queueTenantDeletionJob(
+    @Param('tenantId') tenantId: string,
+    @Body(new ZodValidationPipe(queuePlatformTenantDeletionJobRequestSchema))
+    request: QueuePlatformTenantDeletionJobRequest,
+    @CurrentAuthSessionResponse() session: AuthSessionResponseData,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Headers('user-agent') userAgent: string | undefined,
+    @Ip() ipAddress: string | undefined,
+  ): ReturnType<PlatformTenantService['queueTenantDeletionJob']> {
+    const now = new Date();
+    const requestIntent = {
+      tenant_id: tenantId,
+      ...request,
+    };
+
+    const idempotency = await this.idempotencyService.begin({
+      tenantId: null,
+      userId: session.user.id,
+      endpoint: 'POST /api/v1/platform/tenants/{tenant_id}/deletion-jobs',
+      idempotencyKey,
+      requestIntent,
+      now,
+      expiresAt: this.platformTenantService.getIdempotencyExpiresAt(now),
+    });
+
+    if (idempotency.type === 'replayed') {
+      return idempotency.responseBodyJson as Awaited<
+        ReturnType<PlatformTenantService['queueTenantDeletionJob']>
+      >;
+    }
+
+    try {
+      const response = await this.platformTenantService.queueTenantDeletionJob(
         tenantId,
         request,
         session,

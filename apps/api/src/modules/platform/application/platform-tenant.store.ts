@@ -93,6 +93,18 @@ export interface PlatformTenantExportJobSummary {
   readonly correlationId: string | null;
 }
 
+export interface PlatformTenantDeletionJobSummary {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly scheduledFor: Date;
+  readonly status: string;
+  readonly startedAt: Date | null;
+  readonly completedAt: Date | null;
+  readonly failureReason: string | null;
+  readonly attemptCount: number;
+  readonly createdAt: Date;
+}
+
 export interface ListPlatformTenantsInput {
   readonly limit: number;
   readonly cursorCreatedAt: Date | null;
@@ -168,6 +180,14 @@ export interface QueueTenantExportJobInput {
   readonly runAfter: Date;
   readonly maxAttempts: number;
   readonly correlationId: string | null;
+}
+
+export interface QueueTenantDeletionJobInput {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly scheduledFor: Date;
+  readonly status: 'queued';
+  readonly createdAt: Date;
 }
 
 export interface CreateOwnerInvitationInput {
@@ -253,6 +273,16 @@ export abstract class PlatformTenantStore {
     input: QueueTenantExportJobInput,
     client: DatabaseQueryClient,
   ): Promise<PlatformTenantExportJobSummary>;
+
+  abstract findActiveTenantDeletionJobByTenantId(
+    tenantId: string,
+    client?: DatabaseQueryClient,
+  ): Promise<PlatformTenantDeletionJobSummary | null>;
+
+  abstract queueTenantDeletionJob(
+    input: QueueTenantDeletionJobInput,
+    client: DatabaseQueryClient,
+  ): Promise<PlatformTenantDeletionJobSummary>;
 
   abstract createOwnerInvitation(
     input: CreateOwnerInvitationInput,

@@ -26,7 +26,6 @@ import {
 } from '../../../components/ui';
 import {
   getAccessTokenOrRefresh,
-  getAuthJson,
   getAuthJsonEnvelope,
   postAuthJson,
 } from '../../auth/actions/login.action';
@@ -288,6 +287,42 @@ interface PlatformTenantExportForm {
   readonly reason: string;
   readonly include_attachments: boolean;
 }
+
+interface PlatformTenantDeletionJobForm {
+  readonly reason: string;
+}
+
+interface PlatformTenantDeletionJobSummary {
+  readonly id: string;
+  readonly tenant_id: string;
+  readonly scheduled_for: string;
+  readonly status: string;
+  readonly created_at: string;
+}
+
+interface QueuePlatformTenantDeletionJobResponse {
+  readonly deletion_job: PlatformTenantDeletionJobSummary;
+}
+
+type PlatformTenantDeletionJobSubmitState =
+  | {
+      readonly status: 'idle';
+    }
+  | {
+      readonly status: 'submitting';
+    }
+  | {
+      readonly status: 'success';
+      readonly message: string;
+      readonly job: PlatformTenantDeletionJobSummary;
+    }
+  | {
+      readonly status: 'error';
+      readonly message: string;
+      readonly detail: string | null;
+      readonly code: string | null;
+      readonly fieldErrors: Record<string, string>;
+    };
 
 interface PlatformTenantExportJobSummary {
   readonly id: string;
@@ -814,6 +849,10 @@ const defaultPlatformSupportAccessForm: PlatformSupportAccessForm = {
 const defaultPlatformTenantExportForm: PlatformTenantExportForm = {
   reason: '',
   include_attachments: false,
+};
+
+const defaultPlatformTenantDeletionJobForm: PlatformTenantDeletionJobForm = {
+  reason: '',
 };
 
 const tenantStatusFilterOptions: readonly {
@@ -2189,6 +2228,15 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
       status: 'idle',
     });
 
+  const [tenantDeletionJobForm, setTenantDeletionJobForm] = useState<PlatformTenantDeletionJobForm>(
+    defaultPlatformTenantDeletionJobForm,
+  );
+
+  const [tenantDeletionJobSubmitState, setTenantDeletionJobSubmitState] =
+    useState<PlatformTenantDeletionJobSubmitState>({
+      status: 'idle',
+    });
+
   useEffect(() => {
     if (sessionState.status !== 'ready' || !canReadTenantDetail || tenantId.length === 0) {
       return;
@@ -2203,6 +2251,7 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
       setTenantSuspensionSubmitState({ status: 'idle' });
       setSupportAccessSubmitState({ status: 'idle' });
       setTenantExportSubmitState({ status: 'idle' });
+      setTenantDeletionJobSubmitState({ status: 'idle' });
 
       try {
         const tenant = await getPlatformTenantDetail(tenantId);
@@ -2631,6 +2680,83 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
     }
   }
 
+  function updateTenantDeletionJobFormField<K extends keyof PlatformTenantDeletionJobForm>(
+    field: K,
+    value: PlatformTenantDeletionJobForm[K],
+  ) {
+    setTenantDeletionJobForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }
+
+  async function handleTenantDeletionJobSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (
+      !canQueueTenantExport ||
+      tenantDeletionJobSubmitState.status === 'submitting' ||
+      tenantDetailState.status !== 'loaded'
+    ) {
+      return;
+    }
+
+    const nextForm: PlatformTenantDeletionJobForm = {
+      reason: tenantDeletionJobForm.reason.trim(),
+    };
+
+    const fieldErrors: Record<string, string> = {};
+
+    if (nextForm.reason.length === 0) {
+      fieldErrors.reason = 'Reason is required.';
+    }
+
+    if (tenantDetailState.tenant.status !== 'pending_deletion') {
+      fieldErrors.reason = 'Tenant must be pending deletion before a deletion job can be queued.';
+    }
+
+    if (
+      tenantDetailState.tenant.deletion_scheduled_for === null ||
+      tenantDetailState.tenant.deletion_scheduled_for === undefined
+    ) {
+      fieldErrors.reason =
+        'Tenant must have deletion_scheduled_for before a deletion job can be queued.';
+    }
+
+    if (Object.keys(fieldErrors).length > 0) {
+      setTenantDeletionJobSubmitState({
+        status: 'error',
+        message: 'Review the tenant deletion job fields.',
+        detail: null,
+        code: 'validation_failed',
+        fieldErrors,
+      });
+      return;
+    }
+
+    setTenantDeletionJobSubmitState({ status: 'submitting' });
+
+    try {
+      const response = await queuePlatformTenantDeletionJob(tenantId, nextForm);
+
+      setTenantDeletionJobForm(defaultPlatformTenantDeletionJobForm);
+      setTenantDeletionJobSubmitState({
+        status: 'success',
+        message:
+          'Tenant deletion job was queued. Permanent deletion execution remains handled by the tenant deletion worker slice.',
+        job: response.deletion_job,
+      });
+    } catch (error) {
+      setTenantDeletionJobSubmitState({
+        status: 'error',
+        message: toSafeErrorMessage(error, 'Unable to queue tenant deletion job.'),
+        detail: toSafeErrorDetail(error),
+        code: getApiErrorCode(error),
+        fieldErrors: getApiFieldErrors(error),
+      });
+    }
+  }
+
   const isLoadingTenant =
     tenantDetailState.status === 'idle' || tenantDetailState.status === 'loading';
   const subscriptionFieldErrors =
@@ -2647,6 +2773,9 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
 
   const tenantExportFieldErrors =
     tenantExportSubmitState.status === 'error' ? tenantExportSubmitState.fieldErrors : {};
+
+  const tenantDeletionJobFieldErrors =
+    tenantDeletionJobSubmitState.status === 'error' ? tenantDeletionJobSubmitState.fieldErrors : {};
 
   return (
     <AuthenticatedShell
@@ -2959,10 +3088,14 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
               </Card>
 
               <div className="grid gap-4 lg:grid-cols-3">
-                <PlannedWorkflowCard
-                  title="Deletion job"
-                  requiredPermission="platform.tenants.update"
-                  description="Deletion queueing requires eligibility checks and a dedicated confirmation workflow."
+                <PlatformTenantDeletionJobPanel
+                  tenant={tenantDetailState.tenant}
+                  canQueueTenantDeletionJob={canQueueTenantExport}
+                  form={tenantDeletionJobForm}
+                  submitState={tenantDeletionJobSubmitState}
+                  fieldErrors={tenantDeletionJobFieldErrors}
+                  onChange={updateTenantDeletionJobFormField}
+                  onSubmit={handleTenantDeletionJobSubmit}
                 />
               </div>
             </div>
@@ -3393,6 +3526,22 @@ async function queuePlatformTenantExport(
     {
       requiresAuth: true,
       idempotencyKey: createIdempotencyKey('platform-tenant-export'),
+    },
+  );
+}
+
+async function queuePlatformTenantDeletionJob(
+  tenantId: string,
+  form: PlatformTenantDeletionJobForm,
+): Promise<QueuePlatformTenantDeletionJobResponse> {
+  return postAuthJson<QueuePlatformTenantDeletionJobResponse>(
+    `/platform/tenants/${encodeURIComponent(tenantId)}/deletion-jobs`,
+    {
+      reason: form.reason.trim(),
+    },
+    {
+      requiresAuth: true,
+      idempotencyKey: createIdempotencyKey('platform-tenant-deletion-job'),
     },
   );
 }
@@ -4259,40 +4408,149 @@ function PlatformTenantExportPanel({
   );
 }
 
+function PlatformTenantDeletionJobPanel({
+  tenant,
+  canQueueTenantDeletionJob,
+  form,
+  submitState,
+  fieldErrors,
+  onChange,
+  onSubmit,
+}: {
+  readonly tenant: PlatformTenantDetail;
+  readonly canQueueTenantDeletionJob: boolean;
+  readonly form: PlatformTenantDeletionJobForm;
+  readonly submitState: PlatformTenantDeletionJobSubmitState;
+  readonly fieldErrors: Record<string, string>;
+  readonly onChange: <K extends keyof PlatformTenantDeletionJobForm>(
+    field: K,
+    value: PlatformTenantDeletionJobForm[K],
+  ) => void;
+  readonly onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  const isSubmitting = submitState.status === 'submitting';
+  const isEligible =
+    tenant.status === 'pending_deletion' &&
+    tenant.deletion_scheduled_for !== null &&
+    tenant.deletion_scheduled_for !== undefined;
+  const isSubmitDisabled = !canQueueTenantDeletionJob || isSubmitting || !isEligible;
+
+  return (
+    <Card id="tenant-deletion-job">
+      <CardHeader>
+        <CardTitle>Tenant deletion job</CardTitle>
+        <CardDescription>
+          Queue an audited tenant deletion job only after the tenant is in pending deletion and has
+          a deletion scheduled date. Permanent deletion execution remains a worker-controlled
+          lifecycle step.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-5">
+        <div className="grid gap-4 md:grid-cols-3">
+          <KeyValue label="Tenant" value={tenant.business_name} />
+          <KeyValue label="Current status" value={formatTenantStatus(tenant.status)} />
+          <KeyValue
+            label="Deletion scheduled for"
+            value={tenant.deletion_scheduled_for ?? 'Not scheduled'}
+          />
+        </div>
+
+        {!canQueueTenantDeletionJob ? (
+          <Alert>
+            <p className="text-sm font-bold">Tenant deletion job unavailable</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              Your platform session can view tenant data, but it cannot queue deletion jobs.
+              Required permission: <strong>platform.tenants.update</strong>.
+            </p>
+          </Alert>
+        ) : null}
+
+        {!isEligible ? (
+          <Alert variant="destructive">
+            <p className="text-sm font-bold">Tenant deletion job blocked</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              Deletion jobs can be queued only for tenants in <strong>pending_deletion</strong> with
+              a populated <strong>deletion_scheduled_for</strong> timestamp. Active, grace-period,
+              read-only, suspended, and deleted tenants are blocked.
+            </p>
+          </Alert>
+        ) : null}
+
+        {submitState.status === 'success' ? (
+          <Alert>
+            <p className="text-sm font-bold">Tenant deletion job queued</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">{submitState.message}</p>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <KeyValue label="Deletion job ID" value={submitState.job.id} />
+              <KeyValue label="Status" value={submitState.job.status} />
+              <KeyValue label="Scheduled for" value={submitState.job.scheduled_for} />
+              <KeyValue label="Queued at" value={submitState.job.created_at} />
+            </div>
+          </Alert>
+        ) : null}
+
+        {submitState.status === 'error' ? (
+          <Alert variant="destructive">
+            <p className="text-sm font-bold">{submitState.message}</p>
+            {submitState.detail === null ? null : (
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">{submitState.detail}</p>
+            )}
+            {submitState.code === 'idempotency_conflict' ? (
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                The request was detected as a duplicate or retry conflict. Reload the tenant detail
+                before submitting again.
+              </p>
+            ) : null}
+          </Alert>
+        ) : null}
+
+        <form className="grid gap-5" onSubmit={onSubmit}>
+          <fieldset
+            className="grid gap-5 disabled:pointer-events-none disabled:opacity-70"
+            disabled={isSubmitDisabled}
+          >
+            <section className="grid gap-4 rounded-2xl border border-border bg-muted/40 p-4">
+              <div>
+                <h2 className="font-bold text-foreground">Deletion queue fields</h2>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                  A reason is required for auditability. This does not execute permanent deletion
+                  immediately.
+                </p>
+              </div>
+
+              <label className="grid gap-2">
+                <span className="text-sm font-bold text-foreground">Reason</span>
+                <textarea
+                  value={form.reason}
+                  onChange={(event) => onChange('reason', event.currentTarget.value)}
+                  required
+                  maxLength={500}
+                  rows={4}
+                  className="min-h-28 rounded-xl border border-input bg-background px-3 py-2 text-base text-foreground shadow-sm outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-60"
+                  placeholder="Example: Retention window completed and tenant is eligible for deletion."
+                />
+                <FieldError message={fieldErrors.reason} />
+              </label>
+            </section>
+          </fieldset>
+
+          <div className="flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:justify-end">
+            <Button type="submit" variant="destructive" disabled={isSubmitDisabled}>
+              {isSubmitting ? 'Queueing deletion job...' : 'Queue deletion job'}
+            </Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
 function FieldError({ message }: { readonly message: string | undefined }) {
   if (message === undefined || message.length === 0) {
     return null;
   }
 
   return <p className="text-sm font-semibold text-destructive">{message}</p>;
-}
-
-function PlannedWorkflowCard({
-  title,
-  requiredPermission,
-  description,
-}: {
-  readonly title: string;
-  readonly requiredPermission: string;
-  readonly description: string;
-}) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Alert>
-          <p className="text-sm font-bold">Planned workflow</p>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            Required permission: <strong>{requiredPermission}</strong>. This action remains disabled
-            in this read-only detail slice.
-          </p>
-        </Alert>
-      </CardContent>
-    </Card>
-  );
 }
 
 function ForbiddenState({

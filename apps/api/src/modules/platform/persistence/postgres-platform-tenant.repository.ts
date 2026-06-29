@@ -7,6 +7,7 @@ import {
   type DatabaseRow,
 } from '../../../shared/database/database-client';
 import {
+  PlatformTenantStore,
   type CreateOwnerInvitationInput,
   type CreateSubscriptionOverrideInput,
   type CreateTenantInput,
@@ -21,7 +22,6 @@ import {
   type PlatformTenantOwnerInvitationSummary,
   type PlatformTenantOwnerSummary,
   type PlatformTenantStatus,
-  PlatformTenantStore,
   type UpdateTenantStatusInput,
   type UpsertTenantSubscriptionInput,
   type CreatePlatformSupportAccessSessionInput,
@@ -29,6 +29,8 @@ import {
   type PlatformSupportAccessSessionSummary,
   type PlatformTenantExportJobSummary,
   type QueueTenantExportJobInput,
+  type PlatformTenantDeletionJobSummary,
+  type QueueTenantDeletionJobInput,
 } from '../application/platform-tenant.store';
 
 interface PlatformTenantRow extends DatabaseRow {
@@ -106,6 +108,18 @@ interface TenantExportJobRow extends DatabaseRow {
   readonly max_attempts: number;
   readonly created_at: Date | string;
   readonly correlation_id: string | null;
+}
+
+interface TenantDeletionJobRow extends DatabaseRow {
+  readonly id: string;
+  readonly tenant_id: string;
+  readonly scheduled_for: Date | string;
+  readonly status: string;
+  readonly started_at: Date | string | null;
+  readonly completed_at: Date | string | null;
+  readonly failure_reason: string | null;
+  readonly attempt_count: number;
+  readonly created_at: Date | string;
 }
 
 interface OwnerInvitationRow extends DatabaseRow {
@@ -515,6 +529,67 @@ export class PostgresPlatformTenantRepository extends PlatformTenantStore {
     return mapTenantExportJobRow(getRequiredRow(result, 'queue tenant export job'));
   }
 
+  async findActiveTenantDeletionJobByTenantId(
+    tenantId: string,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<PlatformTenantDeletionJobSummary | null> {
+    const result = await client.query<TenantDeletionJobRow>(
+      `
+        select
+          id,
+          tenant_id,
+          scheduled_for,
+          status,
+          started_at,
+          completed_at,
+          failure_reason,
+          attempt_count,
+          created_at
+        from tenant_deletion_jobs
+        where tenant_id = $1
+          and status in ('queued', 'running', 'failed')
+        order by created_at desc, id desc
+        limit 1
+      `,
+      [tenantId],
+    );
+
+    const row = result.rows[0];
+
+    return row === undefined ? null : mapTenantDeletionJobRow(row);
+  }
+
+  async queueTenantDeletionJob(
+    input: QueueTenantDeletionJobInput,
+    client: DatabaseQueryClient,
+  ): Promise<PlatformTenantDeletionJobSummary> {
+    const result = await client.query<TenantDeletionJobRow>(
+      `
+        insert into tenant_deletion_jobs (
+          id,
+          tenant_id,
+          scheduled_for,
+          status,
+          created_at
+        )
+        values ($1, $2, $3, $4, $5)
+        returning
+          id,
+          tenant_id,
+          scheduled_for,
+          status,
+          started_at,
+          completed_at,
+          failure_reason,
+          attempt_count,
+          created_at
+      `,
+      [input.id, input.tenantId, input.scheduledFor, input.status, input.createdAt],
+    );
+
+    return mapTenantDeletionJobRow(getRequiredRow(result, 'queue tenant deletion job'));
+  }
+
   async createOwnerInvitation(
     input: CreateOwnerInvitationInput,
     client: DatabaseQueryClient,
@@ -822,6 +897,20 @@ function mapTenantExportJobRow(row: TenantExportJobRow): PlatformTenantExportJob
     maxAttempts: Number(row.max_attempts),
     createdAt: toDate(row.created_at),
     correlationId: row.correlation_id,
+  };
+}
+
+function mapTenantDeletionJobRow(row: TenantDeletionJobRow): PlatformTenantDeletionJobSummary {
+  return {
+    id: row.id,
+    tenantId: row.tenant_id,
+    scheduledFor: toDate(row.scheduled_for),
+    status: row.status,
+    startedAt: toNullableDate(row.started_at),
+    completedAt: toNullableDate(row.completed_at),
+    failureReason: row.failure_reason,
+    attemptCount: Number(row.attempt_count),
+    createdAt: toDate(row.created_at),
   };
 }
 

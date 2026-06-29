@@ -19,6 +19,7 @@ import type {
   QueuePlatformTenantExportRequest,
   StartPlatformSupportAccessSessionRequest,
   UpdatePlatformTenantSubscriptionRequest,
+  QueuePlatformTenantDeletionJobRequest,
 } from '../api/platform-tenant.schemas';
 import {
   type PlatformPlanSummary,
@@ -29,6 +30,7 @@ import {
   type PlatformTenantListRecord,
   type PlatformTenantOwnerInvitationSummary,
   type PlatformTenantStatus,
+  type PlatformTenantDeletionJobSummary,
   PlatformTenantStore,
 } from './platform-tenant.store';
 
@@ -102,6 +104,18 @@ export interface StartPlatformSupportAccessSessionResponse {
 
 export interface QueuePlatformTenantExportResponse {
   readonly export_job: PlatformTenantExportJobResponse;
+}
+
+export interface QueuePlatformTenantDeletionJobResponse {
+  readonly deletion_job: PlatformTenantDeletionJobResponse;
+}
+
+interface PlatformTenantDeletionJobResponse {
+  readonly id: string;
+  readonly tenant_id: string;
+  readonly scheduled_for: string;
+  readonly status: string;
+  readonly created_at: string;
 }
 
 interface PlatformTenantExportJobResponse {
@@ -724,6 +738,80 @@ export class PlatformTenantService {
     });
   }
 
+  async queueTenantDeletionJob(
+    tenantId: string,
+    request: QueuePlatformTenantDeletionJobRequest,
+    session: AuthSessionResponseData,
+    auditContext: PlatformRequestAuditContext,
+  ): Promise<QueuePlatformTenantDeletionJobResponse> {
+    this.assertPlatformPermission(session, PLATFORM_PERMISSIONS.TENANTS_UPDATE);
+
+    const reason = normalizeRequiredReason(request.reason, 'reason');
+    const now = new Date();
+    const deletionJobId = randomUUID();
+
+    return this.transactionRunner.runInTransaction(async (transaction) => {
+      const tenant = await this.tenantStore.findTenantById(tenantId, transaction);
+
+      if (tenant === null) {
+        throw GarageOsApiException.resourceNotFound('Tenant was not found.');
+      }
+
+      if (tenant.status === 'deleted') {
+        throw GarageOsApiException.workflowTransitionBlocked(
+          'Deleted tenants cannot receive deletion jobs.',
+        );
+      }
+
+      if (tenant.status !== 'pending_deletion') {
+        throw GarageOsApiException.workflowTransitionBlocked(
+          'Only tenants in pending_deletion status can receive deletion jobs.',
+        );
+      }
+
+      if (tenant.deletionScheduledFor === null) {
+        throw GarageOsApiException.workflowTransitionBlocked(
+          'Pending deletion tenants must have deletion_scheduled_for before a deletion job can be queued.',
+        );
+      }
+
+      const activeDeletionJob = await this.tenantStore.findActiveTenantDeletionJobByTenantId(
+        tenantId,
+        transaction,
+      );
+
+      if (activeDeletionJob !== null) {
+        throw GarageOsApiException.duplicateResource(
+          'An active tenant deletion job already exists for this tenant.',
+        );
+      }
+
+      const deletionJob = await this.tenantStore.queueTenantDeletionJob(
+        {
+          id: deletionJobId,
+          tenantId,
+          scheduledFor: tenant.deletionScheduledFor,
+          status: 'queued',
+          createdAt: now,
+        },
+        transaction,
+      );
+
+      await this.auditTenantDeletionQueued({
+        tenant,
+        deletionJob,
+        session,
+        auditContext,
+        reason,
+        client: transaction,
+      });
+
+      return {
+        deletion_job: toTenantDeletionJobResponse(deletionJob),
+      };
+    });
+  }
+
   async startSupportAccessSession(
     tenantId: string,
     request: StartPlatformSupportAccessSessionRequest,
@@ -1021,6 +1109,39 @@ export class PlatformTenantService {
     });
   }
 
+  private async auditTenantDeletionQueued(input: {
+    readonly tenant: PlatformTenantDetailRecord;
+    readonly deletionJob: PlatformTenantDeletionJobSummary;
+    readonly session: AuthSessionResponseData;
+    readonly auditContext: PlatformRequestAuditContext;
+    readonly reason: string;
+    readonly client: DatabaseQueryClient;
+  }): Promise<void> {
+    await this.auditService.record({
+      tenantId: input.tenant.id,
+      actorUserId: input.session.user.id,
+      actorType: AUDIT_ACTOR_TYPES.PLATFORM_ADMIN,
+      ipAddress: input.auditContext.ipAddress,
+      userAgent: input.auditContext.userAgent,
+      client: input.client,
+      action: 'platform.tenant_deletion.queued',
+      entityType: 'tenant_deletion_job',
+      entityId: input.deletionJob.id,
+      afterJson: {
+        tenant_id: input.tenant.id,
+        deletion_job_id: input.deletionJob.id,
+        status: input.deletionJob.status,
+        scheduled_for: input.deletionJob.scheduledFor.toISOString(),
+        queued_at: input.deletionJob.createdAt.toISOString(),
+      },
+      metadataJson: {
+        tenant_status: input.tenant.status,
+        tenant_business_name: input.tenant.businessName,
+      },
+      reason: input.reason,
+    });
+  }
+
   private async auditSupportAccessSessionStarted(input: {
     readonly tenant: PlatformTenantDetailRecord;
     readonly supportAccessSession: PlatformSupportAccessSessionSummary;
@@ -1191,6 +1312,18 @@ function toTenantExportJobResponse(
     requested_at: exportJob.createdAt.toISOString(),
     run_after: exportJob.runAfter.toISOString(),
     include_attachments: includeAttachments,
+  };
+}
+
+function toTenantDeletionJobResponse(
+  deletionJob: PlatformTenantDeletionJobSummary,
+): PlatformTenantDeletionJobResponse {
+  return {
+    id: deletionJob.id,
+    tenant_id: deletionJob.tenantId,
+    scheduled_for: deletionJob.scheduledFor.toISOString(),
+    status: deletionJob.status,
+    created_at: deletionJob.createdAt.toISOString(),
   };
 }
 

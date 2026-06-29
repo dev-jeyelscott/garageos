@@ -14,6 +14,7 @@ import { SecureTokenService } from '../../auth/application/secure-token.service'
 import { TokenHashingService } from '../../auth/application/token-hashing.service';
 import type { AuthSessionResponseData } from '../../auth/contracts';
 import {
+  PlatformTenantStore,
   type CreateOwnerInvitationInput,
   type CreateSubscriptionOverrideInput,
   type CreateTenantInput,
@@ -25,13 +26,14 @@ import {
   type PlatformTenantDetailRecord,
   type PlatformTenantListRecord,
   type PlatformTenantOwnerInvitationSummary,
-  PlatformTenantStore,
   type UpdateTenantStatusInput,
   type UpsertTenantSubscriptionInput,
   type CreatePlatformSupportAccessSessionInput,
   type PlatformSupportAccessSessionSummary,
   type PlatformTenantExportJobSummary,
   type QueueTenantExportJobInput,
+  type PlatformTenantDeletionJobSummary,
+  type QueueTenantDeletionJobInput,
 } from './platform-tenant.store';
 import { PLATFORM_PERMISSIONS, PlatformTenantService } from './platform-tenant.service';
 
@@ -569,6 +571,218 @@ describe('PlatformTenantService', () => {
     }
   });
 
+  it('denies queueTenantDeletionJob without platform.tenants.update', async () => {
+    const { service, store } = createService();
+
+    store.tenantById = createTenantRecord({
+      status: 'pending_deletion',
+      deletionScheduledFor: new Date('2026-08-03T00:00:00.000Z'),
+    });
+
+    await expect(
+      service.queueTenantDeletionJob(
+        TENANT_ID,
+        {
+          reason: 'Retention window completed.',
+        },
+        createPlatformSession([PLATFORM_PERMISSIONS.TENANTS_READ]),
+        {
+          ipAddress: null,
+          userAgent: null,
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.FORBIDDEN,
+      details: [
+        {
+          required_permission: PLATFORM_PERMISSIONS.TENANTS_UPDATE,
+        },
+      ],
+    });
+
+    expect(store.queuedTenantDeletionJobs).toEqual([]);
+  });
+
+  it('blocks queueTenantDeletionJob for non-pending-deletion tenants', async () => {
+    const blockedStatuses = ['active', 'grace_period', 'read_only', 'suspended'] as const;
+
+    for (const status of blockedStatuses) {
+      const { service, store } = createService();
+
+      store.tenantById = createTenantRecord({
+        status,
+      });
+
+      await expect(
+        service.queueTenantDeletionJob(
+          TENANT_ID,
+          {
+            reason: 'Retention window completed.',
+          },
+          createPlatformSession([PLATFORM_PERMISSIONS.TENANTS_UPDATE]),
+          {
+            ipAddress: null,
+            userAgent: null,
+          },
+        ),
+      ).rejects.toMatchObject({
+        code: API_ERROR_CODES.WORKFLOW_TRANSITION_BLOCKED,
+      });
+
+      expect(store.queuedTenantDeletionJobs).toEqual([]);
+    }
+  });
+
+  it('blocks queueTenantDeletionJob when tenant status is deleted', async () => {
+    const { service, store } = createService();
+
+    store.tenantById = createTenantRecord({
+      status: 'deleted',
+    });
+
+    await expect(
+      service.queueTenantDeletionJob(
+        TENANT_ID,
+        {
+          reason: 'Retention window completed.',
+        },
+        createPlatformSession([PLATFORM_PERMISSIONS.TENANTS_UPDATE]),
+        {
+          ipAddress: null,
+          userAgent: null,
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.WORKFLOW_TRANSITION_BLOCKED,
+    });
+
+    expect(store.queuedTenantDeletionJobs).toEqual([]);
+  });
+
+  it('blocks queueTenantDeletionJob when pending_deletion tenant has no scheduled deletion date', async () => {
+    const { service, store } = createService();
+
+    store.tenantById = createTenantRecord({
+      status: 'pending_deletion',
+      deletionScheduledFor: null,
+    });
+
+    await expect(
+      service.queueTenantDeletionJob(
+        TENANT_ID,
+        {
+          reason: 'Retention window completed.',
+        },
+        createPlatformSession([PLATFORM_PERMISSIONS.TENANTS_UPDATE]),
+        {
+          ipAddress: null,
+          userAgent: null,
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.WORKFLOW_TRANSITION_BLOCKED,
+    });
+
+    expect(store.queuedTenantDeletionJobs).toEqual([]);
+  });
+
+  it('blocks duplicate active tenant deletion jobs', async () => {
+    const { service, store } = createService();
+
+    store.tenantById = createTenantRecord({
+      status: 'pending_deletion',
+      deletionScheduledFor: new Date('2026-08-03T00:00:00.000Z'),
+    });
+    store.activeTenantDeletionJob = createTenantDeletionJobRecord({
+      status: 'queued',
+    });
+
+    await expect(
+      service.queueTenantDeletionJob(
+        TENANT_ID,
+        {
+          reason: 'Retention window completed.',
+        },
+        createPlatformSession([PLATFORM_PERMISSIONS.TENANTS_UPDATE]),
+        {
+          ipAddress: null,
+          userAgent: null,
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.DUPLICATE_RESOURCE,
+    });
+
+    expect(store.queuedTenantDeletionJobs).toEqual([]);
+  });
+
+  it('queues tenant deletion job for eligible pending_deletion tenant and writes audit log', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+
+    try {
+      const { service, store, auditService } = createService();
+      const scheduledFor = new Date('2026-08-03T00:00:00.000Z');
+
+      store.tenantById = createTenantRecord({
+        status: 'pending_deletion',
+        deletionScheduledFor: scheduledFor,
+      });
+
+      const response = await service.queueTenantDeletionJob(
+        TENANT_ID,
+        {
+          reason: 'Retention window completed.',
+        },
+        createPlatformSession([PLATFORM_PERMISSIONS.TENANTS_UPDATE]),
+        {
+          ipAddress: '127.0.0.1',
+          userAgent: 'vitest',
+        },
+      );
+
+      expect(response.deletion_job).toMatchObject({
+        tenant_id: TENANT_ID,
+        status: 'queued',
+        scheduled_for: scheduledFor.toISOString(),
+        created_at: NOW.toISOString(),
+      });
+
+      expect(store.queuedTenantDeletionJobs).toHaveLength(1);
+      expect(store.queuedTenantDeletionJobs[0]).toMatchObject({
+        tenantId: TENANT_ID,
+        scheduledFor,
+        status: 'queued',
+        createdAt: NOW,
+      });
+
+      expect(auditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tenantId: TENANT_ID,
+          actorUserId: PLATFORM_ADMIN_USER_ID,
+          actorType: 'platform_admin',
+          action: 'platform.tenant_deletion.queued',
+          entityType: 'tenant_deletion_job',
+          entityId: response.deletion_job.id,
+          afterJson: expect.objectContaining({
+            tenant_id: TENANT_ID,
+            deletion_job_id: response.deletion_job.id,
+            status: 'queued',
+            scheduled_for: scheduledFor.toISOString(),
+            queued_at: NOW.toISOString(),
+          }),
+          metadataJson: {
+            tenant_status: 'pending_deletion',
+            tenant_business_name: 'Moto Garage',
+          },
+          reason: 'Retention window completed.',
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('preserves include_attachments true in the response and queued job payload', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
@@ -1053,6 +1267,22 @@ function createSubscriptionRecord(
   };
 }
 
+function createTenantDeletionJobRecord(
+  overrides: Partial<PlatformTenantDeletionJobSummary> = {},
+): PlatformTenantDeletionJobSummary {
+  return {
+    id: overrides.id ?? '88888888-8888-4888-8888-888888888888',
+    tenantId: overrides.tenantId ?? TENANT_ID,
+    scheduledFor: overrides.scheduledFor ?? new Date('2026-08-03T00:00:00.000Z'),
+    status: overrides.status ?? 'queued',
+    startedAt: overrides.startedAt ?? null,
+    completedAt: overrides.completedAt ?? null,
+    failureReason: overrides.failureReason ?? null,
+    attemptCount: overrides.attemptCount ?? 0,
+    createdAt: overrides.createdAt ?? NOW,
+  };
+}
+
 function expectForbidden(action: () => unknown, requiredPermission: string): void {
   try {
     action();
@@ -1097,6 +1327,8 @@ class FakePlatformTenantStore extends PlatformTenantStore {
   };
   duplicate: PlatformTenantDetailRecord | null = null;
   tenantById: PlatformTenantDetailRecord | null = null;
+  activeTenantDeletionJob: PlatformTenantDeletionJobSummary | null = null;
+  readonly queuedTenantDeletionJobs: QueueTenantDeletionJobInput[] = [];
   readonly listInputs: ListPlatformTenantsInput[] = [];
   readonly createdTenants: CreateTenantInput[] = [];
   readonly createdSubscriptions: CreateTenantSubscriptionInput[] = [];
@@ -1238,5 +1470,23 @@ class FakePlatformTenantStore extends PlatformTenantStore {
 
   async createTenantLifecycleEvent(input: CreateTenantLifecycleEventInput): Promise<void> {
     this.lifecycleEvents.push(input);
+  }
+
+  async findActiveTenantDeletionJobByTenantId(): Promise<PlatformTenantDeletionJobSummary | null> {
+    return this.activeTenantDeletionJob;
+  }
+
+  async queueTenantDeletionJob(
+    input: QueueTenantDeletionJobInput,
+  ): Promise<PlatformTenantDeletionJobSummary> {
+    this.queuedTenantDeletionJobs.push(input);
+
+    return createTenantDeletionJobRecord({
+      id: input.id,
+      tenantId: input.tenantId,
+      scheduledFor: input.scheduledFor,
+      status: input.status,
+      createdAt: input.createdAt,
+    });
   }
 }

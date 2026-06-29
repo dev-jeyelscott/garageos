@@ -105,6 +105,12 @@ export const queuePlatformTenantExportRequestSchema = z
   })
   .strict();
 
+export const queuePlatformTenantDeletionJobRequestSchema = z
+  .object({
+    reason: z.string().trim().min(1).max(500),
+  })
+  .strict();
+
 export const startPlatformSupportAccessSessionRequestSchema = z
   .object({
     mode: platformSupportAccessModeSchema,
@@ -131,6 +137,10 @@ export type ApplyPlatformTenantSuspensionRequest = z.infer<
 
 export type QueuePlatformTenantExportRequest = z.infer<
   typeof queuePlatformTenantExportRequestSchema
+>;
+
+export type QueuePlatformTenantDeletionJobRequest = z.infer<
+  typeof queuePlatformTenantDeletionJobRequestSchema
 >;
 
 export type PlatformSupportAccessMode = z.infer<typeof platformSupportAccessModeSchema>;
