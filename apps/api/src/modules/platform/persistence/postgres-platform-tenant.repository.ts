@@ -450,6 +450,11 @@ export class PostgresPlatformTenantRepository extends PlatformTenantStore {
     input: UpdateTenantStatusInput,
     client: DatabaseQueryClient,
   ): Promise<PlatformTenantDetailRecord> {
+    const shouldUpdateDeletionScheduledFor = Object.prototype.hasOwnProperty.call(
+      input,
+      'deletionScheduledFor',
+    );
+
     const result = await client.query<PlatformTenantRow>(
       `
         with updated_tenant as (
@@ -457,6 +462,10 @@ export class PostgresPlatformTenantRepository extends PlatformTenantStore {
           set
             status = $2,
             updated_at = $3,
+            deletion_scheduled_for = case
+              when $4::boolean then $5::timestamptz
+              else deletion_scheduled_for
+            end,
             lock_version = lock_version + 1
           where id = $1
           returning id
@@ -465,7 +474,13 @@ export class PostgresPlatformTenantRepository extends PlatformTenantStore {
         where t.id = (select id from updated_tenant)
         limit 1
       `,
-      [input.tenantId, input.status, input.updatedAt],
+      [
+        input.tenantId,
+        input.status,
+        input.updatedAt,
+        shouldUpdateDeletionScheduledFor,
+        shouldUpdateDeletionScheduledFor ? (input.deletionScheduledFor ?? null) : null,
+      ],
     );
 
     return mapTenantDetailRecord(getRequiredRow(result, 'update tenant status'));

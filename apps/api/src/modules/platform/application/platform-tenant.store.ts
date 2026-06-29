@@ -172,6 +172,7 @@ export interface UpdateTenantStatusInput {
   readonly tenantId: string;
   readonly status: PlatformTenantStatus;
   readonly updatedAt: Date;
+  readonly deletionScheduledFor?: Date | null;
 }
 
 export interface CreateSubscriptionOverrideInput {

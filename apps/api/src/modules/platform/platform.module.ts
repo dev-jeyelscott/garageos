@@ -6,6 +6,7 @@ import { IdempotencyModule } from '../../shared/idempotency/idempotency.module';
 import { AuthModule } from '../auth/auth.module';
 import { PlatformTenantController } from './api/platform-tenant.controller';
 import { PlatformTenantService } from './application/platform-tenant.service';
+import { TenantLifecycleCommandService } from './application/tenant-lifecycle-command.service';
 import { TenantLifecycleEvaluationService } from './application/tenant-lifecycle-evaluation.service';
 import { PLATFORM_TENANT_PROVIDERS } from './platform-tenant.providers';
 
@@ -15,7 +16,9 @@ import { PLATFORM_TENANT_PROVIDERS } from './platform-tenant.providers';
   providers: [
     PlatformTenantService,
     TenantLifecycleEvaluationService,
+    TenantLifecycleCommandService,
     ...PLATFORM_TENANT_PROVIDERS,
   ],
+  exports: [TenantLifecycleCommandService],
 })
 export class PlatformModule {}
