@@ -12,6 +12,15 @@ export const platformTenantStatusSchema = z.enum([
 
 const dateOnlySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must use YYYY-MM-DD.');
 
+const optionalTimestampSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(80)
+  .refine((value) => !Number.isNaN(Date.parse(value)), {
+    message: 'Timestamp must be a valid date-time value.',
+  });
+
 const ownerInvitationRequestSchema = z
   .object({
     full_name: z.string().trim().min(1).max(200),
@@ -73,10 +82,21 @@ export const updatePlatformTenantSubscriptionRequestSchema = z
   })
   .strict();
 
+export const applyPlatformTenantReadOnlyOverrideRequestSchema = z
+  .object({
+    reason: z.string().trim().min(1).max(500),
+    expires_at: optionalTimestampSchema.optional(),
+  })
+  .strict();
+
 export type ListPlatformTenantsQuery = z.infer<typeof listPlatformTenantsQuerySchema>;
 
 export type CreatePlatformTenantRequest = z.infer<typeof createPlatformTenantRequestSchema>;
 
 export type UpdatePlatformTenantSubscriptionRequest = z.infer<
   typeof updatePlatformTenantSubscriptionRequestSchema
+>;
+
+export type ApplyPlatformTenantReadOnlyOverrideRequest = z.infer<
+  typeof applyPlatformTenantReadOnlyOverrideRequestSchema
 >;

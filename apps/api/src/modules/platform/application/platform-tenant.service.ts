@@ -12,6 +12,7 @@ import { SecureTokenService } from '../../auth/application/secure-token.service'
 import { TokenHashingService } from '../../auth/application/token-hashing.service';
 import type { AuthSessionResponseData } from '../../auth/contracts';
 import type {
+  ApplyPlatformTenantReadOnlyOverrideRequest,
   CreatePlatformTenantRequest,
   ListPlatformTenantsQuery,
   UpdatePlatformTenantSubscriptionRequest,
@@ -79,6 +80,10 @@ export interface CreatePlatformTenantResponse {
 
 export interface UpdatePlatformTenantSubscriptionResponse {
   readonly subscription: PlatformSubscriptionResponse;
+}
+
+export interface ApplyPlatformTenantReadOnlyOverrideResponse {
+  readonly tenant: PlatformTenantDetailResponse;
 }
 
 interface PlatformPlanResponse {
@@ -427,6 +432,99 @@ export class PlatformTenantService {
     });
   }
 
+  async applyTenantReadOnlyOverride(
+    tenantId: string,
+    request: ApplyPlatformTenantReadOnlyOverrideRequest,
+    session: AuthSessionResponseData,
+    auditContext: PlatformRequestAuditContext,
+  ): Promise<ApplyPlatformTenantReadOnlyOverrideResponse> {
+    this.assertPlatformPermission(session, PLATFORM_PERMISSIONS.SUBSCRIPTIONS_UPDATE);
+
+    const reason = normalizeRequiredReason(request.reason, 'reason');
+    const expiresAt = normalizeOptionalTimestamp(request.expires_at ?? null, 'expires_at');
+    const platformAdminUserId = session.user.id;
+    const now = new Date();
+    const overrideId = randomUUID();
+    const lifecycleEventId = randomUUID();
+
+    return this.transactionRunner.runInTransaction(async (transaction) => {
+      const tenant = await this.tenantStore.findTenantById(tenantId, transaction);
+
+      if (tenant === null) {
+        throw GarageOsApiException.resourceNotFound('Tenant was not found.');
+      }
+
+      if (tenant.status === 'deleted') {
+        throw GarageOsApiException.workflowTransitionBlocked(
+          'Deleted tenants cannot receive read-only overrides.',
+        );
+      }
+
+      const updatedTenant =
+        tenant.status === 'read_only'
+          ? tenant
+          : await this.tenantStore.updateTenantStatus(
+              {
+                tenantId,
+                status: 'read_only',
+                updatedAt: now,
+              },
+              transaction,
+            );
+
+      await this.tenantStore.createSubscriptionOverride(
+        {
+          id: overrideId,
+          tenantId,
+          overrideType: 'read_only',
+          previousValueJson: {
+            status: tenant.status,
+          },
+          newValueJson: {
+            status: 'read_only',
+            expires_at: expiresAt?.toISOString() ?? null,
+          },
+          reason,
+          effectiveAt: now,
+          expiresAt,
+          createdByPlatformAdminUserId: platformAdminUserId,
+          createdAt: now,
+        },
+        transaction,
+      );
+
+      if (tenant.status !== 'read_only') {
+        await this.tenantStore.createTenantLifecycleEvent(
+          {
+            id: lifecycleEventId,
+            tenantId,
+            fromStatus: tenant.status,
+            toStatus: 'read_only',
+            source: 'platform_admin',
+            reason,
+            effectiveAt: now,
+            createdAt: now,
+          },
+          transaction,
+        );
+      }
+
+      await this.auditTenantReadOnlyOverride({
+        tenantBefore: tenant,
+        tenantAfter: updatedTenant,
+        expiresAt,
+        session,
+        auditContext,
+        reason,
+        client: transaction,
+      });
+
+      return {
+        tenant: toTenantDetailResponse(updatedTenant),
+      };
+    });
+  }
+
   assertPlatformPermission(session: AuthSessionResponseData, permission: string): void {
     if (session.user.user_type !== 'platform_admin') {
       throw GarageOsApiException.forbidden(permission);
@@ -551,6 +649,39 @@ export class PlatformTenantService {
       afterJson: {
         ...toSubscriptionAuditJson(input.subscription),
         plan_code: input.plan.code,
+      },
+      reason: input.reason,
+    });
+  }
+
+  private async auditTenantReadOnlyOverride(input: {
+    readonly tenantBefore: PlatformTenantDetailRecord;
+    readonly tenantAfter: PlatformTenantDetailRecord;
+    readonly expiresAt: Date | null;
+    readonly session: AuthSessionResponseData;
+    readonly auditContext: PlatformRequestAuditContext;
+    readonly reason: string;
+    readonly client: DatabaseQueryClient;
+  }): Promise<void> {
+    await this.auditService.record({
+      tenantId: input.tenantAfter.id,
+      actorUserId: input.session.user.id,
+      actorType: AUDIT_ACTOR_TYPES.PLATFORM_ADMIN,
+      ipAddress: input.auditContext.ipAddress,
+      userAgent: input.auditContext.userAgent,
+      client: input.client,
+      action: 'platform.tenant_read_only_override.applied',
+      entityType: 'tenant',
+      entityId: input.tenantAfter.id,
+      beforeJson: {
+        status: input.tenantBefore.status,
+      },
+      afterJson: {
+        status: input.tenantAfter.status,
+        expires_at: input.expiresAt?.toISOString() ?? null,
+      },
+      metadataJson: {
+        override_type: 'read_only',
       },
       reason: input.reason,
     });
@@ -720,6 +851,32 @@ function normalizeRequiredReason(value: string, field: string): string {
   }
 
   return normalizedValue;
+}
+
+function normalizeOptionalTimestamp(value: string | null, field: string): Date | null {
+  if (value === null) {
+    return null;
+  }
+
+  const normalizedValue = value.trim();
+
+  if (normalizedValue.length === 0) {
+    return null;
+  }
+
+  const timestamp = Date.parse(normalizedValue);
+
+  if (Number.isNaN(timestamp)) {
+    throw GarageOsApiException.validationFailed([
+      {
+        field,
+        code: 'invalid_datetime',
+        message: 'Timestamp must be a valid date-time value.',
+      },
+    ]);
+  }
+
+  return new Date(timestamp);
 }
 
 function validateDateOnly(value: string, field: string): Date {

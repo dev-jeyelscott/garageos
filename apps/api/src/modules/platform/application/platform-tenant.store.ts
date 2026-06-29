@@ -106,6 +106,25 @@ export interface UpsertTenantSubscriptionInput {
   readonly updatedAt: Date;
 }
 
+export interface UpdateTenantStatusInput {
+  readonly tenantId: string;
+  readonly status: PlatformTenantStatus;
+  readonly updatedAt: Date;
+}
+
+export interface CreateSubscriptionOverrideInput {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly overrideType: string;
+  readonly previousValueJson: Record<string, unknown> | null;
+  readonly newValueJson: Record<string, unknown>;
+  readonly reason: string;
+  readonly effectiveAt: Date;
+  readonly expiresAt: Date | null;
+  readonly createdByPlatformAdminUserId: string;
+  readonly createdAt: Date;
+}
+
 export interface CreateOwnerInvitationInput {
   readonly id: string;
   readonly tenantId: string;
@@ -169,6 +188,16 @@ export abstract class PlatformTenantStore {
     input: UpsertTenantSubscriptionInput,
     client: DatabaseQueryClient,
   ): Promise<PlatformSubscriptionSummary>;
+
+  abstract updateTenantStatus(
+    input: UpdateTenantStatusInput,
+    client: DatabaseQueryClient,
+  ): Promise<PlatformTenantDetailRecord>;
+
+  abstract createSubscriptionOverride(
+    input: CreateSubscriptionOverrideInput,
+    client: DatabaseQueryClient,
+  ): Promise<void>;
 
   abstract createOwnerInvitation(
     input: CreateOwnerInvitationInput,

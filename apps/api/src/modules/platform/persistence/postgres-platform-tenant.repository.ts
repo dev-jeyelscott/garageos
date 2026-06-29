@@ -8,6 +8,7 @@ import {
 } from '../../../shared/database/database-client';
 import {
   type CreateOwnerInvitationInput,
+  type CreateSubscriptionOverrideInput,
   type CreateTenantInput,
   type CreateTenantLifecycleEventInput,
   type CreateTenantSubscriptionInput,
@@ -21,6 +22,7 @@ import {
   type PlatformTenantOwnerSummary,
   type PlatformTenantStatus,
   PlatformTenantStore,
+  type UpdateTenantStatusInput,
   type UpsertTenantSubscriptionInput,
 } from '../application/platform-tenant.store';
 
@@ -338,6 +340,66 @@ export class PostgresPlatformTenantRepository extends PlatformTenantStore {
     );
 
     return mapSubscriptionRow(getRequiredRow(result, 'upsert tenant subscription'));
+  }
+
+  async updateTenantStatus(
+    input: UpdateTenantStatusInput,
+    client: DatabaseQueryClient,
+  ): Promise<PlatformTenantDetailRecord> {
+    const result = await client.query<PlatformTenantRow>(
+      `
+        with updated_tenant as (
+          update tenants
+          set
+            status = $2,
+            updated_at = $3,
+            lock_version = lock_version + 1
+          where id = $1
+          returning id
+        )
+        ${tenantSelectSql()}
+        where t.id = (select id from updated_tenant)
+        limit 1
+      `,
+      [input.tenantId, input.status, input.updatedAt],
+    );
+
+    return mapTenantDetailRecord(getRequiredRow(result, 'update tenant status'));
+  }
+
+  async createSubscriptionOverride(
+    input: CreateSubscriptionOverrideInput,
+    client: DatabaseQueryClient,
+  ): Promise<void> {
+    await client.query(
+      `
+        insert into subscription_overrides (
+          id,
+          tenant_id,
+          override_type,
+          previous_value_json,
+          new_value_json,
+          reason,
+          effective_at,
+          expires_at,
+          created_by_platform_admin_user_id,
+          created_at
+        )
+        values ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, $8, $9, $10)
+      `,
+      [
+        input.id,
+        input.tenantId,
+        input.overrideType,
+        input.previousValueJson === null ? null : JSON.stringify(input.previousValueJson),
+        JSON.stringify(input.newValueJson),
+        input.reason,
+        input.effectiveAt,
+        input.expiresAt,
+        input.createdByPlatformAdminUserId,
+        input.createdAt,
+      ],
+    );
   }
 
   async createOwnerInvitation(

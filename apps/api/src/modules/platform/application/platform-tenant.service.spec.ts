@@ -15,6 +15,7 @@ import { TokenHashingService } from '../../auth/application/token-hashing.servic
 import type { AuthSessionResponseData } from '../../auth/contracts';
 import {
   type CreateOwnerInvitationInput,
+  type CreateSubscriptionOverrideInput,
   type CreateTenantInput,
   type CreateTenantLifecycleEventInput,
   type CreateTenantSubscriptionInput,
@@ -25,6 +26,7 @@ import {
   type PlatformTenantListRecord,
   type PlatformTenantOwnerInvitationSummary,
   PlatformTenantStore,
+  type UpdateTenantStatusInput,
   type UpsertTenantSubscriptionInput,
 } from './platform-tenant.store';
 import { PLATFORM_PERMISSIONS, PlatformTenantService } from './platform-tenant.service';
@@ -104,6 +106,120 @@ describe('PlatformTenantService', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('applies a tenant read-only override with override record, lifecycle event, and audit log', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+
+    try {
+      const { service, store, auditService } = createService();
+
+      store.tenantById = createTenantRecord({
+        status: 'active',
+      });
+
+      const response = await service.applyTenantReadOnlyOverride(
+        TENANT_ID,
+        {
+          reason: 'External billing review requires temporary read-only access.',
+          expires_at: '2026-07-10T00:00:00.000Z',
+        },
+        createPlatformSession([PLATFORM_PERMISSIONS.SUBSCRIPTIONS_UPDATE]),
+        {
+          ipAddress: '127.0.0.1',
+          userAgent: 'vitest',
+        },
+      );
+
+      expect(response.tenant).toMatchObject({
+        id: TENANT_ID,
+        status: 'read_only',
+      });
+
+      expect(store.updatedTenantStatuses[0]).toMatchObject({
+        tenantId: TENANT_ID,
+        status: 'read_only',
+        updatedAt: NOW,
+      });
+
+      expect(store.subscriptionOverrides[0]).toMatchObject({
+        tenantId: TENANT_ID,
+        overrideType: 'read_only',
+        previousValueJson: {
+          status: 'active',
+        },
+        newValueJson: {
+          status: 'read_only',
+          expires_at: '2026-07-10T00:00:00.000Z',
+        },
+        reason: 'External billing review requires temporary read-only access.',
+        expiresAt: new Date('2026-07-10T00:00:00.000Z'),
+        createdByPlatformAdminUserId: PLATFORM_ADMIN_USER_ID,
+      });
+
+      expect(store.lifecycleEvents[0]).toMatchObject({
+        tenantId: TENANT_ID,
+        fromStatus: 'active',
+        toStatus: 'read_only',
+        source: 'platform_admin',
+        reason: 'External billing review requires temporary read-only access.',
+      });
+
+      expect(auditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'platform.tenant_read_only_override.applied',
+          entityType: 'tenant',
+          entityId: TENANT_ID,
+          beforeJson: {
+            status: 'active',
+          },
+          afterJson: {
+            status: 'read_only',
+            expires_at: '2026-07-10T00:00:00.000Z',
+          },
+          metadataJson: {
+            override_type: 'read_only',
+          },
+          reason: 'External billing review requires temporary read-only access.',
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('requires a reason before applying a tenant read-only override', async () => {
+    const { service, store } = createService();
+
+    store.tenantById = createTenantRecord({
+      status: 'active',
+    });
+
+    await expect(
+      service.applyTenantReadOnlyOverride(
+        TENANT_ID,
+        {
+          reason: '   ',
+        },
+        createPlatformSession([PLATFORM_PERMISSIONS.SUBSCRIPTIONS_UPDATE]),
+        {
+          ipAddress: null,
+          userAgent: null,
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.VALIDATION_FAILED,
+      details: [
+        expect.objectContaining({
+          field: 'reason',
+          code: 'required',
+        }),
+      ],
+    });
+
+    expect(store.updatedTenantStatuses).toEqual([]);
+    expect(store.subscriptionOverrides).toEqual([]);
   });
 
   it('requires a reason before updating tenant subscription', async () => {
@@ -630,6 +746,8 @@ class FakePlatformTenantStore extends PlatformTenantStore {
   readonly createdTenants: CreateTenantInput[] = [];
   readonly createdSubscriptions: CreateTenantSubscriptionInput[] = [];
   readonly updatedSubscriptions: UpsertTenantSubscriptionInput[] = [];
+  readonly updatedTenantStatuses: UpdateTenantStatusInput[] = [];
+  readonly subscriptionOverrides: CreateSubscriptionOverrideInput[] = [];
   readonly createdInvitations: CreateOwnerInvitationInput[] = [];
   readonly lifecycleEvents: CreateTenantLifecycleEventInput[] = [];
 
@@ -692,6 +810,25 @@ class FakePlatformTenantStore extends PlatformTenantStore {
       updatedByPlatformAdminUserId: input.updatedByPlatformAdminUserId,
       updatedAt: input.updatedAt,
     });
+  }
+
+  async updateTenantStatus(input: UpdateTenantStatusInput): Promise<PlatformTenantDetailRecord> {
+    this.updatedTenantStatuses.push(input);
+
+    const currentTenant = this.tenantById ?? createTenantRecord();
+
+    this.tenantById = createTenantRecord({
+      ...currentTenant,
+      status: input.status,
+      updatedAt: input.updatedAt,
+      lockVersion: currentTenant.lockVersion + 1,
+    });
+
+    return this.tenantById;
+  }
+
+  async createSubscriptionOverride(input: CreateSubscriptionOverrideInput): Promise<void> {
+    this.subscriptionOverrides.push(input);
   }
 
   async createOwnerInvitation(

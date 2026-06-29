@@ -19,6 +19,8 @@ import { CurrentAuthSessionResponse } from '../../auth/api/current-auth-session-
 import type { AuthSessionResponseData } from '../../auth/contracts';
 import { PlatformTenantService } from '../application/platform-tenant.service';
 import {
+  type ApplyPlatformTenantReadOnlyOverrideRequest,
+  applyPlatformTenantReadOnlyOverrideRequestSchema,
   type CreatePlatformTenantRequest,
   createPlatformTenantRequestSchema,
   type ListPlatformTenantsQuery,
@@ -140,6 +142,68 @@ export class PlatformTenantController {
 
     try {
       const response = await this.platformTenantService.updateTenantSubscription(
+        tenantId,
+        request,
+        session,
+        {
+          ipAddress: ipAddress ?? null,
+          userAgent: userAgent ?? null,
+        },
+      );
+
+      await this.idempotencyService.completeSucceeded({
+        id: idempotency.record.id,
+        responseStatusCode: 200,
+        responseBodyJson: response,
+        now: new Date(),
+      });
+
+      return response;
+    } catch (error) {
+      await this.idempotencyService.completeFailed({
+        id: idempotency.record.id,
+        now: new Date(),
+      });
+
+      throw error;
+    }
+  }
+
+  @Post('tenants/:tenantId/read-only')
+  @HttpCode(200)
+  async applyTenantReadOnlyOverride(
+    @Param('tenantId') tenantId: string,
+    @Body(new ZodValidationPipe(applyPlatformTenantReadOnlyOverrideRequestSchema))
+    request: ApplyPlatformTenantReadOnlyOverrideRequest,
+    @CurrentAuthSessionResponse() session: AuthSessionResponseData,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Headers('user-agent') userAgent: string | undefined,
+    @Ip() ipAddress: string | undefined,
+  ): ReturnType<PlatformTenantService['applyTenantReadOnlyOverride']> {
+    const now = new Date();
+    const requestIntent = {
+      tenant_id: tenantId,
+      ...request,
+    };
+
+    const idempotency = await this.idempotencyService.begin({
+      tenantId: null,
+      userId: session.user.id,
+      endpoint: 'POST /api/v1/platform/tenants/{tenant_id}/read-only',
+      idempotencyKey,
+      requestIntent,
+      now,
+      expiresAt: this.platformTenantService.getIdempotencyExpiresAt(now),
+    });
+
+    if (idempotency.type === 'replayed') {
+      return idempotency.responseBodyJson as Awaited<
+        ReturnType<PlatformTenantService['applyTenantReadOnlyOverride']>
+      >;
+    }
+
+    try {
+      const response = await this.platformTenantService.applyTenantReadOnlyOverride(
         tenantId,
         request,
         session,
