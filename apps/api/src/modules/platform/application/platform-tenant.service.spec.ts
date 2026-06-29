@@ -333,6 +333,285 @@ describe('PlatformTenantService', () => {
     expect(store.updatedSubscriptions).toEqual([]);
   });
 
+  it('denies queueTenantExport without platform.tenants.update', async () => {
+    const { service, store } = createService();
+
+    store.tenantById = createTenantRecord({
+      status: 'active',
+    });
+
+    await expect(
+      service.queueTenantExport(
+        TENANT_ID,
+        {
+          reason: 'Compliance export request.',
+        },
+        createPlatformSession([PLATFORM_PERMISSIONS.TENANTS_READ]),
+        {
+          ipAddress: null,
+          userAgent: null,
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.FORBIDDEN,
+      details: [
+        {
+          required_permission: PLATFORM_PERMISSIONS.TENANTS_UPDATE,
+        },
+      ],
+    });
+
+    expect(store.queuedTenantExportJobs).toEqual([]);
+  });
+
+  it('returns not_found when queueTenantExport tenant does not exist', async () => {
+    const { service, store } = createService();
+
+    await expect(
+      service.queueTenantExport(
+        TENANT_ID,
+        {
+          reason: 'Compliance export request.',
+        },
+        createPlatformSession([PLATFORM_PERMISSIONS.TENANTS_UPDATE]),
+        {
+          ipAddress: null,
+          userAgent: null,
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.RESOURCE_NOT_FOUND,
+    });
+
+    expect(store.queuedTenantExportJobs).toEqual([]);
+  });
+
+  it('blocks queueTenantExport when tenant status is deleted', async () => {
+    const { service, store } = createService();
+
+    store.tenantById = createTenantRecord({
+      status: 'deleted',
+    });
+
+    await expect(
+      service.queueTenantExport(
+        TENANT_ID,
+        {
+          reason: 'Compliance export request.',
+        },
+        createPlatformSession([PLATFORM_PERMISSIONS.TENANTS_UPDATE]),
+        {
+          ipAddress: null,
+          userAgent: null,
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.WORKFLOW_TRANSITION_BLOCKED,
+    });
+
+    expect(store.queuedTenantExportJobs).toEqual([]);
+  });
+
+  it('blocks queueTenantExport when tenant status is pending_deletion', async () => {
+    const { service, store } = createService();
+
+    store.tenantById = createTenantRecord({
+      status: 'pending_deletion',
+    });
+
+    await expect(
+      service.queueTenantExport(
+        TENANT_ID,
+        {
+          reason: 'Compliance export request.',
+        },
+        createPlatformSession([PLATFORM_PERMISSIONS.TENANTS_UPDATE]),
+        {
+          ipAddress: null,
+          userAgent: null,
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.WORKFLOW_TRANSITION_BLOCKED,
+    });
+
+    expect(store.queuedTenantExportJobs).toEqual([]);
+  });
+
+  it('queues a tenant_export.generate background job for a valid tenant', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+
+    try {
+      const { service, store } = createService();
+
+      store.tenantById = createTenantRecord({
+        status: 'active',
+      });
+
+      const response = await service.queueTenantExport(
+        TENANT_ID,
+        {
+          reason: 'Compliance export request.',
+        },
+        createPlatformSession([PLATFORM_PERMISSIONS.TENANTS_UPDATE]),
+        {
+          ipAddress: '127.0.0.1',
+          userAgent: 'vitest',
+        },
+      );
+
+      expect(response.export_job).toMatchObject({
+        tenant_id: TENANT_ID,
+        job_type: 'tenant_export.generate',
+        status: 'queued',
+        requested_at: NOW.toISOString(),
+        run_after: NOW.toISOString(),
+        include_attachments: false,
+      });
+
+      expect(store.queuedTenantExportJobs).toHaveLength(1);
+      expect(store.queuedTenantExportJobs[0]).toMatchObject({
+        tenantId: TENANT_ID,
+        runAfter: NOW,
+        maxAttempts: 3,
+        correlationId: null,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('stores tenant export request details in payload_json', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+
+    try {
+      const { service, store } = createService();
+
+      store.tenantById = createTenantRecord({
+        status: 'active',
+      });
+
+      await service.queueTenantExport(
+        TENANT_ID,
+        {
+          reason: 'Compliance export request.',
+        },
+        createPlatformSession([PLATFORM_PERMISSIONS.TENANTS_UPDATE]),
+        {
+          ipAddress: '127.0.0.1',
+          userAgent: 'vitest',
+        },
+      );
+
+      expect(store.queuedTenantExportJobs[0]?.payloadJson).toEqual({
+        tenant_id: TENANT_ID,
+        requested_by_platform_admin_user_id: PLATFORM_ADMIN_USER_ID,
+        reason: 'Compliance export request.',
+        include_attachments: false,
+        requested_at: NOW.toISOString(),
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('writes audit log action platform.tenant_export.queued', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+
+    try {
+      const { service, store, auditService } = createService();
+
+      store.tenantById = createTenantRecord({
+        status: 'active',
+      });
+
+      const response = await service.queueTenantExport(
+        TENANT_ID,
+        {
+          reason: 'Compliance export request.',
+        },
+        createPlatformSession([PLATFORM_PERMISSIONS.TENANTS_UPDATE]),
+        {
+          ipAddress: '127.0.0.1',
+          userAgent: 'vitest',
+        },
+      );
+
+      expect(auditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tenantId: TENANT_ID,
+          actorUserId: PLATFORM_ADMIN_USER_ID,
+          actorType: 'platform_admin',
+          action: 'platform.tenant_export.queued',
+          entityType: 'background_job',
+          entityId: response.export_job.id,
+          afterJson: expect.objectContaining({
+            tenant_id: TENANT_ID,
+            job_id: response.export_job.id,
+            job_type: 'tenant_export.generate',
+            status: 'queued',
+            include_attachments: false,
+            run_after: NOW.toISOString(),
+            requested_at: NOW.toISOString(),
+          }),
+          metadataJson: {
+            tenant_status: 'active',
+            tenant_business_name: 'Moto Garage',
+          },
+          reason: 'Compliance export request.',
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('preserves include_attachments true in the response and queued job payload', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+
+    try {
+      const { service, store } = createService();
+
+      store.tenantById = createTenantRecord({
+        status: 'active',
+      });
+
+      const response = await service.queueTenantExport(
+        TENANT_ID,
+        {
+          reason: 'Compliance export request with attachments.',
+          include_attachments: true,
+        },
+        createPlatformSession([PLATFORM_PERMISSIONS.TENANTS_UPDATE]),
+        {
+          ipAddress: '127.0.0.1',
+          userAgent: 'vitest',
+        },
+      );
+
+      expect(response.export_job).toMatchObject({
+        tenant_id: TENANT_ID,
+        job_type: 'tenant_export.generate',
+        status: 'queued',
+        include_attachments: true,
+      });
+
+      expect(store.queuedTenantExportJobs[0]?.payloadJson).toMatchObject({
+        tenant_id: TENANT_ID,
+        requested_by_platform_admin_user_id: PLATFORM_ADMIN_USER_ID,
+        reason: 'Compliance export request with attachments.',
+        include_attachments: true,
+        requested_at: NOW.toISOString(),
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('rejects subscription updates for missing tenants', async () => {
     const { service } = createService();
 
