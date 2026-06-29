@@ -1,5 +1,5 @@
 import { TenantPlannedRouteScreen } from '../../../src/features/app-shell/components/authenticated-shell.client';
 
-export default function CustomersPage() {
-  return <TenantPlannedRouteScreen route="customers" />;
+export default function JobOrdersPage() {
+  return <TenantPlannedRouteScreen route="job-orders" />;
 }

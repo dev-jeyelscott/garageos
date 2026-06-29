@@ -32,7 +32,12 @@ import {
 } from '../../auth/utils/resolve-auth-redirect';
 import { isApiClientError, type ApiClientError } from '../../../lib/api-envelope';
 
-type ProtectedRouteKind = 'platform' | 'tenant-dashboard' | 'tenant-onboarding' | 'tenant-status';
+type ProtectedRouteKind =
+  | 'platform'
+  | 'tenant-dashboard'
+  | 'tenant-operational'
+  | 'tenant-onboarding'
+  | 'tenant-status';
 
 type SessionLoadState =
   | {
@@ -52,6 +57,19 @@ interface ShellNavItem {
   readonly label: string;
   readonly href?: string;
   readonly disabledReason?: string;
+}
+
+type TenantPlannedRouteKey = 'job-orders' | 'customers' | 'inventory-stock-balances' | 'more';
+
+interface TenantPlannedRouteConfig {
+  readonly title: string;
+  readonly eyebrow: string;
+  readonly description: string;
+  readonly routePath: string;
+  readonly primaryPermission: string | null;
+  readonly primaryPermissionLabel: string;
+  readonly plannedWorkflows: readonly string[];
+  readonly guardrails: readonly string[];
 }
 
 type PlatformSubscriptionStatusSource = 'system_computed' | 'platform_override';
@@ -345,21 +363,116 @@ const tenantNavItems: readonly ShellNavItem[] = [
   },
   {
     label: 'Job Orders',
-    disabledReason: 'Tenant operational routes come after shell foundation.',
+    href: '/job-orders',
   },
   {
     label: 'Customers',
-    disabledReason: 'Tenant operational routes come after shell foundation.',
+    href: '/customers',
   },
   {
     label: 'Inventory',
-    disabledReason: 'Tenant operational routes come after shell foundation.',
+    href: '/inventory/stock-balances',
   },
   {
     label: 'More',
-    disabledReason: 'Secondary tenant menu comes after shell foundation.',
+    href: '/more',
   },
 ];
+
+const tenantPlannedRouteConfigs: Record<TenantPlannedRouteKey, TenantPlannedRouteConfig> = {
+  'job-orders': {
+    title: 'Job Orders',
+    eyebrow: 'Service operations',
+    description:
+      'Protected route foundation for job order service workflows. Full job order lists, creation, status transitions, mechanic assignment, file attachments, inventory reservation, completion, cancellation, and release workflows remain disabled until their documented API slices are implemented.',
+    routePath: '/job-orders',
+    primaryPermission: 'job_orders.read',
+    primaryPermissionLabel: 'job_orders.read',
+    plannedWorkflows: [
+      'Job order list and search',
+      'Job order detail and status history',
+      'New job order intake',
+      'Mechanic assignment and work-session links',
+      'Part reservation and release actions',
+      'Completion, cancellation, release, and correction workflows',
+    ],
+    guardrails: [
+      'Do not create job orders from this scaffold.',
+      'Do not invent service metrics or queue counts.',
+      'Do not change status through freeform dropdowns.',
+      'Keep inventory-consuming actions disabled until FIFO reservation and consumption APIs are wired.',
+    ],
+  },
+  customers: {
+    title: 'Customers',
+    eyebrow: 'Customer records',
+    description:
+      'Protected route foundation for tenant-wide customer lookup and intake. Full customer list, create, detail, edit, merge, soft-delete, restore, motorcycle links, branch-filtered history, notes, files, and audit panels remain disabled until their documented API slices are implemented.',
+    routePath: '/customers',
+    primaryPermission: 'customers.read',
+    primaryPermissionLabel: 'customers.read',
+    plannedWorkflows: [
+      'Customer list and search',
+      'Customer detail with linked motorcycles',
+      'Create and edit customer records',
+      'Duplicate warning and merge review',
+      'Soft-delete and restore flows',
+      'Branch-filtered customer operational history',
+    ],
+    guardrails: [
+      'Do not create or update customer records from this scaffold.',
+      'Do not expose branch-specific histories without branch access checks.',
+      'Do not imply a customer portal or customer login.',
+      'Keep file upload disabled until the files module is wired.',
+    ],
+  },
+  'inventory-stock-balances': {
+    title: 'Stock Balances',
+    eyebrow: 'Inventory',
+    description:
+      'Protected route foundation for branch-aware inventory stock lookup. Full product search, stock balances, low-stock alerts, ledger history, FIFO layers, reservations, adjustments, transfers, receiving, and supplier-linked inventory workflows remain disabled until their documented API slices are implemented.',
+    routePath: '/inventory/stock-balances',
+    primaryPermission: 'inventory.read',
+    primaryPermissionLabel: 'inventory.read or products.read',
+    plannedWorkflows: [
+      'Branch-aware stock balance lookup',
+      'Product and SKU search',
+      'Low-stock alert list',
+      'Inventory ledger and stock movement history',
+      'FIFO layer and reservation visibility',
+      'Adjustment, transfer, and receiving workflow entry points',
+    ],
+    guardrails: [
+      'Do not directly edit stock quantities.',
+      'Do not create inventory ledger entries from this scaffold.',
+      'Do not invent stock counts, costs, or low-stock metrics.',
+      'Keep stock-changing actions disabled until ledger/FIFO APIs are wired.',
+    ],
+  },
+  more: {
+    title: 'More',
+    eyebrow: 'Tenant menu',
+    description:
+      'Protected route foundation for secondary tenant modules. This screen should become the permission-aware entry point for invoices, payments, purchases, suppliers, reports, reminders, employees, roles, settings, audit logs, exports, background jobs, and offline-cache views as those documented slices are implemented.',
+    routePath: '/more',
+    primaryPermission: null,
+    primaryPermissionLabel: 'Permission varies by destination',
+    plannedWorkflows: [
+      'Invoices, payments, receipts, refunds, AR, and cashier workflows',
+      'Purchases, suppliers, supplier returns, AP, and supplier payment workflows',
+      'Reports, report exports, dashboard drilldowns, and branch comparison reports',
+      'Reminders, notifications, files, exports, audit logs, and background jobs',
+      'Employees, roles, permissions, branches, shop settings, and billing settings',
+      'Offline recent-record cache entry point',
+    ],
+    guardrails: [
+      'Do not add undocumented modules.',
+      'Do not add standalone retail POS, customer portal, payroll, full accounting, or 2FA links.',
+      'Do not enable destination links until their route scaffolds or real module screens exist.',
+      'Keep each destination permission-aware when the menu is expanded.',
+    ],
+  },
+};
 
 const platformTenantListPageSize = 50;
 
@@ -814,6 +927,127 @@ export function TenantDashboardScreen() {
             <p>{session.effective_permissions.length} effective permission(s)</p>
             <p className="mt-2 text-muted-foreground">
               Permission-aware navigation is a UX aid. Backend authorization remains authoritative.
+            </p>
+          </InfoBlock>
+        </CardContent>
+      </Card>
+    </AuthenticatedShell>
+  );
+}
+
+export function TenantPlannedRouteScreen({ route }: { readonly route: TenantPlannedRouteKey }) {
+  const sessionState = useProtectedSession('tenant-operational');
+
+  if (sessionState.status !== 'ready') {
+    return <SessionStateScreen state={sessionState} area="tenant" />;
+  }
+
+  const { session } = sessionState;
+  const config = tenantPlannedRouteConfigs[route];
+  const hasPrimaryPermission =
+    config.primaryPermission === null || hasEffectivePermission(session, config.primaryPermission);
+
+  return (
+    <AuthenticatedShell
+      area="tenant"
+      session={session}
+      title={config.title}
+      eyebrow={config.eyebrow}
+      description={config.description}
+      actions={
+        <>
+          <ButtonLink href="/dashboard" variant="secondary">
+            Back to dashboard
+          </ButtonLink>
+          <ButtonLink href="/auth/logout" variant="secondary">
+            Logout
+          </ButtonLink>
+        </>
+      }
+    >
+      <Alert>
+        <p className="text-sm font-bold">Route foundation only</p>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">
+          This protected screen confirms navigation, session guarding, tenant lifecycle banners,
+          branch context, and offline warnings. Operational writes and module-specific API calls
+          stay disabled until the matching backend/frontend slices are implemented.
+        </p>
+      </Alert>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <SummaryCard
+          title="Route"
+          value={config.routePath}
+          description="Navigation is enabled because this protected scaffold now exists."
+        />
+        <SummaryCard
+          title="Primary permission"
+          value={hasPrimaryPermission ? 'Present in session' : 'Not present in session'}
+          description={config.primaryPermissionLabel}
+        />
+        <SummaryCard
+          title="Write actions"
+          value="Disabled"
+          description="No create, edit, approval, upload, payment, or stock-changing action is wired here."
+        />
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Planned module coverage</CardTitle>
+          <CardDescription>
+            These entries describe the documented workflows this route will host later. They are not
+            active actions in this scaffold.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ul className="grid gap-3 text-sm text-muted-foreground md:grid-cols-2">
+            {config.plannedWorkflows.map((workflow) => (
+              <ChecklistItem key={workflow} label={workflow} />
+            ))}
+          </ul>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Implementation guardrails</CardTitle>
+          <CardDescription>
+            Keep this screen safe while the real module APIs and workflows are not wired.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 md:grid-cols-2">
+          {config.guardrails.map((guardrail) => (
+            <InfoBlock key={guardrail} title="Guardrail">
+              <p>{guardrail}</p>
+            </InfoBlock>
+          ))}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Session context</CardTitle>
+          <CardDescription>
+            The shell already exposes tenant status, branch context, and offline state. This card
+            keeps route scaffolds transparent without inventing operational data.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 md:grid-cols-2">
+          <InfoBlock title="Tenant access">
+            <p>Tenant status: {formatTenantStatus(session.tenant?.status)}</p>
+            <p className="mt-2">
+              {session.access.can_access_operational_modules
+                ? 'Operational modules may be viewed according to permissions and branch access.'
+                : 'Operational modules are currently blocked by tenant or session state.'}
+            </p>
+          </InfoBlock>
+
+          <InfoBlock title="Branch access">
+            <p>{getBranchContextLabel(session)}</p>
+            <p className="mt-2">
+              Branch-specific records must stay scoped by assigned branch access or tenant-wide
+              branch access.
             </p>
           </InfoBlock>
         </CardContent>
@@ -2080,7 +2314,7 @@ function resolveRouteAccess(
     return kind === 'tenant-status' ? null : '/account/status';
   }
 
-  if (kind === 'tenant-dashboard') {
+  if (kind === 'tenant-dashboard' || kind === 'tenant-operational') {
     if (tenantStatus === 'pending_setup') {
       return '/onboarding';
     }
