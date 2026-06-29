@@ -23,6 +23,7 @@ import { RolesModule } from './modules/roles/role.module';
 import { ShopModule } from './modules/shop/shop.module';
 import { AuditModule } from './shared/audit/audit.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
+import { BackgroundJobsModule } from './shared/background-jobs/background-jobs.module';
 import { IdempotencyModule } from './shared/idempotency/idempotency.module';
 import { RequestContextMiddleware } from './shared/observability/request-context.middleware';
 
@@ -56,6 +57,7 @@ export class HealthController {
     ProductCategoriesModule,
     AuditModule,
     IdempotencyModule,
+    BackgroundJobsModule,
   ],
   controllers: [HealthController],
 })
