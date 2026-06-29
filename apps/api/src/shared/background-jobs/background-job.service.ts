@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 
 import { GarageOsApiException } from '../api/api-exception';
+import type { DatabaseQueryClient } from '../database/database-client';
 import {
   API_TRANSACTION_RUNNER,
   type DatabaseTransactionRunner,
@@ -55,6 +56,15 @@ export class BackgroundJobService {
   ) {}
 
   async enqueue(input: EnqueueBackgroundJobInput): Promise<BackgroundJobRecord> {
+    return this.transactionRunner.runInTransaction(async (transaction) =>
+      this.enqueueInTransaction(input, transaction),
+    );
+  }
+
+  async enqueueInTransaction(
+    input: EnqueueBackgroundJobInput,
+    transaction: DatabaseQueryClient,
+  ): Promise<BackgroundJobRecord> {
     const now = input.now ?? new Date();
     const jobType = normalizeRequiredText(input.jobType, 'job_type', 'Job type is required.');
     const maxAttempts = normalizePositiveInteger(
@@ -63,19 +73,17 @@ export class BackgroundJobService {
       'Max attempts must be a positive integer.',
     );
 
-    return this.transactionRunner.runInTransaction(async (transaction) =>
-      this.store.createQueued(
-        {
-          id: randomUUID(),
-          tenantId: input.tenantId ?? null,
-          jobType,
-          payloadJson: input.payloadJson ?? {},
-          runAfter: input.runAfter ?? now,
-          maxAttempts,
-          correlationId: input.correlationId ?? null,
-        },
-        transaction,
-      ),
+    return this.store.createQueued(
+      {
+        id: randomUUID(),
+        tenantId: input.tenantId ?? null,
+        jobType,
+        payloadJson: input.payloadJson ?? {},
+        runAfter: input.runAfter ?? now,
+        maxAttempts,
+        correlationId: input.correlationId ?? null,
+      },
+      transaction,
     );
   }
 

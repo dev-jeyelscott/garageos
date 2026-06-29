@@ -27,8 +27,6 @@ import {
   type CreatePlatformSupportAccessSessionInput,
   type PlatformSupportAccessMode,
   type PlatformSupportAccessSessionSummary,
-  type PlatformTenantExportJobSummary,
-  type QueueTenantExportJobInput,
   type PlatformTenantDeletionJobSummary,
   type QueueTenantDeletionJobInput,
   type EndPlatformSupportAccessSessionInput,
@@ -98,19 +96,6 @@ interface PlatformSupportAccessSessionRow extends DatabaseRow {
   readonly started_at: Date | string;
   readonly expires_at: Date | string;
   readonly ended_at: Date | string | null;
-}
-
-interface TenantExportJobRow extends DatabaseRow {
-  readonly id: string;
-  readonly tenant_id: string | null;
-  readonly job_type: string;
-  readonly status: string;
-  readonly payload_json: unknown;
-  readonly run_after: Date | string;
-  readonly attempt_count: number;
-  readonly max_attempts: number;
-  readonly created_at: Date | string;
-  readonly correlation_id: string | null;
 }
 
 interface TenantDeletionJobRow extends DatabaseRow {
@@ -617,48 +602,6 @@ export class PostgresPlatformTenantRepository extends PlatformTenantStore {
     );
   }
 
-  async queueTenantExportJob(
-    input: QueueTenantExportJobInput,
-    client: DatabaseQueryClient,
-  ): Promise<PlatformTenantExportJobSummary> {
-    const result = await client.query<TenantExportJobRow>(
-      `
-        insert into background_jobs (
-          id,
-          tenant_id,
-          job_type,
-          status,
-          payload_json,
-          run_after,
-          max_attempts,
-          correlation_id
-        )
-        values ($1, $2, 'tenant_export.generate', 'queued', $3::jsonb, $4, $5, $6)
-        returning
-          id,
-          tenant_id,
-          job_type,
-          status,
-          payload_json,
-          run_after,
-          attempt_count,
-          max_attempts,
-          created_at,
-          correlation_id
-      `,
-      [
-        input.id,
-        input.tenantId,
-        JSON.stringify(input.payloadJson),
-        input.runAfter,
-        input.maxAttempts,
-        input.correlationId,
-      ],
-    );
-
-    return mapTenantExportJobRow(getRequiredRow(result, 'queue tenant export job'));
-  }
-
   async findActiveTenantDeletionJobByTenantId(
     tenantId: string,
     client: DatabaseQueryClient = this.database,
@@ -1035,21 +978,6 @@ function mapPlatformSupportAccessSessionRow(
     startedAt: toDate(row.started_at),
     expiresAt: toDate(row.expires_at),
     endedAt: toNullableDate(row.ended_at),
-  };
-}
-
-function mapTenantExportJobRow(row: TenantExportJobRow): PlatformTenantExportJobSummary {
-  return {
-    id: row.id,
-    tenantId: row.tenant_id,
-    jobType: row.job_type,
-    status: row.status,
-    payloadJson: normalizeJsonObject(row.payload_json),
-    runAfter: toDate(row.run_after),
-    attemptCount: Number(row.attempt_count),
-    maxAttempts: Number(row.max_attempts),
-    createdAt: toDate(row.created_at),
-    correlationId: row.correlation_id,
   };
 }
 

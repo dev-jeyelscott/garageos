@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 
 import { AuditModule } from '../../shared/audit/audit.module';
+import { BackgroundJobsModule } from '../../shared/background-jobs/background-jobs.module';
 import { DatabaseModule } from '../../shared/database/database.module';
 import { IdempotencyModule } from '../../shared/idempotency/idempotency.module';
 import { AuthModule } from '../auth/auth.module';
@@ -11,7 +12,7 @@ import { TenantLifecycleEvaluationService } from './application/tenant-lifecycle
 import { PLATFORM_TENANT_PROVIDERS } from './platform-tenant.providers';
 
 @Module({
-  imports: [AuthModule, AuditModule, DatabaseModule, IdempotencyModule],
+  imports: [AuthModule, AuditModule, BackgroundJobsModule, DatabaseModule, IdempotencyModule],
   controllers: [PlatformTenantController],
   providers: [
     PlatformTenantService,

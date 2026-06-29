@@ -80,19 +80,6 @@ export interface PlatformSupportAccessSessionSummary {
   readonly endedAt: Date | null;
 }
 
-export interface PlatformTenantExportJobSummary {
-  readonly id: string;
-  readonly tenantId: string | null;
-  readonly jobType: string;
-  readonly status: string;
-  readonly payloadJson: Record<string, unknown>;
-  readonly runAfter: Date;
-  readonly attemptCount: number;
-  readonly maxAttempts: number;
-  readonly createdAt: Date;
-  readonly correlationId: string | null;
-}
-
 export interface PlatformTenantDeletionJobSummary {
   readonly id: string;
   readonly tenantId: string;
@@ -203,15 +190,6 @@ export interface EndPlatformSupportAccessSessionInput {
   readonly endedAt: Date;
 }
 
-export interface QueueTenantExportJobInput {
-  readonly id: string;
-  readonly tenantId: string;
-  readonly payloadJson: Record<string, unknown>;
-  readonly runAfter: Date;
-  readonly maxAttempts: number;
-  readonly correlationId: string | null;
-}
-
 export interface QueueTenantDeletionJobInput {
   readonly id: string;
   readonly tenantId: string;
@@ -313,11 +291,6 @@ export abstract class PlatformTenantStore {
     input: EndPlatformSupportAccessSessionInput,
     client: DatabaseQueryClient,
   ): Promise<PlatformSupportAccessSessionSummary>;
-
-  abstract queueTenantExportJob(
-    input: QueueTenantExportJobInput,
-    client: DatabaseQueryClient,
-  ): Promise<PlatformTenantExportJobSummary>;
 
   abstract findActiveTenantDeletionJobByTenantId(
     tenantId: string,

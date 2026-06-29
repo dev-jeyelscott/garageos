@@ -2,6 +2,11 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { API_ERROR_CODES } from '../../../shared/api/api-error-code';
 import { GarageOsApiException } from '../../../shared/api/api-exception';
+import type { BackgroundJobRecord } from '../../../shared/background-jobs/background-job.store';
+import type {
+  BackgroundJobService,
+  EnqueueBackgroundJobInput,
+} from '../../../shared/background-jobs/background-job.service';
 import type { AuditLogRecord } from '../../../shared/audit/audit-log.store';
 import type { AuditService } from '../../../shared/audit/audit.service';
 import type {
@@ -31,8 +36,6 @@ import {
   type UpsertTenantSubscriptionInput,
   type CreatePlatformSupportAccessSessionInput,
   type PlatformSupportAccessSessionSummary,
-  type PlatformTenantExportJobSummary,
-  type QueueTenantExportJobInput,
   type PlatformTenantDeletionJobSummary,
   type QueueTenantDeletionJobInput,
   type ListPlatformAuditLogsInput,
@@ -199,7 +202,7 @@ describe('PlatformTenantService', () => {
   });
 
   it('requires a reason before applying a tenant read-only override', async () => {
-    const { service, store } = createService();
+    const { service, store, backgroundJobService } = createService();
 
     store.tenantById = createTenantRecord({
       status: 'active',
@@ -232,7 +235,7 @@ describe('PlatformTenantService', () => {
   });
 
   it('lists platform audit logs with filters, safe metadata, and cursor pagination', async () => {
-    const { service, store } = createService();
+    const { service, store, backgroundJobService } = createService();
 
     store.auditLogRows = [
       createPlatformAuditLogRecord({
@@ -302,7 +305,7 @@ describe('PlatformTenantService', () => {
   });
 
   it('requires platform.audit_logs.read before listing platform audit logs', async () => {
-    const { service, store } = createService();
+    const { service, store, backgroundJobService } = createService();
 
     store.auditLogRows = [createPlatformAuditLogRecord()];
 
@@ -473,7 +476,7 @@ describe('PlatformTenantService', () => {
   });
 
   it('blocks ending an already ended platform support access session', async () => {
-    const { service, store } = createService();
+    const { service, store, backgroundJobService } = createService();
     const supportAccessSessionId = '55555555-5555-4555-8555-555555555555';
 
     store.supportAccessSessionById = createSupportAccessSessionRecord({
@@ -501,7 +504,7 @@ describe('PlatformTenantService', () => {
   });
 
   it('returns not_found when ending a missing platform support access session', async () => {
-    const { service, store } = createService();
+    const { service, store, backgroundJobService } = createService();
 
     await expect(
       service.endSupportAccessSession(
@@ -523,7 +526,7 @@ describe('PlatformTenantService', () => {
   });
 
   it('requires platform.support_access before ending support access session', async () => {
-    const { service, store } = createService();
+    const { service, store, backgroundJobService } = createService();
     const supportAccessSessionId = '55555555-5555-4555-8555-555555555555';
 
     store.supportAccessSessionById = createSupportAccessSessionRecord({
@@ -555,7 +558,7 @@ describe('PlatformTenantService', () => {
   });
 
   it('requires a reason before ending support access session', async () => {
-    const { service, store } = createService();
+    const { service, store, backgroundJobService } = createService();
     const supportAccessSessionId = '55555555-5555-4555-8555-555555555555';
 
     store.supportAccessSessionById = createSupportAccessSessionRecord({
@@ -588,7 +591,7 @@ describe('PlatformTenantService', () => {
   });
 
   it('requires a reason before updating tenant subscription', async () => {
-    const { service, store } = createService();
+    const { service, store, backgroundJobService } = createService();
 
     store.tenantById = createTenantRecord({
       subscription: createSubscriptionRecord(),
@@ -623,7 +626,7 @@ describe('PlatformTenantService', () => {
   });
 
   it('denies queueTenantExport without platform.tenants.update', async () => {
-    const { service, store } = createService();
+    const { service, store, backgroundJobService } = createService();
 
     store.tenantById = createTenantRecord({
       status: 'active',
@@ -650,11 +653,11 @@ describe('PlatformTenantService', () => {
       ],
     });
 
-    expect(store.queuedTenantExportJobs).toEqual([]);
+    expect(backgroundJobService.enqueuedJobs).toEqual([]);
   });
 
   it('returns not_found when queueTenantExport tenant does not exist', async () => {
-    const { service, store } = createService();
+    const { service, backgroundJobService } = createService();
 
     await expect(
       service.queueTenantExport(
@@ -672,11 +675,11 @@ describe('PlatformTenantService', () => {
       code: API_ERROR_CODES.RESOURCE_NOT_FOUND,
     });
 
-    expect(store.queuedTenantExportJobs).toEqual([]);
+    expect(backgroundJobService.enqueuedJobs).toHaveLength(0);
   });
 
   it('blocks queueTenantExport when tenant status is deleted', async () => {
-    const { service, store } = createService();
+    const { service, store, backgroundJobService } = createService();
 
     store.tenantById = createTenantRecord({
       status: 'deleted',
@@ -698,11 +701,11 @@ describe('PlatformTenantService', () => {
       code: API_ERROR_CODES.WORKFLOW_TRANSITION_BLOCKED,
     });
 
-    expect(store.queuedTenantExportJobs).toEqual([]);
+    expect(backgroundJobService.enqueuedJobs).toHaveLength(0);
   });
 
   it('blocks queueTenantExport when tenant status is pending_deletion', async () => {
-    const { service, store } = createService();
+    const { service, store, backgroundJobService } = createService();
 
     store.tenantById = createTenantRecord({
       status: 'pending_deletion',
@@ -724,7 +727,7 @@ describe('PlatformTenantService', () => {
       code: API_ERROR_CODES.WORKFLOW_TRANSITION_BLOCKED,
     });
 
-    expect(store.queuedTenantExportJobs).toEqual([]);
+    expect(backgroundJobService.enqueuedJobs).toHaveLength(0);
   });
 
   it('queues a tenant_export.generate background job for a valid tenant', async () => {
@@ -732,7 +735,7 @@ describe('PlatformTenantService', () => {
     vi.setSystemTime(NOW);
 
     try {
-      const { service, store } = createService();
+      const { service, store, backgroundJobService } = createService();
 
       store.tenantById = createTenantRecord({
         status: 'active',
@@ -759,9 +762,10 @@ describe('PlatformTenantService', () => {
         include_attachments: false,
       });
 
-      expect(store.queuedTenantExportJobs).toHaveLength(1);
-      expect(store.queuedTenantExportJobs[0]).toMatchObject({
+      expect(backgroundJobService.enqueuedJobs).toHaveLength(1);
+      expect(backgroundJobService.enqueuedJobs[0]).toMatchObject({
         tenantId: TENANT_ID,
+        jobType: 'tenant_export.generate',
         runAfter: NOW,
         maxAttempts: 3,
         correlationId: null,
@@ -776,7 +780,7 @@ describe('PlatformTenantService', () => {
     vi.setSystemTime(NOW);
 
     try {
-      const { service, store } = createService();
+      const { service, store, backgroundJobService } = createService();
 
       store.tenantById = createTenantRecord({
         status: 'active',
@@ -794,7 +798,7 @@ describe('PlatformTenantService', () => {
         },
       );
 
-      expect(store.queuedTenantExportJobs[0]?.payloadJson).toEqual({
+      expect(backgroundJobService.enqueuedJobs[0]?.payloadJson).toEqual({
         tenant_id: TENANT_ID,
         requested_by_platform_admin_user_id: PLATFORM_ADMIN_USER_ID,
         reason: 'Compliance export request.',
@@ -859,7 +863,7 @@ describe('PlatformTenantService', () => {
   });
 
   it('denies queueTenantDeletionJob without platform.tenants.update', async () => {
-    const { service, store } = createService();
+    const { service, store, backgroundJobService } = createService();
 
     store.tenantById = createTenantRecord({
       status: 'pending_deletion',
@@ -894,7 +898,7 @@ describe('PlatformTenantService', () => {
     const blockedStatuses = ['active', 'grace_period', 'read_only', 'suspended'] as const;
 
     for (const status of blockedStatuses) {
-      const { service, store } = createService();
+      const { service, store, backgroundJobService } = createService();
 
       store.tenantById = createTenantRecord({
         status,
@@ -921,7 +925,7 @@ describe('PlatformTenantService', () => {
   });
 
   it('blocks queueTenantDeletionJob when tenant status is deleted', async () => {
-    const { service, store } = createService();
+    const { service, store, backgroundJobService } = createService();
 
     store.tenantById = createTenantRecord({
       status: 'deleted',
@@ -947,7 +951,7 @@ describe('PlatformTenantService', () => {
   });
 
   it('blocks queueTenantDeletionJob when pending_deletion tenant has no scheduled deletion date', async () => {
-    const { service, store } = createService();
+    const { service, store, backgroundJobService } = createService();
 
     store.tenantById = createTenantRecord({
       status: 'pending_deletion',
@@ -974,7 +978,7 @@ describe('PlatformTenantService', () => {
   });
 
   it('blocks duplicate active tenant deletion jobs', async () => {
-    const { service, store } = createService();
+    const { service, store, backgroundJobService } = createService();
 
     store.tenantById = createTenantRecord({
       status: 'pending_deletion',
@@ -1075,7 +1079,7 @@ describe('PlatformTenantService', () => {
     vi.setSystemTime(NOW);
 
     try {
-      const { service, store } = createService();
+      const { service, store, backgroundJobService } = createService();
 
       store.tenantById = createTenantRecord({
         status: 'active',
@@ -1101,7 +1105,7 @@ describe('PlatformTenantService', () => {
         include_attachments: true,
       });
 
-      expect(store.queuedTenantExportJobs[0]?.payloadJson).toMatchObject({
+      expect(backgroundJobService.enqueuedJobs[0]?.payloadJson).toMatchObject({
         tenant_id: TENANT_ID,
         requested_by_platform_admin_user_id: PLATFORM_ADMIN_USER_ID,
         reason: 'Compliance export request with attachments.',
@@ -1180,7 +1184,7 @@ describe('PlatformTenantService', () => {
   });
 
   it('lists tenants with API-safe pagination metadata', async () => {
-    const { service, store } = createService();
+    const { service, store, backgroundJobService } = createService();
     store.listRows = [
       createTenantRecord({
         id: '55555555-5555-4555-8555-555555555555',
@@ -1339,7 +1343,7 @@ describe('PlatformTenantService', () => {
   });
 
   it('blocks duplicate approval when the approval reason is blank', async () => {
-    const { service, store } = createService();
+    const { service, store, backgroundJobService } = createService();
     store.duplicate = createTenantRecord({
       id: '99999999-9999-4999-8999-999999999999',
       businessName: 'Moto Garage',
@@ -1372,7 +1376,7 @@ describe('PlatformTenantService', () => {
   });
 
   it('requires an active subscription plan', async () => {
-    const { service, store } = createService();
+    const { service, store, backgroundJobService } = createService();
     store.plan = null;
 
     await expect(
@@ -1425,9 +1429,11 @@ describe('PlatformTenantService', () => {
 function createService(): {
   readonly service: PlatformTenantService;
   readonly store: FakePlatformTenantStore;
+  readonly backgroundJobService: FakeBackgroundJobService;
   readonly auditService: AuditService;
 } {
   const store = new FakePlatformTenantStore();
+  const backgroundJobService = new FakeBackgroundJobService();
   const auditService = {
     record: vi.fn(
       async (input: unknown): Promise<AuditLogRecord> => ({
@@ -1461,12 +1467,14 @@ function createService(): {
   return {
     service: new PlatformTenantService(
       store,
+      backgroundJobService as unknown as BackgroundJobService,
       new FakeTransactionRunner(),
       auditService,
       new SecureTokenService(),
       new TokenHashingService(),
     ),
     store,
+    backgroundJobService,
     auditService,
   };
 }
@@ -1638,6 +1646,49 @@ class FakeTransactionRunner implements DatabaseTransactionRunner {
   }
 }
 
+class FakeBackgroundJobService {
+  readonly enqueuedJobs: EnqueueBackgroundJobInput[] = [];
+
+  async enqueueInTransaction(input: EnqueueBackgroundJobInput): Promise<BackgroundJobRecord> {
+    this.enqueuedJobs.push(input);
+
+    return createBackgroundJobRecord({
+      tenantId: input.tenantId ?? null,
+      jobType: input.jobType,
+      payloadJson: input.payloadJson ?? {},
+      runAfter: input.runAfter ?? NOW,
+      maxAttempts: input.maxAttempts ?? 3,
+      correlationId: input.correlationId ?? null,
+      createdAt: input.now ?? input.runAfter ?? NOW,
+    });
+  }
+}
+
+function createBackgroundJobRecord(
+  overrides: Partial<BackgroundJobRecord> = {},
+): BackgroundJobRecord {
+  const createdAt = overrides.createdAt ?? NOW;
+
+  return {
+    id: overrides.id ?? '99999999-9999-4999-8999-999999999999',
+    tenantId: overrides.tenantId ?? TENANT_ID,
+    jobType: overrides.jobType ?? 'tenant_export.generate',
+    status: overrides.status ?? 'queued',
+    payloadJson: overrides.payloadJson ?? {},
+    runAfter: overrides.runAfter ?? NOW,
+    attemptCount: overrides.attemptCount ?? 0,
+    maxAttempts: overrides.maxAttempts ?? 3,
+    lockedBy: overrides.lockedBy ?? null,
+    lockedUntil: overrides.lockedUntil ?? null,
+    createdAt,
+    startedAt: overrides.startedAt ?? null,
+    completedAt: overrides.completedAt ?? null,
+    failedAt: overrides.failedAt ?? null,
+    lastError: overrides.lastError ?? null,
+    correlationId: overrides.correlationId ?? null,
+  };
+}
+
 class FakePlatformTenantStore extends PlatformTenantStore {
   listRows: PlatformTenantListRecord[] = [];
   plan: PlatformPlanSummary | null = {
@@ -1661,7 +1712,6 @@ class FakePlatformTenantStore extends PlatformTenantStore {
   readonly subscriptionOverrides: CreateSubscriptionOverrideInput[] = [];
   readonly supportAccessSessions: CreatePlatformSupportAccessSessionInput[] = [];
   readonly endedSupportAccessSessions: EndPlatformSupportAccessSessionInput[] = [];
-  readonly queuedTenantExportJobs: QueueTenantExportJobInput[] = [];
   readonly createdInvitations: CreateOwnerInvitationInput[] = [];
   readonly lifecycleEvents: CreateTenantLifecycleEventInput[] = [];
 
@@ -1787,25 +1837,6 @@ class FakePlatformTenantStore extends PlatformTenantStore {
     };
 
     return this.supportAccessSessionById;
-  }
-
-  async queueTenantExportJob(
-    input: QueueTenantExportJobInput,
-  ): Promise<PlatformTenantExportJobSummary> {
-    this.queuedTenantExportJobs.push(input);
-
-    return {
-      id: input.id,
-      tenantId: input.tenantId,
-      jobType: 'tenant_export.generate',
-      status: 'queued',
-      payloadJson: input.payloadJson,
-      runAfter: input.runAfter,
-      attemptCount: 0,
-      maxAttempts: input.maxAttempts,
-      createdAt: input.runAfter,
-      correlationId: input.correlationId,
-    };
   }
 
   async createOwnerInvitation(

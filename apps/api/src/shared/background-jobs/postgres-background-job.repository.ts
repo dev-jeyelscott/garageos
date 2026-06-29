@@ -112,15 +112,17 @@ export class PostgresBackgroundJobRepository extends BackgroundJobStore {
           select id
           from background_jobs
           where (
-              status = any($6::text[])
-              and run_after <= $1::timestamptz
-              and locked_by is null
-              and locked_until is null
-            )
-            or (
-              status = $7
-              and locked_until is not null
-              and locked_until <= $1::timestamptz
+              (
+                status = any($6::text[])
+                and run_after <= $1::timestamptz
+                and locked_by is null
+                and locked_until is null
+              )
+              or (
+                status = $7
+                and locked_until is not null
+                and locked_until <= $1::timestamptz
+              )
             )
             and ($5::text[] is null or job_type = any($5::text[]))
           order by run_after asc, created_at asc, id asc

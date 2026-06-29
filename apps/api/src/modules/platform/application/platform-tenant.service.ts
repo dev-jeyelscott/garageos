@@ -3,6 +3,8 @@ import { randomUUID } from 'node:crypto';
 
 import { GarageOsApiException } from '../../../shared/api/api-exception';
 import { AUDIT_ACTOR_TYPES, AuditService } from '../../../shared/audit/audit.service';
+import { BackgroundJobService } from '../../../shared/background-jobs/background-job.service';
+import type { BackgroundJobRecord } from '../../../shared/background-jobs/background-job.store';
 import {
   API_TRANSACTION_RUNNER,
   type DatabaseTransactionRunner,
@@ -28,7 +30,6 @@ import {
   type PlatformSubscriptionSummary,
   type PlatformSupportAccessSessionSummary,
   type PlatformTenantDetailRecord,
-  type PlatformTenantExportJobSummary,
   type PlatformTenantListRecord,
   type PlatformTenantOwnerInvitationSummary,
   type PlatformTenantStatus,
@@ -212,6 +213,8 @@ export class PlatformTenantService {
   constructor(
     @Inject(PlatformTenantStore)
     private readonly tenantStore: PlatformTenantStore,
+    @Inject(BackgroundJobService)
+    private readonly backgroundJobService: BackgroundJobService,
     @Inject(API_TRANSACTION_RUNNER)
     private readonly transactionRunner: DatabaseTransactionRunner,
     @Inject(AuditService)
@@ -748,7 +751,6 @@ export class PlatformTenantService {
     const includeAttachments = request.include_attachments === true;
     const platformAdminUserId = session.user.id;
     const now = new Date();
-    const exportJobId = randomUUID();
 
     return this.transactionRunner.runInTransaction(async (transaction) => {
       const tenant = await this.tenantStore.findTenantById(tenantId, transaction);
@@ -769,10 +771,10 @@ export class PlatformTenantService {
         );
       }
 
-      const exportJob = await this.tenantStore.queueTenantExportJob(
+      const exportJob = await this.backgroundJobService.enqueueInTransaction(
         {
-          id: exportJobId,
           tenantId,
+          jobType: 'tenant_export.generate',
           payloadJson: {
             tenant_id: tenantId,
             requested_by_platform_admin_user_id: platformAdminUserId,
@@ -783,6 +785,7 @@ export class PlatformTenantService {
           runAfter: now,
           maxAttempts: 3,
           correlationId: null,
+          now,
         },
         transaction,
       );
@@ -1202,7 +1205,7 @@ export class PlatformTenantService {
 
   private async auditTenantExportQueued(input: {
     readonly tenant: PlatformTenantDetailRecord;
-    readonly exportJob: PlatformTenantExportJobSummary;
+    readonly exportJob: BackgroundJobRecord;
     readonly includeAttachments: boolean;
     readonly session: AuthSessionResponseData;
     readonly auditContext: PlatformRequestAuditContext;
@@ -1593,7 +1596,7 @@ function toSupportAccessSessionResponse(
 }
 
 function toTenantExportJobResponse(
-  exportJob: PlatformTenantExportJobSummary,
+  exportJob: BackgroundJobRecord,
   includeAttachments: boolean,
 ): PlatformTenantExportJobResponse {
   return {
