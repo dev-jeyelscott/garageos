@@ -155,6 +155,11 @@ interface PlatformTenantReadOnlyOverrideForm {
   readonly expires_at: string;
 }
 
+interface PlatformTenantSuspensionForm {
+  readonly reason: string;
+  readonly expires_at: string;
+}
+
 type PlatformTenantReadOnlyOverrideSubmitState =
   | {
       readonly status: 'idle';
@@ -174,7 +179,30 @@ type PlatformTenantReadOnlyOverrideSubmitState =
       readonly fieldErrors: Record<string, string>;
     };
 
+type PlatformTenantSuspensionSubmitState =
+  | {
+      readonly status: 'idle';
+    }
+  | {
+      readonly status: 'submitting';
+    }
+  | {
+      readonly status: 'success';
+      readonly message: string;
+    }
+  | {
+      readonly status: 'error';
+      readonly message: string;
+      readonly detail: string | null;
+      readonly code: string | null;
+      readonly fieldErrors: Record<string, string>;
+    };
+
 interface ApplyPlatformTenantReadOnlyOverrideResponse {
+  readonly tenant?: PlatformTenantDetail;
+}
+
+interface ApplyPlatformTenantSuspensionResponse {
   readonly tenant?: PlatformTenantDetail;
 }
 
@@ -316,6 +344,11 @@ const defaultPlatformTenantSubscriptionForm: PlatformTenantSubscriptionForm = {
 };
 
 const defaultPlatformTenantReadOnlyOverrideForm: PlatformTenantReadOnlyOverrideForm = {
+  reason: '',
+  expires_at: '',
+};
+
+const defaultPlatformTenantSuspensionForm: PlatformTenantSuspensionForm = {
   reason: '',
   expires_at: '',
 };
@@ -1075,6 +1108,14 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
       status: 'idle',
     });
 
+  const [tenantSuspensionForm, setTenantSuspensionForm] = useState<PlatformTenantSuspensionForm>(
+    defaultPlatformTenantSuspensionForm,
+  );
+  const [tenantSuspensionSubmitState, setTenantSuspensionSubmitState] =
+    useState<PlatformTenantSuspensionSubmitState>({
+      status: 'idle',
+    });
+
   const canReadTenantDetail =
     sessionState.status === 'ready' &&
     hasEffectivePermission(sessionState.session, 'platform.tenants.read');
@@ -1094,6 +1135,7 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
       setTenantDetailState({ status: 'loading' });
       setSubscriptionSubmitState({ status: 'idle' });
       setReadOnlyOverrideSubmitState({ status: 'idle' });
+      setTenantSuspensionSubmitState({ status: 'idle' });
 
       try {
         const tenant = await getPlatformTenantDetail(tenantId);
@@ -1303,6 +1345,79 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
     return <SessionStateScreen state={sessionState} area="platform" />;
   }
 
+  function updateTenantSuspensionFormField<K extends keyof PlatformTenantSuspensionForm>(
+    field: K,
+    value: PlatformTenantSuspensionForm[K],
+  ) {
+    setTenantSuspensionForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }
+
+  async function handleTenantSuspensionSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (
+      !canUpdateSubscription ||
+      tenantSuspensionSubmitState.status === 'submitting' ||
+      tenantDetailState.status !== 'loaded'
+    ) {
+      return;
+    }
+
+    const nextForm: PlatformTenantSuspensionForm = {
+      reason: tenantSuspensionForm.reason.trim(),
+      expires_at: tenantSuspensionForm.expires_at.trim(),
+    };
+
+    const fieldErrors: Record<string, string> = {};
+
+    if (nextForm.reason.length === 0) {
+      fieldErrors.reason = 'Reason is required.';
+    }
+
+    if (nextForm.expires_at.length > 0 && Number.isNaN(Date.parse(nextForm.expires_at))) {
+      fieldErrors.expires_at = 'Expiry must be a valid date and time.';
+    }
+
+    if (Object.keys(fieldErrors).length > 0) {
+      setTenantSuspensionSubmitState({
+        status: 'error',
+        message: 'Review the suspension fields.',
+        detail: null,
+        code: 'validation_failed',
+        fieldErrors,
+      });
+      return;
+    }
+
+    setTenantSuspensionSubmitState({ status: 'submitting' });
+
+    try {
+      await applyPlatformTenantSuspension(tenantId, nextForm);
+      const refreshedTenant = await getPlatformTenantDetail(tenantId);
+
+      setTenantDetailState({
+        status: 'loaded',
+        tenant: refreshedTenant,
+      });
+      setTenantSuspensionForm(defaultPlatformTenantSuspensionForm);
+      setTenantSuspensionSubmitState({
+        status: 'success',
+        message: 'Tenant suspension was applied and the tenant detail view was refreshed.',
+      });
+    } catch (error) {
+      setTenantSuspensionSubmitState({
+        status: 'error',
+        message: toSafeErrorMessage(error, 'Unable to apply tenant suspension.'),
+        detail: toSafeErrorDetail(error),
+        code: getApiErrorCode(error),
+        fieldErrors: getApiFieldErrors(error),
+      });
+    }
+  }
+
   const isLoadingTenant =
     tenantDetailState.status === 'idle' || tenantDetailState.status === 'loading';
   const subscriptionFieldErrors =
@@ -1310,6 +1425,9 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
 
   const readOnlyOverrideFieldErrors =
     readOnlyOverrideSubmitState.status === 'error' ? readOnlyOverrideSubmitState.fieldErrors : {};
+
+  const tenantSuspensionFieldErrors =
+    tenantSuspensionSubmitState.status === 'error' ? tenantSuspensionSubmitState.fieldErrors : {};
 
   return (
     <AuthenticatedShell
@@ -1330,6 +1448,9 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
               </ButtonLink>
               <ButtonLink href="#tenant-read-only-override" variant="secondary">
                 Apply read-only
+              </ButtonLink>
+              <ButtonLink href="#tenant-suspension" variant="destructive">
+                Suspend tenant
               </ButtonLink>
             </>
           ) : (
@@ -1358,6 +1479,18 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
               >
                 Apply read-only
               </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                disabled
+                title={
+                  canUpdateSubscription
+                    ? 'Tenant detail must load before suspension.'
+                    : 'Requires platform.subscriptions.update.'
+                }
+              >
+                Suspend tenant
+              </Button>
             </>
           )}
         </>
@@ -1374,7 +1507,7 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
           <Alert>
             <p className="text-sm leading-6">
               This screen reads platform tenant detail and now wires the documented subscription
-              management and read-only override workflows. Suspension, support access, exports,
+              management, read-only override, and suspension workflows. Support access, exports,
               deletion jobs, and platform audit logs remain separate workflow slices.
             </p>
           </Alert>
@@ -1531,6 +1664,16 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
                 fieldErrors={readOnlyOverrideFieldErrors}
                 onChange={updateReadOnlyOverrideFormField}
                 onSubmit={handleTenantReadOnlyOverrideSubmit}
+              />
+
+              <PlatformTenantSuspensionPanel
+                tenant={tenantDetailState.tenant}
+                canUpdateSubscription={canUpdateSubscription}
+                form={tenantSuspensionForm}
+                submitState={tenantSuspensionSubmitState}
+                fieldErrors={tenantSuspensionFieldErrors}
+                onChange={updateTenantSuspensionFormField}
+                onSubmit={handleTenantSuspensionSubmit}
               />
 
               <Card>
@@ -1949,6 +2092,29 @@ async function applyPlatformTenantReadOnlyOverride(
   );
 }
 
+async function applyPlatformTenantSuspension(
+  tenantId: string,
+  form: PlatformTenantSuspensionForm,
+): Promise<ApplyPlatformTenantSuspensionResponse> {
+  const expiresAt = toOptionalIsoTimestamp(form.expires_at);
+
+  return postAuthJson<ApplyPlatformTenantSuspensionResponse>(
+    `/platform/tenants/${encodeURIComponent(tenantId)}/suspend`,
+    {
+      reason: form.reason.trim(),
+      ...(expiresAt === null
+        ? {}
+        : {
+            expires_at: expiresAt,
+          }),
+    },
+    {
+      requiresAuth: true,
+      idempotencyKey: createIdempotencyKey('platform-tenant-suspension'),
+    },
+  );
+}
+
 function normalizePlatformTenantDetailPayload(
   data: unknown,
   meta: {
@@ -2343,6 +2509,144 @@ function PlatformTenantReadOnlyOverridePanel({
               disabled={!canUpdateSubscription || isSubmitting}
             >
               {isSubmitting ? 'Applying read-only override...' : 'Apply read-only override'}
+            </Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+function PlatformTenantSuspensionPanel({
+  tenant,
+  canUpdateSubscription,
+  form,
+  submitState,
+  fieldErrors,
+  onChange,
+  onSubmit,
+}: {
+  readonly tenant: PlatformTenantDetail;
+  readonly canUpdateSubscription: boolean;
+  readonly form: PlatformTenantSuspensionForm;
+  readonly submitState: PlatformTenantSuspensionSubmitState;
+  readonly fieldErrors: Record<string, string>;
+  readonly onChange: <K extends keyof PlatformTenantSuspensionForm>(
+    field: K,
+    value: PlatformTenantSuspensionForm[K],
+  ) => void;
+  readonly onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  const isSubmitting = submitState.status === 'submitting';
+
+  return (
+    <Card id="tenant-suspension">
+      <CardHeader>
+        <CardTitle>Tenant suspension</CardTitle>
+        <CardDescription>
+          Suspend tenant operational access through the documented platform override workflow. A
+          reason is required for auditability. Expiry is optional when the suspension is temporary.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-5">
+        <div className="grid gap-4 md:grid-cols-2">
+          <KeyValue label="Current tenant status" value={formatTenantStatus(tenant.status)} />
+          <KeyValue
+            label="Suspension effect"
+            value="Shop Owner renewal/export only; non-owner access blocked"
+          />
+        </div>
+
+        <Alert variant="destructive">
+          <p className="text-sm font-bold">High-impact tenant lifecycle action</p>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            Suspension blocks operational access for tenant users. The backend remains authoritative
+            for lifecycle enforcement and audit logging.
+          </p>
+        </Alert>
+
+        {!canUpdateSubscription ? (
+          <Alert>
+            <p className="text-sm font-bold">Tenant suspension unavailable</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              Your platform session can view tenant lifecycle data, but it cannot suspend tenants.
+              Required permission: <strong>platform.subscriptions.update</strong>.
+            </p>
+          </Alert>
+        ) : null}
+
+        {submitState.status === 'success' ? (
+          <Alert>
+            <p className="text-sm font-bold">Tenant suspended</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">{submitState.message}</p>
+          </Alert>
+        ) : null}
+
+        {submitState.status === 'error' ? (
+          <Alert variant="destructive">
+            <p className="text-sm font-bold">{submitState.message}</p>
+            {submitState.detail === null ? null : (
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">{submitState.detail}</p>
+            )}
+            {submitState.code === 'idempotency_conflict' ? (
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                The request was detected as a duplicate or retry conflict. Reload the tenant detail
+                before submitting again.
+              </p>
+            ) : null}
+          </Alert>
+        ) : null}
+
+        <form className="grid gap-5" onSubmit={onSubmit}>
+          <fieldset
+            className="grid gap-5 disabled:pointer-events-none disabled:opacity-70"
+            disabled={!canUpdateSubscription || isSubmitting}
+          >
+            <section className="grid gap-4 rounded-2xl border border-border bg-muted/40 p-4">
+              <div>
+                <h2 className="font-bold text-foreground">Suspension fields</h2>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                  This does not process payment, create support access, trigger export, or queue
+                  deletion. It only applies the documented suspension override.
+                </p>
+              </div>
+
+              <label className="grid gap-2">
+                <span className="text-sm font-bold text-foreground">Reason</span>
+                <textarea
+                  value={form.reason}
+                  onChange={(event) => onChange('reason', event.currentTarget.value)}
+                  required
+                  maxLength={500}
+                  rows={4}
+                  className="min-h-28 rounded-xl border border-input bg-background px-3 py-2 text-base text-foreground shadow-sm outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-60"
+                  placeholder="Example: External subscription non-payment confirmed after grace and read-only period."
+                />
+                <FieldError message={fieldErrors.reason} />
+              </label>
+
+              <label className="grid gap-2">
+                <span className="text-sm font-bold text-foreground">Optional expiry</span>
+                <Input
+                  type="datetime-local"
+                  value={form.expires_at}
+                  onChange={(event) => onChange('expires_at', event.currentTarget.value)}
+                />
+                <p className="text-sm leading-6 text-muted-foreground">
+                  Optional. When provided, the frontend sends it to the API as an ISO timestamp.
+                </p>
+                <FieldError message={fieldErrors.expires_at} />
+              </label>
+            </section>
+          </fieldset>
+
+          <div className="flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:justify-end">
+            <Button
+              type="submit"
+              variant="destructive"
+              disabled={!canUpdateSubscription || isSubmitting}
+            >
+              {isSubmitting ? 'Suspending tenant...' : 'Suspend tenant'}
             </Button>
           </div>
         </form>

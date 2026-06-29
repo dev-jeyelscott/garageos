@@ -89,6 +89,13 @@ export const applyPlatformTenantReadOnlyOverrideRequestSchema = z
   })
   .strict();
 
+export const applyPlatformTenantSuspensionRequestSchema = z
+  .object({
+    reason: z.string().trim().min(1).max(500),
+    expires_at: optionalTimestampSchema.optional(),
+  })
+  .strict();
+
 export type ListPlatformTenantsQuery = z.infer<typeof listPlatformTenantsQuerySchema>;
 
 export type CreatePlatformTenantRequest = z.infer<typeof createPlatformTenantRequestSchema>;
@@ -99,4 +106,8 @@ export type UpdatePlatformTenantSubscriptionRequest = z.infer<
 
 export type ApplyPlatformTenantReadOnlyOverrideRequest = z.infer<
   typeof applyPlatformTenantReadOnlyOverrideRequestSchema
+>;
+
+export type ApplyPlatformTenantSuspensionRequest = z.infer<
+  typeof applyPlatformTenantSuspensionRequestSchema
 >;

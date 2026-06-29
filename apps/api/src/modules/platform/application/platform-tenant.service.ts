@@ -13,6 +13,7 @@ import { TokenHashingService } from '../../auth/application/token-hashing.servic
 import type { AuthSessionResponseData } from '../../auth/contracts';
 import type {
   ApplyPlatformTenantReadOnlyOverrideRequest,
+  ApplyPlatformTenantSuspensionRequest,
   CreatePlatformTenantRequest,
   ListPlatformTenantsQuery,
   UpdatePlatformTenantSubscriptionRequest,
@@ -83,6 +84,10 @@ export interface UpdatePlatformTenantSubscriptionResponse {
 }
 
 export interface ApplyPlatformTenantReadOnlyOverrideResponse {
+  readonly tenant: PlatformTenantDetailResponse;
+}
+
+export interface ApplyPlatformTenantSuspensionResponse {
   readonly tenant: PlatformTenantDetailResponse;
 }
 
@@ -525,6 +530,99 @@ export class PlatformTenantService {
     });
   }
 
+  async applyTenantSuspension(
+    tenantId: string,
+    request: ApplyPlatformTenantSuspensionRequest,
+    session: AuthSessionResponseData,
+    auditContext: PlatformRequestAuditContext,
+  ): Promise<ApplyPlatformTenantSuspensionResponse> {
+    this.assertPlatformPermission(session, PLATFORM_PERMISSIONS.SUBSCRIPTIONS_UPDATE);
+
+    const reason = normalizeRequiredReason(request.reason, 'reason');
+    const expiresAt = normalizeOptionalTimestamp(request.expires_at ?? null, 'expires_at');
+    const platformAdminUserId = session.user.id;
+    const now = new Date();
+    const overrideId = randomUUID();
+    const lifecycleEventId = randomUUID();
+
+    return this.transactionRunner.runInTransaction(async (transaction) => {
+      const tenant = await this.tenantStore.findTenantById(tenantId, transaction);
+
+      if (tenant === null) {
+        throw GarageOsApiException.resourceNotFound('Tenant was not found.');
+      }
+
+      if (tenant.status === 'deleted') {
+        throw GarageOsApiException.workflowTransitionBlocked(
+          'Deleted tenants cannot receive suspension overrides.',
+        );
+      }
+
+      const updatedTenant =
+        tenant.status === 'suspended'
+          ? tenant
+          : await this.tenantStore.updateTenantStatus(
+              {
+                tenantId,
+                status: 'suspended',
+                updatedAt: now,
+              },
+              transaction,
+            );
+
+      await this.tenantStore.createSubscriptionOverride(
+        {
+          id: overrideId,
+          tenantId,
+          overrideType: 'suspended',
+          previousValueJson: {
+            status: tenant.status,
+          },
+          newValueJson: {
+            status: 'suspended',
+            expires_at: expiresAt?.toISOString() ?? null,
+          },
+          reason,
+          effectiveAt: now,
+          expiresAt,
+          createdByPlatformAdminUserId: platformAdminUserId,
+          createdAt: now,
+        },
+        transaction,
+      );
+
+      if (tenant.status !== 'suspended') {
+        await this.tenantStore.createTenantLifecycleEvent(
+          {
+            id: lifecycleEventId,
+            tenantId,
+            fromStatus: tenant.status,
+            toStatus: 'suspended',
+            source: 'platform_admin',
+            reason,
+            effectiveAt: now,
+            createdAt: now,
+          },
+          transaction,
+        );
+      }
+
+      await this.auditTenantSuspension({
+        tenantBefore: tenant,
+        tenantAfter: updatedTenant,
+        expiresAt,
+        session,
+        auditContext,
+        reason,
+        client: transaction,
+      });
+
+      return {
+        tenant: toTenantDetailResponse(updatedTenant),
+      };
+    });
+  }
+
   assertPlatformPermission(session: AuthSessionResponseData, permission: string): void {
     if (session.user.user_type !== 'platform_admin') {
       throw GarageOsApiException.forbidden(permission);
@@ -682,6 +780,39 @@ export class PlatformTenantService {
       },
       metadataJson: {
         override_type: 'read_only',
+      },
+      reason: input.reason,
+    });
+  }
+
+  private async auditTenantSuspension(input: {
+    readonly tenantBefore: PlatformTenantDetailRecord;
+    readonly tenantAfter: PlatformTenantDetailRecord;
+    readonly expiresAt: Date | null;
+    readonly session: AuthSessionResponseData;
+    readonly auditContext: PlatformRequestAuditContext;
+    readonly reason: string;
+    readonly client: DatabaseQueryClient;
+  }): Promise<void> {
+    await this.auditService.record({
+      tenantId: input.tenantAfter.id,
+      actorUserId: input.session.user.id,
+      actorType: AUDIT_ACTOR_TYPES.PLATFORM_ADMIN,
+      ipAddress: input.auditContext.ipAddress,
+      userAgent: input.auditContext.userAgent,
+      client: input.client,
+      action: 'platform.tenant_suspension.applied',
+      entityType: 'tenant',
+      entityId: input.tenantAfter.id,
+      beforeJson: {
+        status: input.tenantBefore.status,
+      },
+      afterJson: {
+        status: input.tenantAfter.status,
+        expires_at: input.expiresAt?.toISOString() ?? null,
+      },
+      metadataJson: {
+        override_type: 'suspended',
       },
       reason: input.reason,
     });
