@@ -278,6 +278,45 @@ interface StartPlatformSupportAccessSessionResponse {
   readonly support_access_session: PlatformSupportAccessSessionSummary;
 }
 
+interface PlatformTenantExportForm {
+  readonly reason: string;
+  readonly include_attachments: boolean;
+}
+
+interface PlatformTenantExportJobSummary {
+  readonly id: string;
+  readonly tenant_id: string;
+  readonly job_type: string;
+  readonly status: string;
+  readonly requested_at: string;
+  readonly run_after: string;
+  readonly include_attachments: boolean;
+}
+
+interface QueuePlatformTenantExportResponse {
+  readonly export_job: PlatformTenantExportJobSummary;
+}
+
+type PlatformTenantExportSubmitState =
+  | {
+      readonly status: 'idle';
+    }
+  | {
+      readonly status: 'submitting';
+    }
+  | {
+      readonly status: 'success';
+      readonly message: string;
+      readonly job: PlatformTenantExportJobSummary;
+    }
+  | {
+      readonly status: 'error';
+      readonly message: string;
+      readonly detail: string | null;
+      readonly code: string | null;
+      readonly fieldErrors: Record<string, string>;
+    };
+
 interface PlatformTenantCreateForm {
   readonly business_name: string;
   readonly shop_email: string;
@@ -753,6 +792,11 @@ const defaultPlatformSupportAccessForm: PlatformSupportAccessForm = {
   mode: 'read_only',
   reason: '',
   expires_at: '',
+};
+
+const defaultPlatformTenantExportForm: PlatformTenantExportForm = {
+  reason: '',
+  include_attachments: false,
 };
 
 const tenantStatusFilterOptions: readonly {
@@ -1908,6 +1952,19 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
     sessionState.status === 'ready' &&
     hasEffectivePermission(sessionState.session, 'platform.support_access');
 
+  const canQueueTenantExport =
+    sessionState.status === 'ready' &&
+    hasEffectivePermission(sessionState.session, 'platform.tenants.update');
+
+  const [tenantExportForm, setTenantExportForm] = useState<PlatformTenantExportForm>(
+    defaultPlatformTenantExportForm,
+  );
+
+  const [tenantExportSubmitState, setTenantExportSubmitState] =
+    useState<PlatformTenantExportSubmitState>({
+      status: 'idle',
+    });
+
   useEffect(() => {
     if (sessionState.status !== 'ready' || !canReadTenantDetail || tenantId.length === 0) {
       return;
@@ -1921,6 +1978,7 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
       setReadOnlyOverrideSubmitState({ status: 'idle' });
       setTenantSuspensionSubmitState({ status: 'idle' });
       setSupportAccessSubmitState({ status: 'idle' });
+      setTenantExportSubmitState({ status: 'idle' });
 
       try {
         const tenant = await getPlatformTenantDetail(tenantId);
@@ -2283,6 +2341,72 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
     }
   }
 
+  function updateTenantExportFormField<K extends keyof PlatformTenantExportForm>(
+    field: K,
+    value: PlatformTenantExportForm[K],
+  ) {
+    setTenantExportForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }
+
+  async function handleTenantExportSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (
+      !canQueueTenantExport ||
+      tenantExportSubmitState.status === 'submitting' ||
+      tenantDetailState.status !== 'loaded'
+    ) {
+      return;
+    }
+
+    const nextForm: PlatformTenantExportForm = {
+      reason: tenantExportForm.reason.trim(),
+      include_attachments: tenantExportForm.include_attachments,
+    };
+
+    const fieldErrors: Record<string, string> = {};
+
+    if (nextForm.reason.length === 0) {
+      fieldErrors.reason = 'Reason is required.';
+    }
+
+    if (Object.keys(fieldErrors).length > 0) {
+      setTenantExportSubmitState({
+        status: 'error',
+        message: 'Review the tenant export fields.',
+        detail: null,
+        code: 'validation_failed',
+        fieldErrors,
+      });
+      return;
+    }
+
+    setTenantExportSubmitState({ status: 'submitting' });
+
+    try {
+      const response = await queuePlatformTenantExport(tenantId, nextForm);
+
+      setTenantExportForm(defaultPlatformTenantExportForm);
+      setTenantExportSubmitState({
+        status: 'success',
+        message:
+          'Tenant export job was queued. Full package generation and download links are completed by the export worker slice.',
+        job: response.export_job,
+      });
+    } catch (error) {
+      setTenantExportSubmitState({
+        status: 'error',
+        message: toSafeErrorMessage(error, 'Unable to queue tenant export.'),
+        detail: toSafeErrorDetail(error),
+        code: getApiErrorCode(error),
+        fieldErrors: getApiFieldErrors(error),
+      });
+    }
+  }
+
   const isLoadingTenant =
     tenantDetailState.status === 'idle' || tenantDetailState.status === 'loading';
   const subscriptionFieldErrors =
@@ -2296,6 +2420,9 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
 
   const supportAccessFieldErrors =
     supportAccessSubmitState.status === 'error' ? supportAccessSubmitState.fieldErrors : {};
+
+  const tenantExportFieldErrors =
+    tenantExportSubmitState.status === 'error' ? tenantExportSubmitState.fieldErrors : {};
 
   return (
     <AuthenticatedShell
@@ -2390,9 +2517,9 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
           <Alert>
             <p className="text-sm leading-6">
               This screen reads platform tenant detail and now wires the documented subscription
-              management, read-only override, suspension, and support access session workflows.
-              Exports, deletion jobs, plan management, and platform audit logs remain separate
-              workflow slices.
+              management, read-only override, suspension, support access session, and tenant export
+              job trigger workflows. Deletion jobs, plan management, platform audit logs, and full
+              export packaging remain separate workflow slices.
             </p>
           </Alert>
 
@@ -2570,6 +2697,16 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
                 onSubmit={handleSupportAccessSubmit}
               />
 
+              <PlatformTenantExportPanel
+                tenant={tenantDetailState.tenant}
+                canQueueTenantExport={canQueueTenantExport}
+                form={tenantExportForm}
+                submitState={tenantExportSubmitState}
+                fieldErrors={tenantExportFieldErrors}
+                onChange={updateTenantExportFormField}
+                onSubmit={handleTenantExportSubmit}
+              />
+
               <Card>
                 <CardHeader>
                   <CardTitle>Lifecycle detail</CardTitle>
@@ -2598,11 +2735,6 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
               </Card>
 
               <div className="grid gap-4 lg:grid-cols-3">
-                <PlannedWorkflowCard
-                  title="Tenant export"
-                  requiredPermission="platform.tenants.update"
-                  description="Tenant export remains a separate async job workflow."
-                />
                 <PlannedWorkflowCard
                   title="Deletion job"
                   requiredPermission="platform.tenants.update"
@@ -3020,6 +3152,23 @@ async function startPlatformSupportAccessSession(
     {
       requiresAuth: true,
       idempotencyKey: createIdempotencyKey('platform-support-access-session'),
+    },
+  );
+}
+
+async function queuePlatformTenantExport(
+  tenantId: string,
+  form: PlatformTenantExportForm,
+): Promise<QueuePlatformTenantExportResponse> {
+  return postAuthJson<QueuePlatformTenantExportResponse>(
+    `/platform/tenants/${encodeURIComponent(tenantId)}/exports`,
+    {
+      reason: form.reason.trim(),
+      include_attachments: form.include_attachments,
+    },
+    {
+      requiresAuth: true,
+      idempotencyKey: createIdempotencyKey('platform-tenant-export'),
     },
   );
 }
@@ -3718,6 +3867,166 @@ function PlatformTenantSupportAccessPanel({
               disabled={!canStartSupportAccess || isSubmitting}
             >
               {isSubmitting ? 'Starting support access...' : 'Start support access'}
+            </Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+function PlatformTenantExportPanel({
+  tenant,
+  canQueueTenantExport,
+  form,
+  submitState,
+  fieldErrors,
+  onChange,
+  onSubmit,
+}: {
+  readonly tenant: PlatformTenantDetail;
+  readonly canQueueTenantExport: boolean;
+  readonly form: PlatformTenantExportForm;
+  readonly submitState: PlatformTenantExportSubmitState;
+  readonly fieldErrors: Record<string, string>;
+  readonly onChange: <K extends keyof PlatformTenantExportForm>(
+    field: K,
+    value: PlatformTenantExportForm[K],
+  ) => void;
+  readonly onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  const isSubmitting = submitState.status === 'submitting';
+  const isLifecycleBlocked = tenant.status === 'pending_deletion' || tenant.status === 'deleted';
+  const isSubmitDisabled = !canQueueTenantExport || isSubmitting || isLifecycleBlocked;
+
+  return (
+    <Card id="tenant-export">
+      <CardHeader>
+        <CardTitle>Tenant export</CardTitle>
+        <CardDescription>
+          Queue an audited async tenant export job. This slice creates the background job; the
+          export worker, ZIP package, signed download URL, and manifest validation remain separate
+          slices.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-5">
+        <div className="grid gap-4 md:grid-cols-3">
+          <KeyValue label="Tenant" value={tenant.business_name} />
+          <KeyValue label="Current status" value={formatTenantStatus(tenant.status)} />
+          <KeyValue label="Required permission" value="platform.tenants.update" />
+        </div>
+
+        {!canQueueTenantExport ? (
+          <Alert>
+            <p className="text-sm font-bold">Tenant export unavailable</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              Your platform session can view tenant data, but it cannot queue tenant exports.
+              Required permission: <strong>platform.tenants.update</strong>.
+            </p>
+          </Alert>
+        ) : null}
+
+        {isLifecycleBlocked ? (
+          <Alert variant="destructive">
+            <p className="text-sm font-bold">Tenant export blocked by lifecycle state</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              Export jobs are not queued for deleted tenants or tenants pending deletion in this
+              slice. Emergency-extension behavior belongs to the later deletion/export lifecycle
+              hardening slice.
+            </p>
+          </Alert>
+        ) : null}
+
+        {form.include_attachments ? (
+          <Alert>
+            <p className="text-sm font-bold">Attachment binaries requested</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              The queued job records this option for the future export worker. Actual attachment
+              packaging remains blocked until the files/object-storage export slice is implemented.
+            </p>
+          </Alert>
+        ) : null}
+
+        {submitState.status === 'success' ? (
+          <Alert>
+            <p className="text-sm font-bold">Tenant export queued</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">{submitState.message}</p>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <KeyValue label="Job ID" value={submitState.job.id} />
+              <KeyValue label="Status" value={submitState.job.status} />
+              <KeyValue label="Job type" value={submitState.job.job_type} />
+              <KeyValue label="Run after" value={submitState.job.run_after} />
+            </div>
+          </Alert>
+        ) : null}
+
+        {submitState.status === 'error' ? (
+          <Alert variant="destructive">
+            <p className="text-sm font-bold">{submitState.message}</p>
+            {submitState.detail === null ? null : (
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">{submitState.detail}</p>
+            )}
+            {submitState.code === 'idempotency_conflict' ? (
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                The request was detected as a duplicate or retry conflict. Reload the tenant detail
+                before submitting again.
+              </p>
+            ) : null}
+          </Alert>
+        ) : null}
+
+        <form className="grid gap-5" onSubmit={onSubmit}>
+          <fieldset
+            className="grid gap-5 disabled:pointer-events-none disabled:opacity-70"
+            disabled={isSubmitDisabled}
+          >
+            <section className="grid gap-4 rounded-2xl border border-border bg-muted/40 p-4">
+              <div>
+                <h2 className="font-bold text-foreground">Export request fields</h2>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                  A reason is required for auditability. The export job is queued asynchronously and
+                  does not generate a download link in this slice.
+                </p>
+              </div>
+
+              <label className="grid gap-2">
+                <span className="text-sm font-bold text-foreground">Reason</span>
+                <textarea
+                  value={form.reason}
+                  onChange={(event) => onChange('reason', event.currentTarget.value)}
+                  required
+                  maxLength={500}
+                  rows={4}
+                  className="min-h-28 rounded-xl border border-input bg-background px-3 py-2 text-base text-foreground shadow-sm outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-60"
+                  placeholder="Example: Tenant requested a full data export for account review."
+                />
+                <FieldError message={fieldErrors.reason} />
+              </label>
+
+              <label className="flex items-start gap-3 rounded-2xl border border-border bg-card p-4">
+                <input
+                  type="checkbox"
+                  checked={form.include_attachments}
+                  onChange={(event) => onChange('include_attachments', event.currentTarget.checked)}
+                  className="mt-1 h-5 w-5 rounded border border-input"
+                />
+                <span>
+                  <span className="block text-sm font-bold text-foreground">
+                    Request attachment binaries
+                  </span>
+                  <span className="mt-1 block text-sm leading-6 text-muted-foreground">
+                    Records the attachment-binary option for the future export worker. Metadata-only
+                    export is used when this is unchecked.
+                  </span>
+                </span>
+              </label>
+              <FieldError message={fieldErrors.include_attachments} />
+            </section>
+          </fieldset>
+
+          <div className="flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:justify-end">
+            <Button type="submit" variant="primary" disabled={isSubmitDisabled}>
+              {isSubmitting ? 'Queueing tenant export...' : 'Queue tenant export'}
             </Button>
           </div>
         </form>

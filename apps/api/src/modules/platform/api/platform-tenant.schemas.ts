@@ -98,6 +98,13 @@ export const applyPlatformTenantSuspensionRequestSchema = z
   })
   .strict();
 
+export const queuePlatformTenantExportRequestSchema = z
+  .object({
+    reason: z.string().trim().min(1).max(500),
+    include_attachments: z.boolean().optional(),
+  })
+  .strict();
+
 export const startPlatformSupportAccessSessionRequestSchema = z
   .object({
     mode: platformSupportAccessModeSchema,
@@ -120,6 +127,10 @@ export type ApplyPlatformTenantReadOnlyOverrideRequest = z.infer<
 
 export type ApplyPlatformTenantSuspensionRequest = z.infer<
   typeof applyPlatformTenantSuspensionRequestSchema
+>;
+
+export type QueuePlatformTenantExportRequest = z.infer<
+  typeof queuePlatformTenantExportRequestSchema
 >;
 
 export type PlatformSupportAccessMode = z.infer<typeof platformSupportAccessModeSchema>;

@@ -80,6 +80,19 @@ export interface PlatformSupportAccessSessionSummary {
   readonly endedAt: Date | null;
 }
 
+export interface PlatformTenantExportJobSummary {
+  readonly id: string;
+  readonly tenantId: string | null;
+  readonly jobType: string;
+  readonly status: string;
+  readonly payloadJson: Record<string, unknown>;
+  readonly runAfter: Date;
+  readonly attemptCount: number;
+  readonly maxAttempts: number;
+  readonly createdAt: Date;
+  readonly correlationId: string | null;
+}
+
 export interface ListPlatformTenantsInput {
   readonly limit: number;
   readonly cursorCreatedAt: Date | null;
@@ -146,6 +159,15 @@ export interface CreatePlatformSupportAccessSessionInput {
   readonly reason: string;
   readonly startedAt: Date;
   readonly expiresAt: Date;
+}
+
+export interface QueueTenantExportJobInput {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly payloadJson: Record<string, unknown>;
+  readonly runAfter: Date;
+  readonly maxAttempts: number;
+  readonly correlationId: string | null;
 }
 
 export interface CreateOwnerInvitationInput {
@@ -226,6 +248,11 @@ export abstract class PlatformTenantStore {
     input: CreatePlatformSupportAccessSessionInput,
     client: DatabaseQueryClient,
   ): Promise<PlatformSupportAccessSessionSummary>;
+
+  abstract queueTenantExportJob(
+    input: QueueTenantExportJobInput,
+    client: DatabaseQueryClient,
+  ): Promise<PlatformTenantExportJobSummary>;
 
   abstract createOwnerInvitation(
     input: CreateOwnerInvitationInput,

@@ -30,6 +30,8 @@ import {
   type UpsertTenantSubscriptionInput,
   type CreatePlatformSupportAccessSessionInput,
   type PlatformSupportAccessSessionSummary,
+  type PlatformTenantExportJobSummary,
+  type QueueTenantExportJobInput,
 } from './platform-tenant.store';
 import { PLATFORM_PERMISSIONS, PlatformTenantService } from './platform-tenant.service';
 
@@ -823,6 +825,7 @@ class FakePlatformTenantStore extends PlatformTenantStore {
   readonly updatedTenantStatuses: UpdateTenantStatusInput[] = [];
   readonly subscriptionOverrides: CreateSubscriptionOverrideInput[] = [];
   readonly supportAccessSessions: CreatePlatformSupportAccessSessionInput[] = [];
+  readonly queuedTenantExportJobs: QueueTenantExportJobInput[] = [];
   readonly createdInvitations: CreateOwnerInvitationInput[] = [];
   readonly lifecycleEvents: CreateTenantLifecycleEventInput[] = [];
 
@@ -920,6 +923,25 @@ class FakePlatformTenantStore extends PlatformTenantStore {
       startedAt: input.startedAt,
       expiresAt: input.expiresAt,
       endedAt: null,
+    };
+  }
+
+  async queueTenantExportJob(
+    input: QueueTenantExportJobInput,
+  ): Promise<PlatformTenantExportJobSummary> {
+    this.queuedTenantExportJobs.push(input);
+
+    return {
+      id: input.id,
+      tenantId: input.tenantId,
+      jobType: 'tenant_export.generate',
+      status: 'queued',
+      payloadJson: input.payloadJson,
+      runAfter: input.runAfter,
+      attemptCount: 0,
+      maxAttempts: input.maxAttempts,
+      createdAt: input.runAfter,
+      correlationId: input.correlationId,
     };
   }
 

@@ -16,14 +16,16 @@ import type {
   ApplyPlatformTenantSuspensionRequest,
   CreatePlatformTenantRequest,
   ListPlatformTenantsQuery,
+  QueuePlatformTenantExportRequest,
   StartPlatformSupportAccessSessionRequest,
   UpdatePlatformTenantSubscriptionRequest,
 } from '../api/platform-tenant.schemas';
 import {
   type PlatformPlanSummary,
   type PlatformSubscriptionSummary,
-  PlatformSupportAccessSessionSummary,
+  type PlatformSupportAccessSessionSummary,
   type PlatformTenantDetailRecord,
+  type PlatformTenantExportJobSummary,
   type PlatformTenantListRecord,
   type PlatformTenantOwnerInvitationSummary,
   type PlatformTenantStatus,
@@ -96,6 +98,20 @@ export interface ApplyPlatformTenantSuspensionResponse {
 
 export interface StartPlatformSupportAccessSessionResponse {
   readonly support_access_session: PlatformSupportAccessSessionResponse;
+}
+
+export interface QueuePlatformTenantExportResponse {
+  readonly export_job: PlatformTenantExportJobResponse;
+}
+
+interface PlatformTenantExportJobResponse {
+  readonly id: string;
+  readonly tenant_id: string;
+  readonly job_type: string;
+  readonly status: string;
+  readonly requested_at: string;
+  readonly run_after: string;
+  readonly include_attachments: boolean;
 }
 
 interface PlatformSupportAccessSessionResponse {
@@ -641,6 +657,73 @@ export class PlatformTenantService {
     });
   }
 
+  async queueTenantExport(
+    tenantId: string,
+    request: QueuePlatformTenantExportRequest,
+    session: AuthSessionResponseData,
+    auditContext: PlatformRequestAuditContext,
+  ): Promise<QueuePlatformTenantExportResponse> {
+    this.assertPlatformPermission(session, PLATFORM_PERMISSIONS.TENANTS_UPDATE);
+
+    const reason = normalizeRequiredReason(request.reason, 'reason');
+    const includeAttachments = request.include_attachments === true;
+    const platformAdminUserId = session.user.id;
+    const now = new Date();
+    const exportJobId = randomUUID();
+
+    return this.transactionRunner.runInTransaction(async (transaction) => {
+      const tenant = await this.tenantStore.findTenantById(tenantId, transaction);
+
+      if (tenant === null) {
+        throw GarageOsApiException.resourceNotFound('Tenant was not found.');
+      }
+
+      if (tenant.status === 'deleted') {
+        throw GarageOsApiException.workflowTransitionBlocked(
+          'Deleted tenants cannot receive export jobs.',
+        );
+      }
+
+      if (tenant.status === 'pending_deletion') {
+        throw GarageOsApiException.workflowTransitionBlocked(
+          'Tenant export is disabled while the tenant is pending deletion unless an emergency extension is granted.',
+        );
+      }
+
+      const exportJob = await this.tenantStore.queueTenantExportJob(
+        {
+          id: exportJobId,
+          tenantId,
+          payloadJson: {
+            tenant_id: tenantId,
+            requested_by_platform_admin_user_id: platformAdminUserId,
+            reason,
+            include_attachments: includeAttachments,
+            requested_at: now.toISOString(),
+          },
+          runAfter: now,
+          maxAttempts: 3,
+          correlationId: null,
+        },
+        transaction,
+      );
+
+      await this.auditTenantExportQueued({
+        tenant,
+        exportJob,
+        includeAttachments,
+        session,
+        auditContext,
+        reason,
+        client: transaction,
+      });
+
+      return {
+        export_job: toTenantExportJobResponse(exportJob, includeAttachments),
+      };
+    });
+  }
+
   async startSupportAccessSession(
     tenantId: string,
     request: StartPlatformSupportAccessSessionRequest,
@@ -902,6 +985,42 @@ export class PlatformTenantService {
     });
   }
 
+  private async auditTenantExportQueued(input: {
+    readonly tenant: PlatformTenantDetailRecord;
+    readonly exportJob: PlatformTenantExportJobSummary;
+    readonly includeAttachments: boolean;
+    readonly session: AuthSessionResponseData;
+    readonly auditContext: PlatformRequestAuditContext;
+    readonly reason: string;
+    readonly client: DatabaseQueryClient;
+  }): Promise<void> {
+    await this.auditService.record({
+      tenantId: input.tenant.id,
+      actorUserId: input.session.user.id,
+      actorType: AUDIT_ACTOR_TYPES.PLATFORM_ADMIN,
+      ipAddress: input.auditContext.ipAddress,
+      userAgent: input.auditContext.userAgent,
+      client: input.client,
+      action: 'platform.tenant_export.queued',
+      entityType: 'background_job',
+      entityId: input.exportJob.id,
+      afterJson: {
+        tenant_id: input.tenant.id,
+        job_id: input.exportJob.id,
+        job_type: input.exportJob.jobType,
+        status: input.exportJob.status,
+        include_attachments: input.includeAttachments,
+        run_after: input.exportJob.runAfter.toISOString(),
+        requested_at: input.exportJob.createdAt.toISOString(),
+      },
+      metadataJson: {
+        tenant_status: input.tenant.status,
+        tenant_business_name: input.tenant.businessName,
+      },
+      reason: input.reason,
+    });
+  }
+
   private async auditSupportAccessSessionStarted(input: {
     readonly tenant: PlatformTenantDetailRecord;
     readonly supportAccessSession: PlatformSupportAccessSessionSummary;
@@ -1057,6 +1176,21 @@ function toSupportAccessSessionResponse(
     started_at: supportAccessSession.startedAt.toISOString(),
     expires_at: supportAccessSession.expiresAt.toISOString(),
     ended_at: supportAccessSession.endedAt?.toISOString() ?? null,
+  };
+}
+
+function toTenantExportJobResponse(
+  exportJob: PlatformTenantExportJobSummary,
+  includeAttachments: boolean,
+): PlatformTenantExportJobResponse {
+  return {
+    id: exportJob.id,
+    tenant_id: exportJob.tenantId ?? '',
+    job_type: exportJob.jobType,
+    status: exportJob.status,
+    requested_at: exportJob.createdAt.toISOString(),
+    run_after: exportJob.runAfter.toISOString(),
+    include_attachments: includeAttachments,
   };
 }
 

@@ -24,11 +24,13 @@ import {
   type ApplyPlatformTenantSuspensionRequest,
   applyPlatformTenantSuspensionRequestSchema,
   type CreatePlatformTenantRequest,
-  type StartPlatformSupportAccessSessionRequest,
-  startPlatformSupportAccessSessionRequestSchema,
   createPlatformTenantRequestSchema,
   type ListPlatformTenantsQuery,
   listPlatformTenantsQuerySchema,
+  type QueuePlatformTenantExportRequest,
+  queuePlatformTenantExportRequestSchema,
+  type StartPlatformSupportAccessSessionRequest,
+  startPlatformSupportAccessSessionRequestSchema,
   type UpdatePlatformTenantSubscriptionRequest,
   updatePlatformTenantSubscriptionRequestSchema,
 } from './platform-tenant.schemas';
@@ -282,6 +284,68 @@ export class PlatformTenantController {
       await this.idempotencyService.completeSucceeded({
         id: idempotency.record.id,
         responseStatusCode: 200,
+        responseBodyJson: response,
+        now: new Date(),
+      });
+
+      return response;
+    } catch (error) {
+      await this.idempotencyService.completeFailed({
+        id: idempotency.record.id,
+        now: new Date(),
+      });
+
+      throw error;
+    }
+  }
+
+  @Post('tenants/:tenantId/exports')
+  @HttpCode(202)
+  async queueTenantExport(
+    @Param('tenantId') tenantId: string,
+    @Body(new ZodValidationPipe(queuePlatformTenantExportRequestSchema))
+    request: QueuePlatformTenantExportRequest,
+    @CurrentAuthSessionResponse() session: AuthSessionResponseData,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Headers('user-agent') userAgent: string | undefined,
+    @Ip() ipAddress: string | undefined,
+  ): ReturnType<PlatformTenantService['queueTenantExport']> {
+    const now = new Date();
+    const requestIntent = {
+      tenant_id: tenantId,
+      ...request,
+    };
+
+    const idempotency = await this.idempotencyService.begin({
+      tenantId: null,
+      userId: session.user.id,
+      endpoint: 'POST /api/v1/platform/tenants/{tenant_id}/exports',
+      idempotencyKey,
+      requestIntent,
+      now,
+      expiresAt: this.platformTenantService.getIdempotencyExpiresAt(now),
+    });
+
+    if (idempotency.type === 'replayed') {
+      return idempotency.responseBodyJson as Awaited<
+        ReturnType<PlatformTenantService['queueTenantExport']>
+      >;
+    }
+
+    try {
+      const response = await this.platformTenantService.queueTenantExport(
+        tenantId,
+        request,
+        session,
+        {
+          ipAddress: ipAddress ?? null,
+          userAgent: userAgent ?? null,
+        },
+      );
+
+      await this.idempotencyService.completeSucceeded({
+        id: idempotency.record.id,
+        responseStatusCode: 202,
         responseBodyJson: response,
         now: new Date(),
       });
