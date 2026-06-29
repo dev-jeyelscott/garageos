@@ -37,6 +37,8 @@ import {
   queuePlatformTenantDeletionJobRequestSchema,
   type EndPlatformSupportAccessSessionRequest,
   endPlatformSupportAccessSessionRequestSchema,
+  type ListPlatformAuditLogsQuery,
+  listPlatformAuditLogsQuerySchema,
 } from './platform-tenant.schemas';
 
 @Controller('platform')
@@ -56,6 +58,15 @@ export class PlatformTenantController {
     @CurrentAuthSessionResponse() session: AuthSessionResponseData,
   ): ReturnType<PlatformTenantService['listTenants']> {
     return this.platformTenantService.listTenants(query, session);
+  }
+
+  @Get('audit-logs')
+  listAuditLogs(
+    @Query(new ZodValidationPipe(listPlatformAuditLogsQuerySchema))
+    query: ListPlatformAuditLogsQuery,
+    @CurrentAuthSessionResponse() session: AuthSessionResponseData,
+  ): ReturnType<PlatformTenantService['listAuditLogs']> {
+    return this.platformTenantService.listAuditLogs(query, session);
   }
 
   @Get('tenants/:tenantId')

@@ -113,6 +113,30 @@ export interface ListPlatformTenantsInput {
   readonly search: string | null;
 }
 
+export interface PlatformAuditLogRecord {
+  readonly id: string;
+  readonly platformAdminUserId: string | null;
+  readonly tenantId: string | null;
+  readonly action: string;
+  readonly entityType: string;
+  readonly entityId: string | null;
+  readonly metadataJson: Record<string, unknown> | null;
+  readonly ipAddress: string | null;
+  readonly userAgent: string | null;
+  readonly createdAt: Date;
+}
+
+export interface ListPlatformAuditLogsInput {
+  readonly limit: number;
+  readonly cursorCreatedAt: Date | null;
+  readonly cursorId: string | null;
+  readonly platformAdminUserId: string | null;
+  readonly action: string | null;
+  readonly tenantId: string | null;
+  readonly fromCreatedAt: Date | null;
+  readonly toCreatedAt: Date | null;
+}
+
 export interface CreateTenantInput {
   readonly id: string;
   readonly businessName: string;
@@ -221,6 +245,11 @@ export interface CreateTenantLifecycleEventInput {
 }
 
 export abstract class PlatformTenantStore {
+  abstract listPlatformAuditLogs(
+    input: ListPlatformAuditLogsInput,
+    client?: DatabaseQueryClient,
+  ): Promise<readonly PlatformAuditLogRecord[]>;
+
   abstract listTenants(
     input: ListPlatformTenantsInput,
     client?: DatabaseQueryClient,

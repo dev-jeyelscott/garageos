@@ -40,6 +40,45 @@ export const listPlatformTenantsQuerySchema = z
   })
   .strict();
 
+export const listPlatformAuditLogsQuerySchema = z
+  .object({
+    limit: z.coerce.number().int().min(1).max(100).optional(),
+    cursor: z.string().trim().min(1).optional(),
+    actor: z.string().trim().uuid().optional(),
+    platform_admin_user_id: z.string().trim().uuid().optional(),
+    action: z.string().trim().min(1).max(200).optional(),
+    tenant_id: z.string().trim().uuid().optional(),
+    from: optionalTimestampSchema.optional(),
+    to: optionalTimestampSchema.optional(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (
+      value.actor !== undefined &&
+      value.platform_admin_user_id !== undefined &&
+      value.actor !== value.platform_admin_user_id
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['platform_admin_user_id'],
+        message: 'actor and platform_admin_user_id must refer to the same platform admin user.',
+      });
+    }
+
+    if (value.from !== undefined && value.to !== undefined) {
+      const fromTime = Date.parse(value.from);
+      const toTime = Date.parse(value.to);
+
+      if (!Number.isNaN(fromTime) && !Number.isNaN(toTime) && fromTime > toTime) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['to'],
+          message: 'to must be greater than or equal to from.',
+        });
+      }
+    }
+  });
+
 export const createPlatformTenantRequestSchema = z
   .object({
     business_name: z.string().trim().min(1).max(200),
@@ -126,6 +165,8 @@ export const endPlatformSupportAccessSessionRequestSchema = z
   .strict();
 
 export type ListPlatformTenantsQuery = z.infer<typeof listPlatformTenantsQuerySchema>;
+
+export type ListPlatformAuditLogsQuery = z.infer<typeof listPlatformAuditLogsQuerySchema>;
 
 export type CreatePlatformTenantRequest = z.infer<typeof createPlatformTenantRequestSchema>;
 

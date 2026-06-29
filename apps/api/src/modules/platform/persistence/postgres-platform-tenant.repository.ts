@@ -32,6 +32,8 @@ import {
   type PlatformTenantDeletionJobSummary,
   type QueueTenantDeletionJobInput,
   type EndPlatformSupportAccessSessionInput,
+  type ListPlatformAuditLogsInput,
+  type PlatformAuditLogRecord,
 } from '../application/platform-tenant.store';
 
 interface PlatformTenantRow extends DatabaseRow {
@@ -123,6 +125,19 @@ interface TenantDeletionJobRow extends DatabaseRow {
   readonly created_at: Date | string;
 }
 
+interface PlatformAuditLogRow extends DatabaseRow {
+  readonly id: string;
+  readonly platform_admin_user_id: string | null;
+  readonly tenant_id: string | null;
+  readonly action: string;
+  readonly entity_type: string;
+  readonly entity_id: string | null;
+  readonly metadata_json: unknown;
+  readonly ip_address: string | null;
+  readonly user_agent: string | null;
+  readonly created_at: Date | string;
+}
+
 interface OwnerInvitationRow extends DatabaseRow {
   readonly email: string;
   readonly status: string;
@@ -168,6 +183,51 @@ export class PostgresPlatformTenantRepository extends PlatformTenantStore {
     );
 
     return result.rows.map(mapTenantListRecord);
+  }
+
+  async listPlatformAuditLogs(
+    input: ListPlatformAuditLogsInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<readonly PlatformAuditLogRecord[]> {
+    const result = await client.query<PlatformAuditLogRow>(
+      `
+        select
+          id,
+          platform_admin_user_id,
+          tenant_id,
+          action,
+          entity_type,
+          entity_id,
+          metadata_json,
+          ip_address::text as ip_address,
+          user_agent,
+          created_at
+        from platform_audit_logs
+        where ($1::uuid is null or platform_admin_user_id = $1)
+          and ($2::text is null or action = $2)
+          and ($3::uuid is null or tenant_id = $3)
+          and ($4::timestamptz is null or created_at >= $4)
+          and ($5::timestamptz is null or created_at <= $5)
+          and (
+            $6::timestamptz is null
+            or (created_at, id) < ($6::timestamptz, $7::uuid)
+          )
+        order by created_at desc, id desc
+        limit $8
+      `,
+      [
+        input.platformAdminUserId,
+        input.action,
+        input.tenantId,
+        input.fromCreatedAt,
+        input.toCreatedAt,
+        input.cursorCreatedAt,
+        input.cursorId,
+        input.limit,
+      ],
+    );
+
+    return result.rows.map(mapPlatformAuditLogRow);
   }
 
   async findTenantById(
@@ -794,6 +854,29 @@ function tenantSelectSql(): string {
       limit 1
     ) owner_invitation on true
   `;
+}
+
+function mapPlatformAuditLogRow(row: PlatformAuditLogRow): PlatformAuditLogRecord {
+  return {
+    id: row.id,
+    platformAdminUserId: row.platform_admin_user_id,
+    tenantId: row.tenant_id,
+    action: row.action,
+    entityType: row.entity_type,
+    entityId: row.entity_id,
+    metadataJson: normalizeNullableJsonObject(row.metadata_json),
+    ipAddress: row.ip_address,
+    userAgent: row.user_agent,
+    createdAt: toDate(row.created_at),
+  };
+}
+
+function normalizeNullableJsonObject(value: unknown): Record<string, unknown> | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  return normalizeJsonObject(value);
 }
 
 function mapTenantListRecord(row: PlatformTenantRow): PlatformTenantListRecord {

@@ -15,12 +15,13 @@ import type {
   ApplyPlatformTenantReadOnlyOverrideRequest,
   ApplyPlatformTenantSuspensionRequest,
   CreatePlatformTenantRequest,
+  EndPlatformSupportAccessSessionRequest,
+  ListPlatformAuditLogsQuery,
   ListPlatformTenantsQuery,
+  QueuePlatformTenantDeletionJobRequest,
   QueuePlatformTenantExportRequest,
   StartPlatformSupportAccessSessionRequest,
   UpdatePlatformTenantSubscriptionRequest,
-  QueuePlatformTenantDeletionJobRequest,
-  EndPlatformSupportAccessSessionRequest,
 } from '../api/platform-tenant.schemas';
 import {
   type PlatformPlanSummary,
@@ -32,6 +33,7 @@ import {
   type PlatformTenantOwnerInvitationSummary,
   type PlatformTenantStatus,
   type PlatformTenantDeletionJobSummary,
+  type PlatformAuditLogRecord,
   PlatformTenantStore,
 } from './platform-tenant.store';
 
@@ -52,6 +54,28 @@ export interface PlatformTenantListResponse {
     readonly next_cursor: string | null;
     readonly has_more: boolean;
   };
+}
+
+export interface PlatformAuditLogListResponse {
+  readonly audit_logs: readonly PlatformAuditLogResponse[];
+  readonly pagination: {
+    readonly limit: number;
+    readonly next_cursor: string | null;
+    readonly has_more: boolean;
+  };
+}
+
+export interface PlatformAuditLogResponse {
+  readonly id: string;
+  readonly platform_admin_user_id: string | null;
+  readonly tenant_id: string | null;
+  readonly action: string;
+  readonly entity_type: string;
+  readonly entity_id: string | null;
+  readonly metadata_json: Record<string, unknown> | null;
+  readonly ip_address: string | null;
+  readonly user_agent: string | null;
+  readonly created_at: string;
 }
 
 export interface PlatformTenantSummaryResponse {
@@ -200,6 +224,42 @@ export class PlatformTenantService {
 
   getIdempotencyExpiresAt(now: Date): Date {
     return new Date(now.getTime() + IDEMPOTENCY_RETENTION_HOURS * 60 * 60 * 1000);
+  }
+
+  async listAuditLogs(
+    query: ListPlatformAuditLogsQuery,
+    session: AuthSessionResponseData,
+  ): Promise<PlatformAuditLogListResponse> {
+    this.assertPlatformPermission(session, PLATFORM_PERMISSIONS.AUDIT_LOGS_READ);
+
+    const limit = query.limit ?? DEFAULT_LIST_LIMIT;
+    const cursor = decodePlatformAuditLogCursor(query.cursor ?? null);
+    const platformAdminUserId = query.platform_admin_user_id ?? query.actor ?? null;
+
+    const rows = await this.tenantStore.listPlatformAuditLogs({
+      limit: limit + 1,
+      cursorCreatedAt: cursor?.createdAt ?? null,
+      cursorId: cursor?.id ?? null,
+      platformAdminUserId,
+      action: normalizeAuditActionFilter(query.action ?? null),
+      tenantId: query.tenant_id ?? null,
+      fromCreatedAt: normalizeOptionalTimestamp(query.from ?? null, 'from'),
+      toCreatedAt: normalizeOptionalTimestamp(query.to ?? null, 'to'),
+    });
+
+    const visibleRows = rows.slice(0, limit);
+    const hasMore = rows.length > limit;
+    const lastRow = visibleRows.at(-1);
+
+    return {
+      audit_logs: visibleRows.map(toPlatformAuditLogResponse),
+      pagination: {
+        limit,
+        has_more: hasMore,
+        next_cursor:
+          hasMore && lastRow !== undefined ? encodePlatformAuditLogCursor(lastRow) : null,
+      },
+    };
   }
 
   async listTenants(
@@ -1334,6 +1394,127 @@ function isUnapprovedTenantDuplicateConstraintViolation(error: unknown): boolean
     (maybeDatabaseError.constraint === 'ux_tenants_unapproved_business_email' ||
       maybeDatabaseError.constraint === 'ux_tenants_active_business_email')
   );
+}
+
+function toPlatformAuditLogResponse(row: PlatformAuditLogRecord): PlatformAuditLogResponse {
+  return {
+    id: row.id,
+    platform_admin_user_id: row.platformAdminUserId,
+    tenant_id: row.tenantId,
+    action: row.action,
+    entity_type: row.entityType,
+    entity_id: row.entityId,
+    metadata_json: sanitizeAuditMetadataJson(row.metadataJson),
+    ip_address: row.ipAddress,
+    user_agent: row.userAgent,
+    created_at: row.createdAt.toISOString(),
+  };
+}
+
+function sanitizeAuditMetadataJson(
+  value: Record<string, unknown> | null,
+): Record<string, unknown> | null {
+  if (value === null) {
+    return null;
+  }
+
+  return sanitizeAuditJsonValue(value) as Record<string, unknown>;
+}
+
+function sanitizeAuditJsonValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeAuditJsonValue(item));
+  }
+
+  if (typeof value !== 'object' || value === null) {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, childValue]) => [
+      key,
+      isSensitiveAuditMetadataKey(key) ? '[redacted]' : sanitizeAuditJsonValue(childValue),
+    ]),
+  );
+}
+
+function isSensitiveAuditMetadataKey(key: string): boolean {
+  const normalizedKey = key.toLowerCase();
+
+  return [
+    'password',
+    'token',
+    'secret',
+    'credential',
+    'authorization',
+    'api_key',
+    'apikey',
+    'access_token',
+    'refresh_token',
+    'idempotency_key',
+    'hash',
+    'card',
+    'provider_secret',
+    'session',
+  ].some((sensitiveFragment) => normalizedKey.includes(sensitiveFragment));
+}
+
+function normalizeAuditActionFilter(value: string | null): string | null {
+  if (value === null) {
+    return null;
+  }
+
+  const normalizedValue = value.trim();
+
+  return normalizedValue.length > 0 ? normalizedValue : null;
+}
+
+function encodePlatformAuditLogCursor(row: PlatformAuditLogRecord): string {
+  return Buffer.from(
+    JSON.stringify({
+      created_at: row.createdAt.toISOString(),
+      id: row.id,
+    }),
+    'utf8',
+  ).toString('base64url');
+}
+
+function decodePlatformAuditLogCursor(
+  cursor: string | null,
+): { readonly createdAt: Date; readonly id: string } | null {
+  if (cursor === null) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as {
+      readonly created_at?: unknown;
+      readonly id?: unknown;
+    };
+
+    if (typeof parsed.created_at !== 'string' || typeof parsed.id !== 'string') {
+      throw new Error('Invalid cursor payload.');
+    }
+
+    const createdAt = new Date(parsed.created_at);
+
+    if (Number.isNaN(createdAt.getTime()) || parsed.id.trim().length === 0) {
+      throw new Error('Invalid cursor values.');
+    }
+
+    return {
+      createdAt,
+      id: parsed.id,
+    };
+  } catch {
+    throw GarageOsApiException.validationFailed([
+      {
+        field: 'cursor',
+        code: 'invalid_cursor',
+        message: 'Cursor is invalid.',
+      },
+    ]);
+  }
 }
 
 function toTenantSummaryResponse(row: PlatformTenantListRecord): PlatformTenantSummaryResponse {

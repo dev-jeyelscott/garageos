@@ -458,6 +458,47 @@ interface PlatformTenantListState {
   readonly code?: string | null;
 }
 
+interface PlatformAuditLogListItem {
+  readonly id: string;
+  readonly platform_admin_user_id: string | null;
+  readonly tenant_id: string | null;
+  readonly action: string;
+  readonly entity_type: string;
+  readonly entity_id: string | null;
+  readonly metadata_json: Record<string, unknown> | null;
+  readonly ip_address: string | null;
+  readonly user_agent: string | null;
+  readonly created_at: string;
+}
+
+interface PlatformAuditLogListFilters {
+  readonly platform_admin_user_id: string;
+  readonly action: string;
+  readonly tenant_id: string;
+  readonly from: string;
+  readonly to: string;
+}
+
+interface PlatformAuditLogListPagination {
+  readonly limit: number;
+  readonly next_cursor: string | null;
+  readonly has_more: boolean;
+}
+
+interface PlatformAuditLogListResult {
+  readonly audit_logs: readonly PlatformAuditLogListItem[];
+  readonly pagination: PlatformAuditLogListPagination | null;
+}
+
+interface PlatformAuditLogListState {
+  readonly status: 'idle' | 'loading' | 'loaded' | 'loading_more' | 'error';
+  readonly auditLogs: readonly PlatformAuditLogListItem[];
+  readonly pagination: PlatformAuditLogListPagination | null;
+  readonly message?: string;
+  readonly detail?: string | null;
+  readonly code?: string | null;
+}
+
 const platformNavItems: readonly ShellNavItem[] = [
   {
     label: 'Overview',
@@ -488,7 +529,7 @@ const platformNavItems: readonly ShellNavItem[] = [
   },
   {
     label: 'Platform Audit Logs',
-    disabledReason: 'Planned route: /platform/audit-logs. Requires platform audit log API.',
+    href: '/platform/audit-logs',
   },
   {
     label: 'Settings',
@@ -845,6 +886,16 @@ const tenantMoreMenuItems: readonly TenantMoreMenuItem[] = [
 
 const platformTenantListPageSize = 50;
 
+const platformAuditLogListPageSize = 50;
+
+const defaultPlatformAuditLogListFilters: PlatformAuditLogListFilters = {
+  platform_admin_user_id: '',
+  action: '',
+  tenant_id: '',
+  from: '',
+  to: '',
+};
+
 const defaultPlatformTenantListFilters: PlatformTenantListFilters = {
   q: '',
   status: 'all',
@@ -973,11 +1024,11 @@ export function PlatformOverviewScreen() {
     },
     {
       title: 'Audit Logs',
-      href: undefined,
-      status: 'planned',
+      href: '/platform/audit-logs',
+      status: 'active',
       requiredPermission: 'platform.audit_logs.read',
       description:
-        'Platform audit log search remains planned until the platform audit log API is wired.',
+        'Search platform audit logs by actor, action, tenant, and date range through the documented read API.',
     },
     {
       title: 'Platform Settings',
@@ -1420,6 +1471,327 @@ export function PlatformTenantsScreen() {
                   </div>
                 ) : null}
               </div>
+            </CardContent>
+          </Card>
+        </>
+      )}
+    </AuthenticatedShell>
+  );
+}
+
+export function PlatformAuditLogsScreen() {
+  const sessionState = useProtectedSession('platform');
+  const [filterDraft, setFilterDraft] = useState<PlatformAuditLogListFilters>(
+    defaultPlatformAuditLogListFilters,
+  );
+  const [appliedFilters, setAppliedFilters] = useState<PlatformAuditLogListFilters>(
+    defaultPlatformAuditLogListFilters,
+  );
+  const [auditLogState, setAuditLogState] = useState<PlatformAuditLogListState>({
+    status: 'idle',
+    auditLogs: [],
+    pagination: null,
+  });
+
+  const canReadAuditLogs =
+    sessionState.status === 'ready' &&
+    hasEffectivePermission(sessionState.session, 'platform.audit_logs.read');
+
+  useEffect(() => {
+    if (sessionState.status !== 'ready' || !canReadAuditLogs) {
+      return;
+    }
+
+    let active = true;
+
+    async function loadInitialAuditLogs() {
+      setAuditLogState({
+        status: 'loading',
+        auditLogs: [],
+        pagination: null,
+      });
+
+      try {
+        const result = await getPlatformAuditLogs({
+          filters: appliedFilters,
+          limit: platformAuditLogListPageSize,
+        });
+
+        if (!active) {
+          return;
+        }
+
+        setAuditLogState({
+          status: 'loaded',
+          auditLogs: result.audit_logs,
+          pagination: result.pagination,
+        });
+      } catch (error) {
+        if (!active) {
+          return;
+        }
+
+        setAuditLogState({
+          status: 'error',
+          auditLogs: [],
+          pagination: null,
+          message: toSafeErrorMessage(error, 'Unable to load platform audit logs.'),
+          detail: toSafeErrorDetail(error),
+          code: getApiErrorCode(error),
+        });
+      }
+    }
+
+    void loadInitialAuditLogs();
+
+    return () => {
+      active = false;
+    };
+  }, [appliedFilters, canReadAuditLogs, sessionState.status]);
+
+  function updateFilterDraft<K extends keyof PlatformAuditLogListFilters>(
+    field: K,
+    value: PlatformAuditLogListFilters[K],
+  ) {
+    setFilterDraft((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }
+
+  function handleFilterSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    setAppliedFilters({
+      platform_admin_user_id: filterDraft.platform_admin_user_id.trim(),
+      action: filterDraft.action.trim(),
+      tenant_id: filterDraft.tenant_id.trim(),
+      from: filterDraft.from,
+      to: filterDraft.to,
+    });
+  }
+
+  function handleResetFilters() {
+    setFilterDraft(defaultPlatformAuditLogListFilters);
+    setAppliedFilters(defaultPlatformAuditLogListFilters);
+  }
+
+  async function handleLoadMore() {
+    const nextCursor = auditLogState.pagination?.next_cursor ?? null;
+
+    if (nextCursor === null || auditLogState.status === 'loading_more') {
+      return;
+    }
+
+    setAuditLogState((current) => ({
+      ...current,
+      status: 'loading_more',
+    }));
+
+    try {
+      const result = await getPlatformAuditLogs({
+        filters: appliedFilters,
+        cursor: nextCursor,
+        limit: platformAuditLogListPageSize,
+      });
+
+      setAuditLogState((current) => ({
+        status: 'loaded',
+        auditLogs: [...current.auditLogs, ...result.audit_logs],
+        pagination: result.pagination,
+      }));
+    } catch (error) {
+      setAuditLogState((current) => ({
+        status: 'error',
+        auditLogs: current.auditLogs,
+        pagination: current.pagination,
+        message: toSafeErrorMessage(error, 'Unable to load more platform audit logs.'),
+        detail: toSafeErrorDetail(error),
+        code: getApiErrorCode(error),
+      }));
+    }
+  }
+
+  if (sessionState.status !== 'ready') {
+    return <SessionStateScreen state={sessionState} area="platform" />;
+  }
+
+  const isInitialLoading = auditLogState.status === 'idle' || auditLogState.status === 'loading';
+  const isLoadingMore = auditLogState.status === 'loading_more';
+  const hasMore =
+    auditLogState.pagination?.has_more === true && auditLogState.pagination.next_cursor !== null;
+  const hasActiveFilters = Object.values(appliedFilters).some((value) => value.length > 0);
+
+  return (
+    <AuthenticatedShell
+      area="platform"
+      session={sessionState.session}
+      title="Platform Audit Logs"
+      eyebrow="Platform administration"
+      description="Search platform-level audit events without exposing sensitive payloads or entering tenant support access."
+      actions={
+        <ButtonLink href="/platform" variant="secondary">
+          Back to platform
+        </ButtonLink>
+      }
+    >
+      {!canReadAuditLogs ? (
+        <ForbiddenState
+          title="Platform audit logs unavailable"
+          requiredPermission="platform.audit_logs.read"
+          description="Your platform session does not include permission to view platform audit logs."
+        />
+      ) : (
+        <>
+          <Alert>
+            <p className="text-sm leading-6">
+              This is a read-only platform audit search screen. It uses actor, action, tenant, and
+              date filters only. Sensitive metadata is redacted by the backend response.
+            </p>
+          </Alert>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Audit log search</CardTitle>
+              <CardDescription>
+                Use narrow filters for high-volume audit trails. Results use cursor pagination from
+                the platform audit log API.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-5">
+              <form
+                className="grid gap-3 lg:grid-cols-5 lg:items-end"
+                onSubmit={handleFilterSubmit}
+              >
+                <label className="grid gap-2">
+                  <span className="text-sm font-bold text-foreground">Actor admin ID</span>
+                  <Input
+                    value={filterDraft.platform_admin_user_id}
+                    onChange={(event) =>
+                      updateFilterDraft('platform_admin_user_id', event.currentTarget.value)
+                    }
+                    placeholder="Platform admin UUID"
+                    disabled={isInitialLoading || isLoadingMore}
+                  />
+                </label>
+
+                <label className="grid gap-2">
+                  <span className="text-sm font-bold text-foreground">Action</span>
+                  <Input
+                    value={filterDraft.action}
+                    onChange={(event) => updateFilterDraft('action', event.currentTarget.value)}
+                    placeholder="platform.tenant_export.queued"
+                    disabled={isInitialLoading || isLoadingMore}
+                  />
+                </label>
+
+                <label className="grid gap-2">
+                  <span className="text-sm font-bold text-foreground">Tenant ID</span>
+                  <Input
+                    value={filterDraft.tenant_id}
+                    onChange={(event) => updateFilterDraft('tenant_id', event.currentTarget.value)}
+                    placeholder="Tenant UUID"
+                    disabled={isInitialLoading || isLoadingMore}
+                  />
+                </label>
+
+                <label className="grid gap-2">
+                  <span className="text-sm font-bold text-foreground">From</span>
+                  <Input
+                    type="datetime-local"
+                    value={filterDraft.from}
+                    onChange={(event) => updateFilterDraft('from', event.currentTarget.value)}
+                    disabled={isInitialLoading || isLoadingMore}
+                  />
+                </label>
+
+                <label className="grid gap-2">
+                  <span className="text-sm font-bold text-foreground">To</span>
+                  <Input
+                    type="datetime-local"
+                    value={filterDraft.to}
+                    onChange={(event) => updateFilterDraft('to', event.currentTarget.value)}
+                    disabled={isInitialLoading || isLoadingMore}
+                  />
+                </label>
+
+                <div className="flex gap-3 lg:col-span-5 lg:justify-end">
+                  <Button type="submit" disabled={isInitialLoading || isLoadingMore}>
+                    Apply filters
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={isInitialLoading || isLoadingMore}
+                    onClick={handleResetFilters}
+                  >
+                    Reset
+                  </Button>
+                </div>
+              </form>
+
+              {hasActiveFilters ? (
+                <Alert>
+                  <p className="text-sm leading-6">
+                    Active audit filters are applied. Reset filters to return to the latest platform
+                    audit events.
+                  </p>
+                </Alert>
+              ) : null}
+
+              {isInitialLoading ? <TenantListSkeleton /> : null}
+
+              {auditLogState.status === 'error' ? (
+                auditLogState.code === 'forbidden' ? (
+                  <ForbiddenState
+                    title="Platform audit log search blocked"
+                    requiredPermission="platform.audit_logs.read"
+                    description={auditLogState.message ?? 'Platform audit log search is blocked.'}
+                    detail={auditLogState.detail ?? null}
+                  />
+                ) : (
+                  <Alert variant="destructive">
+                    <p className="text-sm font-bold">{auditLogState.message}</p>
+                    {auditLogState.detail === null || auditLogState.detail === undefined ? null : (
+                      <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                        {auditLogState.detail}
+                      </p>
+                    )}
+                  </Alert>
+                )
+              ) : null}
+
+              {!isInitialLoading &&
+              auditLogState.status !== 'error' &&
+              auditLogState.auditLogs.length === 0 ? (
+                <EmptyState
+                  title={
+                    hasActiveFilters ? 'No audit logs match the filters' : 'No audit logs returned'
+                  }
+                  description={
+                    hasActiveFilters
+                      ? 'Adjust the actor, action, tenant, or date filters and try again.'
+                      : 'The platform audit log endpoint returned an empty list.'
+                  }
+                />
+              ) : null}
+
+              {auditLogState.auditLogs.length > 0 ? (
+                <PlatformAuditLogResults auditLogs={auditLogState.auditLogs} />
+              ) : null}
+
+              {hasMore && auditLogState.status !== 'error' ? (
+                <div className="flex justify-center">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={isLoadingMore}
+                    onClick={() => void handleLoadMore()}
+                  >
+                    {isLoadingMore ? 'Loading more audit logs...' : 'Load more audit logs'}
+                  </Button>
+                </div>
+              ) : null}
             </CardContent>
           </Card>
         </>
@@ -3647,6 +4019,55 @@ async function getPlatformTenants({
   });
 }
 
+async function getPlatformAuditLogs({
+  filters,
+  cursor = null,
+  limit,
+}: {
+  readonly filters: PlatformAuditLogListFilters;
+  readonly cursor?: string | null;
+  readonly limit: number;
+}): Promise<PlatformAuditLogListResult> {
+  const accessToken = await getAccessTokenOrRefresh();
+  const params = new URLSearchParams();
+
+  params.set('limit', String(limit));
+
+  if (filters.platform_admin_user_id.length > 0) {
+    params.set('platform_admin_user_id', filters.platform_admin_user_id);
+  }
+
+  if (filters.action.length > 0) {
+    params.set('action', filters.action);
+  }
+
+  if (filters.tenant_id.length > 0) {
+    params.set('tenant_id', filters.tenant_id);
+  }
+
+  if (filters.from.length > 0) {
+    params.set('from', new Date(filters.from).toISOString());
+  }
+
+  if (filters.to.length > 0) {
+    params.set('to', new Date(filters.to).toISOString());
+  }
+
+  if (cursor !== null && cursor.length > 0) {
+    params.set('cursor', cursor);
+  }
+
+  const envelope = await getAuthJsonEnvelope<unknown>(`/platform/audit-logs?${params.toString()}`, {
+    accessToken,
+  });
+
+  return normalizePlatformAuditLogListPayload(envelope.data, {
+    requestId: readMetaString(envelope.meta.request_id),
+    correlationId: readMetaString(envelope.meta.correlation_id),
+    pagination: normalizePlatformAuditLogPagination(envelope.meta.pagination),
+  });
+}
+
 async function getPlatformTenantDetail(tenantId: string): Promise<PlatformTenantDetail> {
   const accessToken = await getAccessTokenOrRefresh();
 
@@ -3722,6 +4143,73 @@ function normalizePlatformTenantListPayload(
   }
 
   throw toInvalidTenantListResponseError(meta);
+}
+function normalizePlatformAuditLogListPayload(
+  data: unknown,
+  meta: {
+    readonly requestId: string | null;
+    readonly correlationId: string | null;
+    readonly pagination: PlatformAuditLogListPagination | null;
+  },
+): PlatformAuditLogListResult {
+  if (
+    isObjectRecord(data) &&
+    Array.isArray(data.audit_logs) &&
+    data.audit_logs.every(isPlatformAuditLogListItem)
+  ) {
+    return {
+      audit_logs: data.audit_logs,
+      pagination: normalizePlatformAuditLogPagination(data.pagination) ?? meta.pagination,
+    };
+  }
+
+  throw {
+    code: 'invalid_response',
+    message: 'The platform audit log response was not valid.',
+    status: 200,
+    requestId: meta.requestId,
+    correlationId: meta.correlationId,
+    details: [],
+  } satisfies ApiClientError;
+}
+
+function normalizePlatformAuditLogPagination(
+  value: unknown,
+): PlatformAuditLogListPagination | null {
+  if (!isObjectRecord(value)) {
+    return null;
+  }
+
+  const limit = typeof value.limit === 'number' ? value.limit : null;
+  const nextCursor =
+    typeof value.next_cursor === 'string' || value.next_cursor === null ? value.next_cursor : null;
+  const hasMore = typeof value.has_more === 'boolean' ? value.has_more : null;
+
+  if (limit === null || hasMore === null) {
+    return null;
+  }
+
+  return {
+    limit,
+    next_cursor: nextCursor,
+    has_more: hasMore,
+  };
+}
+
+function isPlatformAuditLogListItem(value: unknown): value is PlatformAuditLogListItem {
+  return (
+    isObjectRecord(value) &&
+    typeof value.id === 'string' &&
+    (typeof value.platform_admin_user_id === 'string' || value.platform_admin_user_id === null) &&
+    (typeof value.tenant_id === 'string' || value.tenant_id === null) &&
+    typeof value.action === 'string' &&
+    typeof value.entity_type === 'string' &&
+    (typeof value.entity_id === 'string' || value.entity_id === null) &&
+    (isObjectRecord(value.metadata_json) || value.metadata_json === null) &&
+    (typeof value.ip_address === 'string' || value.ip_address === null) &&
+    (typeof value.user_agent === 'string' || value.user_agent === null) &&
+    typeof value.created_at === 'string'
+  );
 }
 
 async function updatePlatformTenantSubscription(
@@ -3885,6 +4373,95 @@ function createPlatformTenantSubscriptionFormFromTenant(
     subscription_expiration_date: tenant.subscription?.expiration_date ?? '',
     reason: '',
   };
+}
+
+function PlatformAuditLogResults({
+  auditLogs,
+}: {
+  readonly auditLogs: readonly PlatformAuditLogListItem[];
+}) {
+  return (
+    <div className="grid gap-4">
+      <div className="grid gap-3 lg:hidden">
+        {auditLogs.map((auditLog) => (
+          <PlatformAuditLogMobileCard key={auditLog.id} auditLog={auditLog} />
+        ))}
+      </div>
+
+      <div className="hidden overflow-hidden rounded-2xl border border-border bg-card lg:block">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/70 hover:bg-muted/70">
+              <TableHead>Action</TableHead>
+              <TableHead>Actor</TableHead>
+              <TableHead>Tenant</TableHead>
+              <TableHead>Entity</TableHead>
+              <TableHead>Created</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {auditLogs.map((auditLog) => (
+              <TableRow key={auditLog.id}>
+                <TableCell>
+                  <p className="font-bold text-foreground">{auditLog.action}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">ID: {auditLog.id}</p>
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {auditLog.platform_admin_user_id ?? 'System / not returned'}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {auditLog.tenant_id ?? 'Platform-level'}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {auditLog.entity_type}
+                  {auditLog.entity_id === null ? '' : ` · ${auditLog.entity_id}`}
+                </TableCell>
+                <TableCell className="text-muted-foreground">{auditLog.created_at}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}
+
+function PlatformAuditLogMobileCard({ auditLog }: { readonly auditLog: PlatformAuditLogListItem }) {
+  return (
+    <article className="grid gap-4 rounded-2xl border border-border bg-card p-4 shadow-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge>{auditLog.entity_type}</Badge>
+        <Badge variant="info">Platform audit</Badge>
+      </div>
+
+      <div>
+        <h2 className="break-words font-bold text-foreground">{auditLog.action}</h2>
+        <p className="mt-1 break-words text-sm text-muted-foreground">{auditLog.created_at}</p>
+      </div>
+
+      <dl className="grid gap-3 rounded-2xl border border-border bg-muted/40 p-3 text-sm">
+        <div>
+          <dt className="font-bold text-foreground">Actor admin</dt>
+          <dd className="mt-1 break-words text-muted-foreground">
+            {auditLog.platform_admin_user_id ?? 'System / not returned'}
+          </dd>
+        </div>
+        <div>
+          <dt className="font-bold text-foreground">Tenant</dt>
+          <dd className="mt-1 break-words text-muted-foreground">
+            {auditLog.tenant_id ?? 'Platform-level'}
+          </dd>
+        </div>
+        <div>
+          <dt className="font-bold text-foreground">Entity</dt>
+          <dd className="mt-1 break-words text-muted-foreground">
+            {auditLog.entity_type}
+            {auditLog.entity_id === null ? '' : ` · ${auditLog.entity_id}`}
+          </dd>
+        </div>
+      </dl>
+    </article>
+  );
 }
 
 function PlatformTenantTable({ tenants }: { readonly tenants: readonly PlatformTenantListItem[] }) {

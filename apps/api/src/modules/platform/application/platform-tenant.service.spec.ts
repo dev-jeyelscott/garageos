@@ -15,6 +15,7 @@ import { TokenHashingService } from '../../auth/application/token-hashing.servic
 import type { AuthSessionResponseData } from '../../auth/contracts';
 import {
   PlatformTenantStore,
+  EndPlatformSupportAccessSessionInput,
   type CreateOwnerInvitationInput,
   type CreateSubscriptionOverrideInput,
   type CreateTenantInput,
@@ -34,7 +35,8 @@ import {
   type QueueTenantExportJobInput,
   type PlatformTenantDeletionJobSummary,
   type QueueTenantDeletionJobInput,
-  EndPlatformSupportAccessSessionInput,
+  type ListPlatformAuditLogsInput,
+  type PlatformAuditLogRecord,
 } from './platform-tenant.store';
 import { PLATFORM_PERMISSIONS, PlatformTenantService } from './platform-tenant.service';
 
@@ -227,6 +229,100 @@ describe('PlatformTenantService', () => {
 
     expect(store.updatedTenantStatuses).toEqual([]);
     expect(store.subscriptionOverrides).toEqual([]);
+  });
+
+  it('lists platform audit logs with filters, safe metadata, and cursor pagination', async () => {
+    const { service, store } = createService();
+
+    store.auditLogRows = [
+      createPlatformAuditLogRecord({
+        id: '55555555-5555-4555-8555-555555555555',
+        action: 'platform.tenant_export.queued',
+        metadataJson: {
+          tenant_status: 'active',
+          access_token: 'secret-token',
+          nested: {
+            password_hash: 'secret-hash',
+            safe_value: 'kept',
+          },
+        },
+        createdAt: new Date('2026-06-27T03:00:00.000Z'),
+      }),
+      createPlatformAuditLogRecord({
+        id: '66666666-6666-4666-8666-666666666666',
+        action: 'platform.support_access_session.ended',
+        createdAt: new Date('2026-06-27T02:00:00.000Z'),
+      }),
+    ];
+
+    const response = await service.listAuditLogs(
+      {
+        limit: 1,
+        actor: PLATFORM_ADMIN_USER_ID,
+        action: 'platform.tenant_export.queued',
+        tenant_id: TENANT_ID,
+        from: '2026-06-27T00:00:00.000Z',
+        to: '2026-06-28T00:00:00.000Z',
+      },
+      createPlatformSession([PLATFORM_PERMISSIONS.AUDIT_LOGS_READ]),
+    );
+
+    expect(store.auditLogInputs[0]).toMatchObject({
+      limit: 2,
+      platformAdminUserId: PLATFORM_ADMIN_USER_ID,
+      action: 'platform.tenant_export.queued',
+      tenantId: TENANT_ID,
+      fromCreatedAt: new Date('2026-06-27T00:00:00.000Z'),
+      toCreatedAt: new Date('2026-06-28T00:00:00.000Z'),
+    });
+
+    expect(response.audit_logs).toHaveLength(1);
+    expect(response.audit_logs[0]).toMatchObject({
+      id: '55555555-5555-4555-8555-555555555555',
+      platform_admin_user_id: PLATFORM_ADMIN_USER_ID,
+      tenant_id: TENANT_ID,
+      action: 'platform.tenant_export.queued',
+      entity_type: 'background_job',
+      entity_id: '77777777-7777-4777-8777-777777777777',
+      metadata_json: {
+        tenant_status: 'active',
+        access_token: '[redacted]',
+        nested: {
+          password_hash: '[redacted]',
+          safe_value: 'kept',
+        },
+      },
+      created_at: '2026-06-27T03:00:00.000Z',
+    });
+    expect(response.pagination).toMatchObject({
+      limit: 1,
+      has_more: true,
+    });
+    expect(response.pagination.next_cursor).toEqual(expect.any(String));
+  });
+
+  it('requires platform.audit_logs.read before listing platform audit logs', async () => {
+    const { service, store } = createService();
+
+    store.auditLogRows = [createPlatformAuditLogRecord()];
+
+    await expect(
+      service.listAuditLogs(
+        {
+          limit: 50,
+        },
+        createPlatformSession([PLATFORM_PERMISSIONS.TENANTS_READ]),
+      ),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.FORBIDDEN,
+      details: [
+        {
+          required_permission: PLATFORM_PERMISSIONS.AUDIT_LOGS_READ,
+        },
+      ],
+    });
+
+    expect(store.auditLogInputs).toEqual([]);
   });
 
   it('starts an audited read-only platform support access session', async () => {
@@ -1414,6 +1510,25 @@ function createPlatformSession(permissions: readonly string[]): AuthSessionRespo
   };
 }
 
+function createPlatformAuditLogRecord(
+  overrides: Partial<PlatformAuditLogRecord> = {},
+): PlatformAuditLogRecord {
+  return {
+    id: overrides.id ?? '55555555-5555-4555-8555-555555555555',
+    platformAdminUserId: overrides.platformAdminUserId ?? PLATFORM_ADMIN_USER_ID,
+    tenantId: overrides.tenantId ?? TENANT_ID,
+    action: overrides.action ?? 'platform.tenant_export.queued',
+    entityType: overrides.entityType ?? 'background_job',
+    entityId: overrides.entityId ?? '77777777-7777-4777-8777-777777777777',
+    metadataJson: overrides.metadataJson ?? {
+      tenant_status: 'active',
+    },
+    ipAddress: overrides.ipAddress ?? '127.0.0.1',
+    userAgent: overrides.userAgent ?? 'vitest',
+    createdAt: overrides.createdAt ?? NOW,
+  };
+}
+
 function createTenantRecord(
   overrides: Partial<PlatformTenantDetailRecord> = {},
 ): PlatformTenantDetailRecord {
@@ -1535,6 +1650,8 @@ class FakePlatformTenantStore extends PlatformTenantStore {
   tenantById: PlatformTenantDetailRecord | null = null;
   supportAccessSessionById: PlatformSupportAccessSessionSummary | null = null;
   activeTenantDeletionJob: PlatformTenantDeletionJobSummary | null = null;
+  auditLogRows: PlatformAuditLogRecord[] = [];
+  readonly auditLogInputs: ListPlatformAuditLogsInput[] = [];
   readonly queuedTenantDeletionJobs: QueueTenantDeletionJobInput[] = [];
   readonly listInputs: ListPlatformTenantsInput[] = [];
   readonly createdTenants: CreateTenantInput[] = [];
@@ -1547,6 +1664,14 @@ class FakePlatformTenantStore extends PlatformTenantStore {
   readonly queuedTenantExportJobs: QueueTenantExportJobInput[] = [];
   readonly createdInvitations: CreateOwnerInvitationInput[] = [];
   readonly lifecycleEvents: CreateTenantLifecycleEventInput[] = [];
+
+  async listPlatformAuditLogs(
+    input: ListPlatformAuditLogsInput,
+  ): Promise<readonly PlatformAuditLogRecord[]> {
+    this.auditLogInputs.push(input);
+
+    return this.auditLogRows;
+  }
 
   async listTenants(input: ListPlatformTenantsInput): Promise<readonly PlatformTenantListRecord[]> {
     this.listInputs.push(input);
