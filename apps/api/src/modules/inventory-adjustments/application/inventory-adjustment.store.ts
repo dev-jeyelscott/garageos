@@ -81,6 +81,28 @@ export interface ListAdjustmentsInput {
   readonly limit: number;
 }
 
+export interface FindLatestAdjustmentNumberForDateInput {
+  readonly tenantId: string;
+  readonly datePrefix: string;
+}
+
+export interface FindTenantAdjustmentApprovalThresholdInput {
+  readonly tenantId: string;
+}
+
+export interface FifoCostLayerSnapshot {
+  readonly remainingQuantity: string;
+  readonly activeReservedQuantity: string;
+  readonly allocatableQuantity: string;
+  readonly unitCost: string;
+}
+
+export interface ListFifoCostLayersInput {
+  readonly tenantId: string;
+  readonly branchId: string;
+  readonly productId: string;
+}
+
 export abstract class InventoryAdjustmentStore {
   abstract createDraftAdjustment(
     input: CreateDraftAdjustmentInput,
@@ -126,4 +148,19 @@ export abstract class InventoryAdjustmentStore {
     input: ListAdjustmentsInput,
     client?: DatabaseQueryClient,
   ): Promise<readonly InventoryAdjustmentListRecord[]>;
+
+  abstract findLatestAdjustmentNumberForDate(
+    input: FindLatestAdjustmentNumberForDateInput,
+    client?: DatabaseQueryClient,
+  ): Promise<string | null>;
+
+  abstract findTenantAdjustmentApprovalThreshold(
+    input: FindTenantAdjustmentApprovalThresholdInput,
+    client?: DatabaseQueryClient,
+  ): Promise<string | null>;
+
+  abstract listFifoCostLayers(
+    input: ListFifoCostLayersInput,
+    client?: DatabaseQueryClient,
+  ): Promise<readonly FifoCostLayerSnapshot[]>;
 }

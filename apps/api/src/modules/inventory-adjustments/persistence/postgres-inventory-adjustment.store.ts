@@ -9,10 +9,14 @@ import {
 import {
   type CreateDraftAdjustmentInput,
   type CreateDraftAdjustmentLinesInput,
+  type FifoCostLayerSnapshot,
   type FindAdjustmentWithLinesInput,
+  type FindLatestAdjustmentNumberForDateInput,
+  type FindTenantAdjustmentApprovalThresholdInput,
   type InsertStatusEventInput,
   InventoryAdjustmentStore,
   type ListAdjustmentsInput,
+  type ListFifoCostLayersInput,
   type ListStatusEventsInput,
   type LockAdjustmentWithLinesForPostingInput,
   type ReplaceDraftAdjustmentLinesInput,
@@ -359,6 +363,82 @@ export class PostgresInventoryAdjustmentStore extends InventoryAdjustmentStore {
     );
 
     return result.rows.map(mapInventoryAdjustmentListRow);
+  }
+
+  async findLatestAdjustmentNumberForDate(
+    input: FindLatestAdjustmentNumberForDateInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<string | null> {
+    const result = await client.query<{ adjustment_number: string }>(
+      `
+        select adjustment_number
+        from inventory_adjustments
+        where tenant_id = $1::uuid
+          and adjustment_number like $2
+        order by adjustment_number desc
+        limit 1
+      `,
+      [input.tenantId, `${input.datePrefix}-%`],
+    );
+
+    return result.rows[0]?.adjustment_number ?? null;
+  }
+
+  async findTenantAdjustmentApprovalThreshold(
+    _input: FindTenantAdjustmentApprovalThresholdInput,
+    _client: DatabaseQueryClient = this.database,
+  ): Promise<string | null> {
+    return null;
+  }
+
+  async listFifoCostLayers(
+    input: ListFifoCostLayersInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<readonly FifoCostLayerSnapshot[]> {
+    const result = await client.query<{
+      remaining_quantity: string;
+      active_reserved_quantity: string;
+      allocatable_quantity: string;
+      unit_cost: string;
+    }>(
+      `
+        with active_allocation_totals as (
+          select
+            allocation.fifo_layer_id,
+            coalesce(sum(allocation.reserved_quantity), 0)::numeric(14,3) as active_reserved_quantity
+          from fifo_reservation_allocations allocation
+          where allocation.tenant_id = $1::uuid
+            and allocation.status = 'active'
+          group by allocation.fifo_layer_id
+        )
+        select
+          layer.remaining_quantity::text,
+          coalesce(allocation.active_reserved_quantity, 0)::text as active_reserved_quantity,
+          (
+            layer.remaining_quantity - coalesce(allocation.active_reserved_quantity, 0)
+          )::text as allocatable_quantity,
+          layer.unit_cost::text
+        from fifo_layers layer
+        left join active_allocation_totals allocation
+          on allocation.fifo_layer_id = layer.id
+        where layer.tenant_id = $1::uuid
+          and layer.branch_id = $2::uuid
+          and layer.product_id = $3::uuid
+          and layer.remaining_quantity > 0
+          and (
+            layer.remaining_quantity - coalesce(allocation.active_reserved_quantity, 0)
+          ) > 0
+        order by layer.received_at asc, layer.id asc
+      `,
+      [input.tenantId, input.branchId, input.productId],
+    );
+
+    return result.rows.map((row) => ({
+      remainingQuantity: row.remaining_quantity,
+      activeReservedQuantity: row.active_reserved_quantity,
+      allocatableQuantity: row.allocatable_quantity,
+      unitCost: row.unit_cost,
+    }));
   }
 
   private async findAdjustment(
