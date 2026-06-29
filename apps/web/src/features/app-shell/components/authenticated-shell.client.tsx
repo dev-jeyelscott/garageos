@@ -1,7 +1,8 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 
 import {
@@ -2939,65 +2940,38 @@ function AuthenticatedShell({
   readonly actions?: ReactNode;
   readonly children: ReactNode;
 }) {
+  const pathname = usePathname();
   const navItems = area === 'platform' ? platformNavItems : tenantNavItems;
+  const networkStatus = useNetworkStatus();
+  const isPlatform = area === 'platform';
 
   return (
-    <main className="min-h-dvh bg-background text-foreground">
-      <div className="border-b border-border bg-card/95 shadow-sm">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <Link href="/" className="inline-flex min-h-11 items-center gap-3 no-underline">
-                <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary text-sm font-black text-primary-foreground">
-                  G
-                </span>
-                <span>
-                  <span className="block text-sm font-black tracking-tight">GarageOS</span>
-                  <span className="block text-xs font-semibold text-muted-foreground">
-                    {area === 'platform'
-                      ? 'Platform Admin'
-                      : (session.tenant?.business_name ?? 'Tenant')}
-                  </span>
-                </span>
-              </Link>
-            </div>
+    <main
+      className={
+        isPlatform
+          ? 'min-h-dvh bg-background text-foreground'
+          : 'min-h-dvh bg-background pb-24 text-foreground md:pb-0'
+      }
+    >
+      <div className="sticky top-0 z-30 border-b border-border bg-card/95 shadow-sm backdrop-blur-xl">
+        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-3 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between gap-4">
+            <AppBrandLink area={area} session={session} />
 
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+              {area === 'tenant' ? <BranchContextBadge session={session} /> : null}
               <StatusBadge
                 status={session.tenant?.status}
                 fallback={area === 'platform' ? 'platform' : 'unknown'}
               />
-              <Badge>{session.user.full_name}</Badge>
+              <Badge className="max-w-[12rem] truncate">{session.user.full_name}</Badge>
               <ButtonLink href="/auth/logout" variant="ghost" size="sm">
                 Logout
               </ButtonLink>
             </div>
           </div>
 
-          <nav aria-label={area === 'platform' ? 'Platform admin navigation' : 'Tenant navigation'}>
-            <ul className="flex gap-2 overflow-x-auto pb-1">
-              {navItems.map((item) => (
-                <li key={item.label}>
-                  {item.href === undefined ? (
-                    <span
-                      title={item.disabledReason}
-                      aria-disabled="true"
-                      className="inline-flex min-h-10 cursor-not-allowed items-center whitespace-nowrap rounded-xl border border-border bg-muted px-3 text-sm font-semibold text-muted-foreground"
-                    >
-                      {item.label}
-                    </span>
-                  ) : (
-                    <Link
-                      href={item.href}
-                      className="inline-flex min-h-10 items-center whitespace-nowrap rounded-xl border border-primary/20 bg-accent px-3 text-sm font-semibold text-accent-foreground no-underline"
-                    >
-                      {item.label}
-                    </Link>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </nav>
+          <ShellNavigation area={area} navItems={navItems} pathname={pathname} />
         </div>
       </div>
 
@@ -3010,7 +2984,10 @@ function AuthenticatedShell({
             </p>
           </Alert>
         ) : (
-          <TenantStatusBanner session={session} />
+          <>
+            <TenantStatusBanner session={session} />
+            <OfflineBanner networkStatus={networkStatus} />
+          </>
         )}
 
         <header className="grid gap-4 rounded-[2rem] border border-border bg-card p-5 shadow-sm sm:p-6 lg:grid-cols-[1fr_auto] lg:items-end">
@@ -3031,8 +3008,235 @@ function AuthenticatedShell({
 
         {children}
       </div>
+
+      {area === 'tenant' ? (
+        <MobileTenantNavigation navItems={tenantNavItems} pathname={pathname} />
+      ) : null}
     </main>
   );
+}
+
+function AppBrandLink({
+  area,
+  session,
+}: {
+  readonly area: 'platform' | 'tenant';
+  readonly session: AuthSessionResponseData;
+}) {
+  return (
+    <Link
+      href={area === 'platform' ? '/platform/tenants' : '/dashboard'}
+      aria-label="GarageOS home"
+      className="inline-flex min-h-12 min-w-0 items-center gap-3 no-underline"
+    >
+      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-primary/20 bg-accent shadow-sm sm:h-14 sm:w-14">
+        <Image
+          src="/images/logo.png"
+          alt=""
+          width={96}
+          height={96}
+          priority
+          className="h-9 w-9 object-contain sm:h-11 sm:w-11"
+        />
+      </span>
+
+      <span className="min-w-0">
+        <span className="hidden rounded-2xl border border-border/70 bg-[rgb(var(--foreground))] px-3 py-2 shadow-sm dark:bg-card sm:inline-flex">
+          <Image
+            src="/images/garageos.png"
+            alt=""
+            width={168}
+            height={60}
+            priority
+            className="h-auto w-[118px] object-contain md:w-[136px]"
+          />
+        </span>
+        <span className="mt-1 block max-w-[13rem] truncate text-xs font-semibold text-muted-foreground sm:max-w-[18rem]">
+          {area === 'platform' ? 'Platform Admin' : (session.tenant?.business_name ?? 'Tenant')}
+        </span>
+      </span>
+    </Link>
+  );
+}
+
+function ShellNavigation({
+  area,
+  navItems,
+  pathname,
+}: {
+  readonly area: 'platform' | 'tenant';
+  readonly navItems: readonly ShellNavItem[];
+  readonly pathname: string;
+}) {
+  return (
+    <nav
+      aria-label={area === 'platform' ? 'Platform admin navigation' : 'Tenant navigation'}
+      className={area === 'tenant' ? 'hidden md:block' : undefined}
+    >
+      <ul className="flex gap-2 overflow-x-auto pb-1">
+        {navItems.map((item) => (
+          <li key={item.label}>
+            <ShellNavLink item={item} pathname={pathname} />
+          </li>
+        ))}
+      </ul>
+    </nav>
+  );
+}
+
+function ShellNavLink({
+  item,
+  pathname,
+}: {
+  readonly item: ShellNavItem;
+  readonly pathname: string;
+}) {
+  if (item.href === undefined) {
+    return (
+      <span
+        title={item.disabledReason}
+        aria-disabled="true"
+        className="inline-flex min-h-10 cursor-not-allowed items-center whitespace-nowrap rounded-xl border border-border bg-muted px-3 text-sm font-semibold text-muted-foreground"
+      >
+        {item.label}
+      </span>
+    );
+  }
+
+  const isActive = isShellNavItemActive(pathname, item.href);
+
+  return (
+    <Link
+      href={item.href}
+      aria-current={isActive ? 'page' : undefined}
+      className={
+        isActive
+          ? 'inline-flex min-h-10 items-center whitespace-nowrap rounded-xl border border-primary/30 bg-primary px-3 text-sm font-bold text-primary-foreground no-underline shadow-sm'
+          : 'inline-flex min-h-10 items-center whitespace-nowrap rounded-xl border border-primary/20 bg-accent px-3 text-sm font-semibold text-accent-foreground no-underline transition hover:border-primary/35 hover:bg-primary/10'
+      }
+    >
+      {item.label}
+    </Link>
+  );
+}
+
+function MobileTenantNavigation({
+  navItems,
+  pathname,
+}: {
+  readonly navItems: readonly ShellNavItem[];
+  readonly pathname: string;
+}) {
+  return (
+    <nav
+      aria-label="Tenant mobile navigation"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 px-2 py-2 shadow-[0_-18px_44px_rgb(15_23_42_/_0.10)] backdrop-blur-xl md:hidden"
+    >
+      <ul className="mx-auto grid max-w-2xl grid-cols-5 gap-1">
+        {navItems.map((item) => {
+          const isActive = item.href !== undefined && isShellNavItemActive(pathname, item.href);
+
+          return (
+            <li key={item.label}>
+              {item.href === undefined ? (
+                <span
+                  title={item.disabledReason}
+                  aria-disabled="true"
+                  className="flex min-h-14 cursor-not-allowed flex-col items-center justify-center rounded-2xl border border-transparent px-2 text-center text-[0.68rem] font-bold leading-tight text-muted-foreground opacity-70"
+                >
+                  {item.label}
+                </span>
+              ) : (
+                <Link
+                  href={item.href}
+                  aria-current={isActive ? 'page' : undefined}
+                  className={
+                    isActive
+                      ? 'flex min-h-14 flex-col items-center justify-center rounded-2xl border border-primary/30 bg-primary px-2 text-center text-[0.68rem] font-black leading-tight text-primary-foreground no-underline shadow-sm'
+                      : 'flex min-h-14 flex-col items-center justify-center rounded-2xl border border-transparent px-2 text-center text-[0.68rem] font-bold leading-tight text-muted-foreground no-underline transition hover:bg-accent hover:text-accent-foreground'
+                  }
+                >
+                  {item.label}
+                </Link>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
+  );
+}
+
+function BranchContextBadge({ session }: { readonly session: AuthSessionResponseData }) {
+  return <Badge>{getBranchContextLabel(session)}</Badge>;
+}
+
+function OfflineBanner({ networkStatus }: { readonly networkStatus: 'online' | 'offline' }) {
+  if (networkStatus === 'online') {
+    return null;
+  }
+
+  return (
+    <Alert variant="destructive">
+      <p className="text-sm font-bold">Offline mode</p>
+      <p className="mt-2 text-sm leading-6 text-muted-foreground">
+        GarageOS is offline. Operational writes must stay blocked until the network connection is
+        restored.
+      </p>
+    </Alert>
+  );
+}
+
+function useNetworkStatus(): 'online' | 'offline' {
+  const [isOnline, setIsOnline] = useState(() =>
+    typeof navigator === 'undefined' ? true : navigator.onLine,
+  );
+
+  useEffect(() => {
+    function handleOnline() {
+      setIsOnline(true);
+    }
+
+    function handleOffline() {
+      setIsOnline(false);
+    }
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  return isOnline ? 'online' : 'offline';
+}
+
+function getBranchContextLabel(session: AuthSessionResponseData): string {
+  if (session.tenant_wide_branch_access) {
+    return session.branches.length > 1
+      ? `Tenant-wide · ${session.branches.length} branches`
+      : 'Tenant-wide branch access';
+  }
+
+  if (session.branches.length === 0) {
+    return 'No branch assignment';
+  }
+
+  if (session.branches.length === 1) {
+    return session.branches[0]?.name ?? 'Assigned branch';
+  }
+
+  return `${session.branches.length} assigned branches`;
+}
+
+function isShellNavItemActive(pathname: string, href: string): boolean {
+  if (href === '/dashboard') {
+    return pathname === '/dashboard' || pathname.startsWith('/dashboard/');
+  }
+
+  return pathname === href || pathname.startsWith(`${href}/`);
 }
 
 function TenantStatusBanner({ session }: { readonly session: AuthSessionResponseData }) {
