@@ -72,6 +72,16 @@ interface TenantPlannedRouteConfig {
   readonly guardrails: readonly string[];
 }
 
+interface TenantMoreMenuItem {
+  readonly title: string;
+  readonly group: string;
+  readonly description: string;
+  readonly routePath: string;
+  readonly routeExists: boolean;
+  readonly requiredPermissions: readonly string[];
+  readonly plannedScope: readonly string[];
+}
+
 type PlatformSubscriptionStatusSource = 'system_computed' | 'platform_override';
 
 type PlatformSupportAccessMode = 'read_only' | 'write_allowed';
@@ -473,6 +483,235 @@ const tenantPlannedRouteConfigs: Record<TenantPlannedRouteKey, TenantPlannedRout
     ],
   },
 };
+
+const tenantMoreMenuItems: readonly TenantMoreMenuItem[] = [
+  {
+    title: 'Dashboard',
+    group: 'Available route foundations',
+    description:
+      'Tenant dashboard route foundation for subscription warnings, branch context, session state, and future documented dashboard widgets.',
+    routePath: '/dashboard',
+    routeExists: true,
+    requiredPermissions: [],
+    plannedScope: [
+      'Dashboard summary widgets',
+      'Subscription warning panel',
+      'Branch-aware dashboard filters',
+    ],
+  },
+  {
+    title: 'Job Orders',
+    group: 'Available route foundations',
+    description:
+      'Protected service operations route foundation for job order list, detail, intake, mechanic assignment, and status workflows.',
+    routePath: '/job-orders',
+    routeExists: true,
+    requiredPermissions: ['job_orders.read'],
+    plannedScope: [
+      'Job order list and search',
+      'Job order detail and history',
+      'Service intake and workflow actions',
+    ],
+  },
+  {
+    title: 'Customers',
+    group: 'Available route foundations',
+    description:
+      'Protected customer route foundation for tenant-wide customer lookup, customer detail, motorcycle links, and branch-filtered history.',
+    routePath: '/customers',
+    routeExists: true,
+    requiredPermissions: ['customers.read'],
+    plannedScope: ['Customer lookup', 'Customer detail', 'Linked motorcycles and service history'],
+  },
+  {
+    title: 'Stock Balances',
+    group: 'Available route foundations',
+    description:
+      'Protected inventory route foundation for branch-aware stock lookup, product search, ledger history, FIFO layers, and reservations.',
+    routePath: '/inventory/stock-balances',
+    routeExists: true,
+    requiredPermissions: ['inventory.read', 'products.read'],
+    plannedScope: [
+      'Branch stock balance lookup',
+      'Product and SKU search',
+      'Ledger and FIFO visibility',
+    ],
+  },
+  {
+    title: 'Motorcycles, Services, and Estimates',
+    group: 'Service operations',
+    description:
+      'Documented service-advisor workflow group for motorcycle records, service catalog, estimates, approvals, and estimate conversion.',
+    routePath: '/motorcycles',
+    routeExists: false,
+    requiredPermissions: ['motorcycles.read', 'services.read', 'estimates.read'],
+    plannedScope: [
+      'Motorcycle records',
+      'Service catalog',
+      'Estimate list, approval, and conversion',
+    ],
+  },
+  {
+    title: 'Mechanic Sessions',
+    group: 'Service operations',
+    description:
+      'Documented mechanic work-session group for assigned jobs, active sessions, pause/resume, finish, and work history.',
+    routePath: '/mechanic-sessions',
+    routeExists: false,
+    requiredPermissions: ['mechanic_sessions.read'],
+    plannedScope: [
+      'Assigned mechanic jobs',
+      'Work-session history',
+      'Pause, resume, and finish workflows',
+    ],
+  },
+  {
+    title: 'Invoices, Payments, Receipts, and Refunds',
+    group: 'Cashier workflows',
+    description:
+      'Documented financial workflow group for invoices, manual payments, immutable receipts, refunds, voids, and accounts receivable.',
+    routePath: '/invoices',
+    routeExists: false,
+    requiredPermissions: ['invoices.read', 'payments.read', 'receipts.read'],
+    plannedScope: [
+      'Invoice list and detail',
+      'Manual payment recording',
+      'Receipt viewing and refund workflows',
+    ],
+  },
+  {
+    title: 'Purchases, Suppliers, and AP',
+    group: 'Inventory and purchasing',
+    description:
+      'Documented purchasing group for suppliers, purchase orders, receiving, supplier returns, supplier payments, credits, and accounts payable.',
+    routePath: '/purchase-orders',
+    routeExists: false,
+    requiredPermissions: ['purchases.read', 'suppliers.read', 'supplier_returns.read'],
+    plannedScope: [
+      'Supplier records',
+      'Purchase orders and receiving',
+      'Supplier returns and AP views',
+    ],
+  },
+  {
+    title: 'Inventory Workflows',
+    group: 'Inventory and purchasing',
+    description:
+      'Documented inventory workflow group for adjustments, approvals, transfers, reservations, FIFO visibility, and immutable ledger views.',
+    routePath: '/inventory-adjustments',
+    routeExists: false,
+    requiredPermissions: ['inventory.read', 'inventory.adjust', 'inventory.transfer.create'],
+    plannedScope: [
+      'Inventory adjustments',
+      'Inventory transfers',
+      'Reservation and FIFO workflow visibility',
+    ],
+  },
+  {
+    title: 'Reports',
+    group: 'Management',
+    description:
+      'Documented report group for basic, branch, and advanced reports with plan-aware access and export behavior.',
+    routePath: '/reports',
+    routeExists: false,
+    requiredPermissions: ['reports.view_basic', 'reports.view_branch', 'reports.view_advanced'],
+    plannedScope: ['Basic reports', 'Branch comparison reports', 'Advanced operational reports'],
+  },
+  {
+    title: 'Expenses',
+    group: 'Management',
+    description:
+      'Documented operating expense group for expense records, category management, updates, and void behavior.',
+    routePath: '/expenses',
+    routeExists: false,
+    requiredPermissions: ['expenses.read'],
+    plannedScope: ['Expense list', 'Expense detail', 'Expense category management'],
+  },
+  {
+    title: 'Reminders and Notifications',
+    group: 'Engagement',
+    description:
+      'Documented reminder and internal notification group with plan-aware channel enforcement and delivery status visibility.',
+    routePath: '/reminders',
+    routeExists: false,
+    requiredPermissions: ['reminders.read', 'notifications.read'],
+    plannedScope: [
+      'Customer reminders',
+      'Notification center',
+      'Notification preferences and delivery status',
+    ],
+  },
+  {
+    title: 'Files, Exports, and Background Jobs',
+    group: 'Operations',
+    description:
+      'Documented operational support group for files, full tenant export packaging, report exports, and background job visibility.',
+    routePath: '/exports',
+    routeExists: false,
+    requiredPermissions: ['files.read', 'shop.export_data', 'reports.export'],
+    plannedScope: [
+      'File attachment views',
+      'Export job status',
+      'Background job status and safe error summaries',
+    ],
+  },
+  {
+    title: 'Employees, Roles, and Permissions',
+    group: 'Administration',
+    description:
+      'Documented tenant administration group for employees, invitations, role templates, branch assignments, and permission management.',
+    routePath: '/employees',
+    routeExists: false,
+    requiredPermissions: ['users.read', 'roles.read', 'permissions.read'],
+    plannedScope: [
+      'Employee list and detail',
+      'Role and permission management',
+      'Branch assignment management',
+    ],
+  },
+  {
+    title: 'Branches and Settings',
+    group: 'Administration',
+    description:
+      'Documented shop administration group for branches, shop profile, billing-related settings, notification preferences, and localization settings.',
+    routePath: '/settings',
+    routeExists: false,
+    requiredPermissions: ['branches.read', 'shop.read', 'settings.update'],
+    plannedScope: [
+      'Branch management',
+      'Shop profile and settings',
+      'Billing and notification preferences',
+    ],
+  },
+  {
+    title: 'Audit Logs',
+    group: 'Administration',
+    description:
+      'Documented audit visibility group for sanitized tenant audit records and critical workflow accountability.',
+    routePath: '/audit-logs',
+    routeExists: false,
+    requiredPermissions: ['audit_logs.read'],
+    plannedScope: [
+      'Audit log list',
+      'Audit log detail',
+      'Actor, timestamp, and safe change summaries',
+    ],
+  },
+  {
+    title: 'Offline Cache',
+    group: 'Offline read-only',
+    description:
+      'Documented PWA offline-cache group for recently viewed records in read-only mode only. No offline write queue is introduced.',
+    routePath: '/offline-cache',
+    routeExists: false,
+    requiredPermissions: [],
+    plannedScope: [
+      'Recently viewed cached records',
+      'Read-only offline messaging',
+      'Offline write blockers',
+    ],
+  },
+];
 
 const platformTenantListPageSize = 50;
 
@@ -1054,6 +1293,255 @@ export function TenantPlannedRouteScreen({ route }: { readonly route: TenantPlan
       </Card>
     </AuthenticatedShell>
   );
+}
+
+export function TenantMoreMenuScreen() {
+  const sessionState = useProtectedSession('tenant-operational');
+
+  if (sessionState.status !== 'ready') {
+    return <SessionStateScreen state={sessionState} area="tenant" />;
+  }
+
+  const { session } = sessionState;
+  const availableItems = tenantMoreMenuItems.filter((item) => item.routeExists);
+  const plannedItems = tenantMoreMenuItems.filter((item) => !item.routeExists);
+
+  return (
+    <AuthenticatedShell
+      area="tenant"
+      session={session}
+      title="More"
+      eyebrow="Tenant menu"
+      description="Secondary tenant module menu scaffold for documented GarageOS route groups."
+      actions={
+        <>
+          <ButtonLink href="/dashboard" variant="secondary">
+            Back to dashboard
+          </ButtonLink>
+          <ButtonLink href="/auth/logout" variant="secondary">
+            Logout
+          </ButtonLink>
+        </>
+      }
+    >
+      <Alert>
+        <p className="text-sm font-bold">Secondary menu scaffold only</p>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">
+          This screen exposes documented tenant route groups without wiring unsupported APIs or
+          operational actions. Links are enabled only for route foundations that already exist; all
+          other module destinations remain visibly planned and disabled.
+        </p>
+      </Alert>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <SummaryCard
+          title="Enabled routes"
+          value={String(availableItems.length)}
+          description="Only existing tenant route foundations can be opened from this menu."
+        />
+        <SummaryCard
+          title="Planned destinations"
+          value={String(plannedItems.length)}
+          description="Disabled until their route scaffolds or real module screens exist."
+        />
+        <SummaryCard
+          title="Write actions"
+          value="Disabled"
+          description="No create, edit, approval, upload, payment, export, or stock-changing action is wired here."
+        />
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Available route foundations</CardTitle>
+          <CardDescription>
+            These destinations already have protected tenant route foundations. Permission labels
+            are shown for UX awareness; backend authorization remains authoritative.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <TenantMoreMenuGrid items={availableItems} session={session} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Planned secondary modules</CardTitle>
+          <CardDescription>
+            These are documented GarageOS module groups, but their destination routes are not
+            enabled in this slice.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <TenantMoreMenuGrid items={plannedItems} session={session} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Implementation guardrails</CardTitle>
+          <CardDescription>
+            Keep the secondary menu safe while the real module routes, APIs, and workflows are added
+            incrementally.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 md:grid-cols-2">
+          <InfoBlock title="Scope control">
+            <p>
+              Do not add standalone POS, customer portal, payroll, full accounting, 2FA, automatic
+              subscription charging, offline write queues, or undocumented module links.
+            </p>
+          </InfoBlock>
+          <InfoBlock title="Route activation rule">
+            <p>
+              Enable a destination only after the matching route scaffold or module screen exists
+              and still routes through the authenticated tenant shell.
+            </p>
+          </InfoBlock>
+          <InfoBlock title="Permission awareness">
+            <p>
+              Continue showing documented permission labels and blocked states, but rely on backend
+              guards for final authorization.
+            </p>
+          </InfoBlock>
+          <InfoBlock title="Operational safety">
+            <p>
+              Keep all create, edit, approval, payment, upload, export, and stock-changing actions
+              disabled until their documented API slices are implemented.
+            </p>
+          </InfoBlock>
+        </CardContent>
+      </Card>
+    </AuthenticatedShell>
+  );
+}
+
+function TenantMoreMenuGrid({
+  items,
+  session,
+}: {
+  readonly items: readonly TenantMoreMenuItem[];
+  readonly session: AuthSessionResponseData;
+}) {
+  if (items.length === 0) {
+    return (
+      <EmptyState
+        title="No menu entries"
+        description="No documented menu entries are available for this section."
+      />
+    );
+  }
+
+  return (
+    <ul className="grid gap-4 lg:grid-cols-2">
+      {items.map((item) => (
+        <TenantMoreMenuCard key={`${item.group}:${item.routePath}`} item={item} session={session} />
+      ))}
+    </ul>
+  );
+}
+
+function TenantMoreMenuCard({
+  item,
+  session,
+}: {
+  readonly item: TenantMoreMenuItem;
+  readonly session: AuthSessionResponseData;
+}) {
+  const hasPermissionMatch = hasAnyEffectivePermission(session, item.requiredPermissions);
+  const permissionLabel = formatPermissionRequirement(item.requiredPermissions);
+
+  return (
+    <li className="grid gap-4 rounded-2xl border border-border bg-card p-4 shadow-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge>{item.group}</Badge>
+        <Badge
+          className={
+            item.routeExists
+              ? 'border-primary/30 bg-accent text-accent-foreground'
+              : 'border-border bg-muted text-muted-foreground'
+          }
+        >
+          {item.routeExists ? 'Route enabled' : 'Planned'}
+        </Badge>
+        <Badge
+          className={
+            hasPermissionMatch
+              ? 'border-primary/30 bg-accent text-accent-foreground'
+              : 'border-border bg-muted text-muted-foreground'
+          }
+        >
+          {hasPermissionMatch ? 'Permission visible' : 'Permission not in session'}
+        </Badge>
+      </div>
+
+      <div>
+        <h2 className="text-base font-black text-foreground">{item.title}</h2>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">{item.description}</p>
+      </div>
+
+      <div className="grid gap-3 rounded-2xl border border-border bg-muted/40 p-3 text-sm">
+        <p className="font-semibold text-foreground">Route</p>
+        <p className="break-words text-muted-foreground">{item.routePath}</p>
+
+        <p className="font-semibold text-foreground">Permission basis</p>
+        <p className="break-words text-muted-foreground">{permissionLabel}</p>
+      </div>
+
+      <div>
+        <p className="text-sm font-semibold text-foreground">Planned scope</p>
+        <ul className="mt-3 grid gap-2 text-sm text-muted-foreground">
+          {item.plannedScope.map((scopeItem) => (
+            <ChecklistItem key={scopeItem} label={scopeItem} />
+          ))}
+        </ul>
+      </div>
+
+      <div className="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
+        {item.routeExists ? (
+          <ButtonLink href={item.routePath} variant="secondary" size="sm">
+            Open route
+          </ButtonLink>
+        ) : (
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            disabled
+            title="This destination is planned until its route scaffold or module screen exists."
+          >
+            Planned
+          </Button>
+        )}
+
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+          {item.routeExists ? 'Foundation available' : 'No active route yet'}
+        </p>
+      </div>
+    </li>
+  );
+}
+
+function hasAnyEffectivePermission(
+  session: AuthSessionResponseData,
+  permissions: readonly string[],
+): boolean {
+  return (
+    permissions.length === 0 ||
+    permissions.some((permission) => hasEffectivePermission(session, permission))
+  );
+}
+
+function formatPermissionRequirement(permissions: readonly string[]): string {
+  if (permissions.length === 0) {
+    return 'Authenticated tenant session';
+  }
+
+  if (permissions.length === 1) {
+    return permissions[0] ?? 'Authenticated tenant session';
+  }
+
+  return `Any documented permission: ${permissions.join(', ')}`;
 }
 
 export function PlatformTenantCreateScreen() {
