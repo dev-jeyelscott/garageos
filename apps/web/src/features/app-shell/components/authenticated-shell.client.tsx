@@ -56,6 +56,8 @@ interface ShellNavItem {
 
 type PlatformSubscriptionStatusSource = 'system_computed' | 'platform_override';
 
+type PlatformSupportAccessMode = 'read_only' | 'write_allowed';
+
 type PlatformTenantStatusFilter = 'all' | AuthTenantStatus;
 
 interface PlatformTenantPlanSummary {
@@ -161,6 +163,12 @@ interface PlatformTenantSuspensionForm {
   readonly expires_at: string;
 }
 
+interface PlatformSupportAccessForm {
+  readonly mode: PlatformSupportAccessMode;
+  readonly reason: string;
+  readonly expires_at: string;
+}
+
 type PlatformTenantReadOnlyOverrideSubmitState =
   | {
       readonly status: 'idle';
@@ -199,12 +207,47 @@ type PlatformTenantSuspensionSubmitState =
       readonly fieldErrors: Record<string, string>;
     };
 
+type PlatformSupportAccessSubmitState =
+  | {
+      readonly status: 'idle';
+    }
+  | {
+      readonly status: 'submitting';
+    }
+  | {
+      readonly status: 'success';
+      readonly message: string;
+      readonly session: PlatformSupportAccessSessionSummary;
+    }
+  | {
+      readonly status: 'error';
+      readonly message: string;
+      readonly detail: string | null;
+      readonly code: string | null;
+      readonly fieldErrors: Record<string, string>;
+    };
+
+interface PlatformSupportAccessSessionSummary {
+  readonly id: string;
+  readonly tenant_id: string;
+  readonly platform_admin_user_id: string;
+  readonly mode: PlatformSupportAccessMode | string;
+  readonly reason: string;
+  readonly started_at: string;
+  readonly expires_at: string;
+  readonly ended_at: string | null;
+}
+
 interface ApplyPlatformTenantReadOnlyOverrideResponse {
   readonly tenant?: PlatformTenantDetail;
 }
 
 interface ApplyPlatformTenantSuspensionResponse {
   readonly tenant?: PlatformTenantDetail;
+}
+
+interface StartPlatformSupportAccessSessionResponse {
+  readonly support_access_session: PlatformSupportAccessSessionSummary;
 }
 
 interface PlatformTenantCreateForm {
@@ -350,6 +393,12 @@ const defaultPlatformTenantReadOnlyOverrideForm: PlatformTenantReadOnlyOverrideF
 };
 
 const defaultPlatformTenantSuspensionForm: PlatformTenantSuspensionForm = {
+  reason: '',
+  expires_at: '',
+};
+
+const defaultPlatformSupportAccessForm: PlatformSupportAccessForm = {
+  mode: 'read_only',
   reason: '',
   expires_at: '',
 };
@@ -1117,6 +1166,14 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
       status: 'idle',
     });
 
+  const [supportAccessForm, setSupportAccessForm] = useState<PlatformSupportAccessForm>(
+    defaultPlatformSupportAccessForm,
+  );
+  const [supportAccessSubmitState, setSupportAccessSubmitState] =
+    useState<PlatformSupportAccessSubmitState>({
+      status: 'idle',
+    });
+
   const canReadTenantDetail =
     sessionState.status === 'ready' &&
     hasEffectivePermission(sessionState.session, 'platform.tenants.read');
@@ -1124,6 +1181,10 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
   const canUpdateSubscription =
     sessionState.status === 'ready' &&
     hasEffectivePermission(sessionState.session, 'platform.subscriptions.update');
+
+  const canStartSupportAccess =
+    sessionState.status === 'ready' &&
+    hasEffectivePermission(sessionState.session, 'platform.support_access');
 
   useEffect(() => {
     if (sessionState.status !== 'ready' || !canReadTenantDetail || tenantId.length === 0) {
@@ -1137,6 +1198,7 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
       setSubscriptionSubmitState({ status: 'idle' });
       setReadOnlyOverrideSubmitState({ status: 'idle' });
       setTenantSuspensionSubmitState({ status: 'idle' });
+      setSupportAccessSubmitState({ status: 'idle' });
 
       try {
         const tenant = await getPlatformTenantDetail(tenantId);
@@ -1419,6 +1481,86 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
     }
   }
 
+  function updateSupportAccessFormField<K extends keyof PlatformSupportAccessForm>(
+    field: K,
+    value: PlatformSupportAccessForm[K],
+  ) {
+    setSupportAccessForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }
+
+  async function handleSupportAccessSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (
+      !canStartSupportAccess ||
+      supportAccessSubmitState.status === 'submitting' ||
+      tenantDetailState.status !== 'loaded'
+    ) {
+      return;
+    }
+
+    const nextForm: PlatformSupportAccessForm = {
+      mode: supportAccessForm.mode,
+      reason: supportAccessForm.reason.trim(),
+      expires_at: supportAccessForm.expires_at.trim(),
+    };
+
+    const fieldErrors: Record<string, string> = {};
+    const parsedExpiry = Date.parse(nextForm.expires_at);
+
+    if (nextForm.mode !== 'read_only' && nextForm.mode !== 'write_allowed') {
+      fieldErrors.mode = 'Support access mode is required.';
+    }
+
+    if (nextForm.reason.length === 0) {
+      fieldErrors.reason = 'Reason is required.';
+    }
+
+    if (nextForm.expires_at.length === 0) {
+      fieldErrors.expires_at = 'Expiration is required.';
+    } else if (Number.isNaN(parsedExpiry)) {
+      fieldErrors.expires_at = 'Expiration must be a valid date and time.';
+    } else if (parsedExpiry <= Date.now()) {
+      fieldErrors.expires_at = 'Expiration must be in the future.';
+    }
+
+    if (Object.keys(fieldErrors).length > 0) {
+      setSupportAccessSubmitState({
+        status: 'error',
+        message: 'Review the support access fields.',
+        detail: null,
+        code: 'validation_failed',
+        fieldErrors,
+      });
+      return;
+    }
+
+    setSupportAccessSubmitState({ status: 'submitting' });
+
+    try {
+      const response = await startPlatformSupportAccessSession(tenantId, nextForm);
+
+      setSupportAccessForm(defaultPlatformSupportAccessForm);
+      setSupportAccessSubmitState({
+        status: 'success',
+        message:
+          'Support access session was started. Keep this visible marker active while working in support context.',
+        session: response.support_access_session,
+      });
+    } catch (error) {
+      setSupportAccessSubmitState({
+        status: 'error',
+        message: toSafeErrorMessage(error, 'Unable to start support access session.'),
+        detail: toSafeErrorDetail(error),
+        code: getApiErrorCode(error),
+        fieldErrors: getApiFieldErrors(error),
+      });
+    }
+  }
+
   const isLoadingTenant =
     tenantDetailState.status === 'idle' || tenantDetailState.status === 'loading';
   const subscriptionFieldErrors =
@@ -1429,6 +1571,9 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
 
   const tenantSuspensionFieldErrors =
     tenantSuspensionSubmitState.status === 'error' ? tenantSuspensionSubmitState.fieldErrors : {};
+
+  const supportAccessFieldErrors =
+    supportAccessSubmitState.status === 'error' ? supportAccessSubmitState.fieldErrors : {};
 
   return (
     <AuthenticatedShell
@@ -1452,6 +1597,9 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
               </ButtonLink>
               <ButtonLink href="#tenant-suspension" variant="destructive">
                 Suspend tenant
+              </ButtonLink>
+              <ButtonLink href="#tenant-support-access" variant="secondary">
+                Start support access
               </ButtonLink>
             </>
           ) : (
@@ -1492,6 +1640,18 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
               >
                 Suspend tenant
               </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled
+                title={
+                  canStartSupportAccess
+                    ? 'Tenant detail must load before support access.'
+                    : 'Requires platform.support_access.'
+                }
+              >
+                Start support access
+              </Button>
             </>
           )}
         </>
@@ -1508,8 +1668,9 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
           <Alert>
             <p className="text-sm leading-6">
               This screen reads platform tenant detail and now wires the documented subscription
-              management, read-only override, and suspension workflows. Support access, exports,
-              deletion jobs, and platform audit logs remain separate workflow slices.
+              management, read-only override, suspension, and support access session workflows.
+              Exports, deletion jobs, plan management, and platform audit logs remain separate
+              workflow slices.
             </p>
           </Alert>
 
@@ -1677,6 +1838,16 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
                 onSubmit={handleTenantSuspensionSubmit}
               />
 
+              <PlatformTenantSupportAccessPanel
+                tenant={tenantDetailState.tenant}
+                canStartSupportAccess={canStartSupportAccess}
+                form={supportAccessForm}
+                submitState={supportAccessSubmitState}
+                fieldErrors={supportAccessFieldErrors}
+                onChange={updateSupportAccessFormField}
+                onSubmit={handleSupportAccessSubmit}
+              />
+
               <Card>
                 <CardHeader>
                   <CardTitle>Lifecycle detail</CardTitle>
@@ -1705,11 +1876,6 @@ export function PlatformTenantDetailScreen({ tenantId }: { readonly tenantId: st
               </Card>
 
               <div className="grid gap-4 lg:grid-cols-3">
-                <PlannedWorkflowCard
-                  title="Support access"
-                  requiredPermission="platform.support_access"
-                  description="Audited support access must require reason, mode, expiration, and a visible support marker."
-                />
                 <PlannedWorkflowCard
                   title="Tenant export"
                   requiredPermission="platform.tenants.update"
@@ -2112,6 +2278,26 @@ async function applyPlatformTenantSuspension(
     {
       requiresAuth: true,
       idempotencyKey: createIdempotencyKey('platform-tenant-suspension'),
+    },
+  );
+}
+
+async function startPlatformSupportAccessSession(
+  tenantId: string,
+  form: PlatformSupportAccessForm,
+): Promise<StartPlatformSupportAccessSessionResponse> {
+  const expiresAt = toOptionalIsoTimestamp(form.expires_at);
+
+  return postAuthJson<StartPlatformSupportAccessSessionResponse>(
+    `/platform/tenants/${encodeURIComponent(tenantId)}/support-access-sessions`,
+    {
+      mode: form.mode,
+      reason: form.reason.trim(),
+      expires_at: expiresAt ?? '',
+    },
+    {
+      requiresAuth: true,
+      idempotencyKey: createIdempotencyKey('platform-support-access-session'),
     },
   );
 }
@@ -2648,6 +2834,168 @@ function PlatformTenantSuspensionPanel({
               disabled={!canUpdateSubscription || isSubmitting}
             >
               {isSubmitting ? 'Suspending tenant...' : 'Suspend tenant'}
+            </Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+function PlatformTenantSupportAccessPanel({
+  tenant,
+  canStartSupportAccess,
+  form,
+  submitState,
+  fieldErrors,
+  onChange,
+  onSubmit,
+}: {
+  readonly tenant: PlatformTenantDetail;
+  readonly canStartSupportAccess: boolean;
+  readonly form: PlatformSupportAccessForm;
+  readonly submitState: PlatformSupportAccessSubmitState;
+  readonly fieldErrors: Record<string, string>;
+  readonly onChange: <K extends keyof PlatformSupportAccessForm>(
+    field: K,
+    value: PlatformSupportAccessForm[K],
+  ) => void;
+  readonly onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  const isSubmitting = submitState.status === 'submitting';
+  const isWriteAllowed = form.mode === 'write_allowed';
+
+  return (
+    <Card id="tenant-support-access">
+      <CardHeader>
+        <CardTitle>Support access</CardTitle>
+        <CardDescription>
+          Start an audited platform support access session for this tenant. This does not silently
+          impersonate a tenant user and does not enter the tenant workspace.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-5">
+        <div className="grid gap-4 md:grid-cols-3">
+          <KeyValue label="Tenant" value={tenant.business_name} />
+          <KeyValue label="Current status" value={formatTenantStatus(tenant.status)} />
+          <KeyValue label="Default mode" value="Read-only" />
+        </div>
+
+        {!canStartSupportAccess ? (
+          <Alert>
+            <p className="text-sm font-bold">Support access unavailable</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              Your platform session can view tenant data, but it cannot start support access.
+              Required permission: <strong>platform.support_access</strong>.
+            </p>
+          </Alert>
+        ) : null}
+
+        {submitState.status === 'success' ? (
+          <Alert>
+            <p className="text-sm font-bold">Visible support access marker</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">{submitState.message}</p>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <KeyValue label="Session ID" value={submitState.session.id} />
+              <KeyValue label="Mode" value={formatSupportAccessMode(submitState.session.mode)} />
+              <KeyValue label="Started" value={submitState.session.started_at} />
+              <KeyValue label="Expires" value={submitState.session.expires_at} />
+            </div>
+          </Alert>
+        ) : null}
+
+        {submitState.status === 'error' ? (
+          <Alert variant="destructive">
+            <p className="text-sm font-bold">{submitState.message}</p>
+            {submitState.detail === null ? null : (
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">{submitState.detail}</p>
+            )}
+            {submitState.code === 'idempotency_conflict' ? (
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                The request was detected as a duplicate or retry conflict. Reload the tenant detail
+                before submitting again.
+              </p>
+            ) : null}
+          </Alert>
+        ) : null}
+
+        {isWriteAllowed ? (
+          <Alert variant="destructive">
+            <p className="text-sm font-bold">Write-allowed support access selected</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              This mode must be explicit and should be used only when support, investigation,
+              compliance, or recovery work requires it. Backend authorization and audit logging
+              remain authoritative.
+            </p>
+          </Alert>
+        ) : null}
+
+        <form className="grid gap-5" onSubmit={onSubmit}>
+          <fieldset
+            className="grid gap-5 disabled:pointer-events-none disabled:opacity-70"
+            disabled={!canStartSupportAccess || isSubmitting}
+          >
+            <section className="grid gap-4 rounded-2xl border border-border bg-muted/40 p-4">
+              <div>
+                <h2 className="font-bold text-foreground">Support access fields</h2>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                  Reason, mode, and expiration are required. Read-only is the default mode.
+                </p>
+              </div>
+
+              <label className="grid gap-2">
+                <span className="text-sm font-bold text-foreground">Mode</span>
+                <select
+                  value={form.mode}
+                  onChange={(event) =>
+                    onChange('mode', event.currentTarget.value as PlatformSupportAccessMode)
+                  }
+                  required
+                  className="min-h-11 rounded-xl border border-input bg-background px-3 py-2 text-base text-foreground shadow-sm outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <option value="read_only">Read-only</option>
+                  <option value="write_allowed">Write-allowed</option>
+                </select>
+                <FieldError message={fieldErrors.mode} />
+              </label>
+
+              <label className="grid gap-2">
+                <span className="text-sm font-bold text-foreground">Reason</span>
+                <textarea
+                  value={form.reason}
+                  onChange={(event) => onChange('reason', event.currentTarget.value)}
+                  required
+                  maxLength={500}
+                  rows={4}
+                  className="min-h-28 rounded-xl border border-input bg-background px-3 py-2 text-base text-foreground shadow-sm outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-60"
+                  placeholder="Example: Investigate support ticket without tenant impersonation."
+                />
+                <FieldError message={fieldErrors.reason} />
+              </label>
+
+              <label className="grid gap-2">
+                <span className="text-sm font-bold text-foreground">Expiration</span>
+                <Input
+                  type="datetime-local"
+                  value={form.expires_at}
+                  onChange={(event) => onChange('expires_at', event.currentTarget.value)}
+                  required
+                />
+                <p className="text-sm leading-6 text-muted-foreground">
+                  Required. The frontend sends this to the API as an ISO timestamp.
+                </p>
+                <FieldError message={fieldErrors.expires_at} />
+              </label>
+            </section>
+          </fieldset>
+
+          <div className="flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:justify-end">
+            <Button
+              type="submit"
+              variant={isWriteAllowed ? 'destructive' : 'primary'}
+              disabled={!canStartSupportAccess || isSubmitting}
+            >
+              {isSubmitting ? 'Starting support access...' : 'Start support access'}
             </Button>
           </div>
         </form>
@@ -3374,6 +3722,13 @@ function formatTenantStatus(status: AuthTenantStatus | undefined): string {
   }
 
   return status
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function formatSupportAccessMode(mode: string): string {
+  return mode
     .split('_')
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ');

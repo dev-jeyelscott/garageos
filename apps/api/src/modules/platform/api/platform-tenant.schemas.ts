@@ -10,6 +10,8 @@ export const platformTenantStatusSchema = z.enum([
   'deleted',
 ]);
 
+export const platformSupportAccessModeSchema = z.enum(['read_only', 'write_allowed']);
+
 const dateOnlySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must use YYYY-MM-DD.');
 
 const optionalTimestampSchema = z
@@ -96,6 +98,14 @@ export const applyPlatformTenantSuspensionRequestSchema = z
   })
   .strict();
 
+export const startPlatformSupportAccessSessionRequestSchema = z
+  .object({
+    mode: platformSupportAccessModeSchema,
+    reason: z.string().trim().min(1).max(500),
+    expires_at: optionalTimestampSchema,
+  })
+  .strict();
+
 export type ListPlatformTenantsQuery = z.infer<typeof listPlatformTenantsQuerySchema>;
 
 export type CreatePlatformTenantRequest = z.infer<typeof createPlatformTenantRequestSchema>;
@@ -110,4 +120,10 @@ export type ApplyPlatformTenantReadOnlyOverrideRequest = z.infer<
 
 export type ApplyPlatformTenantSuspensionRequest = z.infer<
   typeof applyPlatformTenantSuspensionRequestSchema
+>;
+
+export type PlatformSupportAccessMode = z.infer<typeof platformSupportAccessModeSchema>;
+
+export type StartPlatformSupportAccessSessionRequest = z.infer<
+  typeof startPlatformSupportAccessSessionRequestSchema
 >;

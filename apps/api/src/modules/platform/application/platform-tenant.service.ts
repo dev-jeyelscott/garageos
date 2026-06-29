@@ -16,11 +16,13 @@ import type {
   ApplyPlatformTenantSuspensionRequest,
   CreatePlatformTenantRequest,
   ListPlatformTenantsQuery,
+  StartPlatformSupportAccessSessionRequest,
   UpdatePlatformTenantSubscriptionRequest,
 } from '../api/platform-tenant.schemas';
 import {
   type PlatformPlanSummary,
   type PlatformSubscriptionSummary,
+  PlatformSupportAccessSessionSummary,
   type PlatformTenantDetailRecord,
   type PlatformTenantListRecord,
   type PlatformTenantOwnerInvitationSummary,
@@ -34,6 +36,7 @@ export const PLATFORM_PERMISSIONS = {
   TENANTS_UPDATE: 'platform.tenants.update',
   SUBSCRIPTIONS_UPDATE: 'platform.subscriptions.update',
   PLANS_UPDATE: 'platform.plans.update',
+  SUPPORT_ACCESS: 'platform.support_access',
   AUDIT_LOGS_READ: 'platform.audit_logs.read',
 } as const;
 
@@ -89,6 +92,21 @@ export interface ApplyPlatformTenantReadOnlyOverrideResponse {
 
 export interface ApplyPlatformTenantSuspensionResponse {
   readonly tenant: PlatformTenantDetailResponse;
+}
+
+export interface StartPlatformSupportAccessSessionResponse {
+  readonly support_access_session: PlatformSupportAccessSessionResponse;
+}
+
+interface PlatformSupportAccessSessionResponse {
+  readonly id: string;
+  readonly tenant_id: string;
+  readonly platform_admin_user_id: string;
+  readonly mode: string;
+  readonly reason: string;
+  readonly started_at: string;
+  readonly expires_at: string;
+  readonly ended_at: string | null;
 }
 
 interface PlatformPlanResponse {
@@ -623,6 +641,72 @@ export class PlatformTenantService {
     });
   }
 
+  async startSupportAccessSession(
+    tenantId: string,
+    request: StartPlatformSupportAccessSessionRequest,
+    session: AuthSessionResponseData,
+    auditContext: PlatformRequestAuditContext,
+  ): Promise<StartPlatformSupportAccessSessionResponse> {
+    this.assertPlatformPermission(session, PLATFORM_PERMISSIONS.SUPPORT_ACCESS);
+
+    const reason = normalizeRequiredReason(request.reason, 'reason');
+    const expiresAt = normalizeRequiredTimestamp(request.expires_at, 'expires_at');
+    const now = new Date();
+
+    if (expiresAt.getTime() <= now.getTime()) {
+      throw GarageOsApiException.validationFailed([
+        {
+          field: 'expires_at',
+          code: 'must_be_future',
+          message: 'Support access expiration must be in the future.',
+        },
+      ]);
+    }
+
+    const supportAccessSessionId = randomUUID();
+    const platformAdminUserId = session.user.id;
+
+    return this.transactionRunner.runInTransaction(async (transaction) => {
+      const tenant = await this.tenantStore.findTenantById(tenantId, transaction);
+
+      if (tenant === null) {
+        throw GarageOsApiException.resourceNotFound('Tenant was not found.');
+      }
+
+      if (tenant.status === 'deleted') {
+        throw GarageOsApiException.workflowTransitionBlocked(
+          'Deleted tenants cannot receive support access sessions.',
+        );
+      }
+
+      const supportAccessSession = await this.tenantStore.createPlatformSupportAccessSession(
+        {
+          id: supportAccessSessionId,
+          tenantId,
+          platformAdminUserId,
+          accessMode: request.mode,
+          reason,
+          startedAt: now,
+          expiresAt,
+        },
+        transaction,
+      );
+
+      await this.auditSupportAccessSessionStarted({
+        tenant,
+        supportAccessSession,
+        session,
+        auditContext,
+        reason,
+        client: transaction,
+      });
+
+      return {
+        support_access_session: toSupportAccessSessionResponse(supportAccessSession),
+      };
+    });
+  }
+
   assertPlatformPermission(session: AuthSessionResponseData, permission: string): void {
     if (session.user.user_type !== 'platform_admin') {
       throw GarageOsApiException.forbidden(permission);
@@ -817,6 +901,41 @@ export class PlatformTenantService {
       reason: input.reason,
     });
   }
+
+  private async auditSupportAccessSessionStarted(input: {
+    readonly tenant: PlatformTenantDetailRecord;
+    readonly supportAccessSession: PlatformSupportAccessSessionSummary;
+    readonly session: AuthSessionResponseData;
+    readonly auditContext: PlatformRequestAuditContext;
+    readonly reason: string;
+    readonly client: DatabaseQueryClient;
+  }): Promise<void> {
+    await this.auditService.record({
+      tenantId: input.tenant.id,
+      actorUserId: input.session.user.id,
+      actorType: AUDIT_ACTOR_TYPES.PLATFORM_ADMIN,
+      supportAccessSessionId: input.supportAccessSession.id,
+      ipAddress: input.auditContext.ipAddress,
+      userAgent: input.auditContext.userAgent,
+      client: input.client,
+      action: 'platform.support_access_session.started',
+      entityType: 'platform_support_access_session',
+      entityId: input.supportAccessSession.id,
+      afterJson: {
+        tenant_id: input.tenant.id,
+        platform_admin_user_id: input.supportAccessSession.platformAdminUserId,
+        mode: input.supportAccessSession.accessMode,
+        started_at: input.supportAccessSession.startedAt.toISOString(),
+        expires_at: input.supportAccessSession.expiresAt.toISOString(),
+        ended_at: input.supportAccessSession.endedAt?.toISOString() ?? null,
+      },
+      metadataJson: {
+        tenant_status: input.tenant.status,
+        tenant_business_name: input.tenant.businessName,
+      },
+      reason: input.reason,
+    });
+  }
 }
 
 function normalizeDuplicateApproval(request: CreatePlatformTenantRequest): string | null {
@@ -926,6 +1045,21 @@ function toSubscriptionResponse(
   };
 }
 
+function toSupportAccessSessionResponse(
+  supportAccessSession: PlatformSupportAccessSessionSummary,
+): PlatformSupportAccessSessionResponse {
+  return {
+    id: supportAccessSession.id,
+    tenant_id: supportAccessSession.tenantId,
+    platform_admin_user_id: supportAccessSession.platformAdminUserId,
+    mode: supportAccessSession.accessMode,
+    reason: supportAccessSession.reason,
+    started_at: supportAccessSession.startedAt.toISOString(),
+    expires_at: supportAccessSession.expiresAt.toISOString(),
+    ended_at: supportAccessSession.endedAt?.toISOString() ?? null,
+  };
+}
+
 function toSubscriptionAuditJson(
   subscription: PlatformSubscriptionSummary,
 ): Record<string, string | null> {
@@ -1008,6 +1142,22 @@ function normalizeOptionalTimestamp(value: string | null, field: string): Date |
   }
 
   return new Date(timestamp);
+}
+
+function normalizeRequiredTimestamp(value: string, field: string): Date {
+  const timestamp = normalizeOptionalTimestamp(value, field);
+
+  if (timestamp === null) {
+    throw GarageOsApiException.validationFailed([
+      {
+        field,
+        code: 'required',
+        message: 'Expiration timestamp is required.',
+      },
+    ]);
+  }
+
+  return timestamp;
 }
 
 function validateDateOnly(value: string, field: string): Date {

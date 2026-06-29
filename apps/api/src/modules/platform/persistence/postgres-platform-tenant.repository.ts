@@ -24,6 +24,9 @@ import {
   PlatformTenantStore,
   type UpdateTenantStatusInput,
   type UpsertTenantSubscriptionInput,
+  type CreatePlatformSupportAccessSessionInput,
+  type PlatformSupportAccessMode,
+  type PlatformSupportAccessSessionSummary,
 } from '../application/platform-tenant.store';
 
 interface PlatformTenantRow extends DatabaseRow {
@@ -77,6 +80,17 @@ interface PlatformSubscriptionRow extends DatabaseRow {
   readonly last_renewal_at: Date | string | null;
   readonly updated_by_platform_admin_user_id: string | null;
   readonly updated_at: Date | string;
+}
+
+interface PlatformSupportAccessSessionRow extends DatabaseRow {
+  readonly id: string;
+  readonly tenant_id: string;
+  readonly platform_admin_user_id: string;
+  readonly access_mode: string;
+  readonly reason: string;
+  readonly started_at: Date | string;
+  readonly expires_at: Date | string;
+  readonly ended_at: Date | string | null;
 }
 
 interface OwnerInvitationRow extends DatabaseRow {
@@ -402,6 +416,48 @@ export class PostgresPlatformTenantRepository extends PlatformTenantStore {
     );
   }
 
+  async createPlatformSupportAccessSession(
+    input: CreatePlatformSupportAccessSessionInput,
+    client: DatabaseQueryClient,
+  ): Promise<PlatformSupportAccessSessionSummary> {
+    const result = await client.query<PlatformSupportAccessSessionRow>(
+      `
+        insert into platform_support_access_sessions (
+          id,
+          tenant_id,
+          platform_admin_user_id,
+          access_mode,
+          reason,
+          started_at,
+          expires_at
+        )
+        values ($1, $2, $3, $4, $5, $6, $7)
+        returning
+          id,
+          tenant_id,
+          platform_admin_user_id,
+          access_mode,
+          reason,
+          started_at,
+          expires_at,
+          ended_at
+      `,
+      [
+        input.id,
+        input.tenantId,
+        input.platformAdminUserId,
+        input.accessMode,
+        input.reason,
+        input.startedAt,
+        input.expiresAt,
+      ],
+    );
+
+    return mapPlatformSupportAccessSessionRow(
+      getRequiredRow(result, 'create platform support access session'),
+    );
+  }
+
   async createOwnerInvitation(
     input: CreateOwnerInvitationInput,
     client: DatabaseQueryClient,
@@ -682,6 +738,21 @@ function mapSubscriptionRow(row: PlatformSubscriptionRow): PlatformSubscriptionS
   };
 }
 
+function mapPlatformSupportAccessSessionRow(
+  row: PlatformSupportAccessSessionRow,
+): PlatformSupportAccessSessionSummary {
+  return {
+    id: row.id,
+    tenantId: row.tenant_id,
+    platformAdminUserId: row.platform_admin_user_id,
+    accessMode: toSupportAccessMode(row.access_mode),
+    reason: row.reason,
+    startedAt: toDate(row.started_at),
+    expiresAt: toDate(row.expires_at),
+    endedAt: toNullableDate(row.ended_at),
+  };
+}
+
 function mapOwnerInvitationRow(row: OwnerInvitationRow): PlatformTenantOwnerInvitationSummary {
   return {
     email: row.email,
@@ -726,6 +797,16 @@ function toPlanCode(value: string): PlatformPlanCode {
       return value;
     default:
       throw new Error(`Unsupported platform plan code: ${value}`);
+  }
+}
+
+function toSupportAccessMode(value: string): PlatformSupportAccessMode {
+  switch (value) {
+    case 'read_only':
+    case 'write_allowed':
+      return value;
+    default:
+      throw new Error(`Unsupported support access mode: ${value}`);
   }
 }
 

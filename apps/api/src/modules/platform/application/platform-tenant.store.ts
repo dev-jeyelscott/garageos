@@ -9,6 +9,8 @@ export type PlatformTenantStatus =
   | 'pending_deletion'
   | 'deleted';
 
+export type PlatformSupportAccessMode = 'read_only' | 'write_allowed';
+
 export type PlatformPlanCode = 'basic' | 'mid' | 'high';
 
 export interface PlatformTenantOwnerSummary {
@@ -67,6 +69,17 @@ export interface PlatformSubscriptionSummary {
   readonly updatedAt: Date;
 }
 
+export interface PlatformSupportAccessSessionSummary {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly platformAdminUserId: string;
+  readonly accessMode: PlatformSupportAccessMode;
+  readonly reason: string;
+  readonly startedAt: Date;
+  readonly expiresAt: Date;
+  readonly endedAt: Date | null;
+}
+
 export interface ListPlatformTenantsInput {
   readonly limit: number;
   readonly cursorCreatedAt: Date | null;
@@ -123,6 +136,16 @@ export interface CreateSubscriptionOverrideInput {
   readonly expiresAt: Date | null;
   readonly createdByPlatformAdminUserId: string;
   readonly createdAt: Date;
+}
+
+export interface CreatePlatformSupportAccessSessionInput {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly platformAdminUserId: string;
+  readonly accessMode: PlatformSupportAccessMode;
+  readonly reason: string;
+  readonly startedAt: Date;
+  readonly expiresAt: Date;
 }
 
 export interface CreateOwnerInvitationInput {
@@ -198,6 +221,11 @@ export abstract class PlatformTenantStore {
     input: CreateSubscriptionOverrideInput,
     client: DatabaseQueryClient,
   ): Promise<void>;
+
+  abstract createPlatformSupportAccessSession(
+    input: CreatePlatformSupportAccessSessionInput,
+    client: DatabaseQueryClient,
+  ): Promise<PlatformSupportAccessSessionSummary>;
 
   abstract createOwnerInvitation(
     input: CreateOwnerInvitationInput,

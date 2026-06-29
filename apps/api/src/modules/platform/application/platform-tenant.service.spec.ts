@@ -28,6 +28,8 @@ import {
   PlatformTenantStore,
   type UpdateTenantStatusInput,
   type UpsertTenantSubscriptionInput,
+  type CreatePlatformSupportAccessSessionInput,
+  type PlatformSupportAccessSessionSummary,
 } from './platform-tenant.store';
 import { PLATFORM_PERMISSIONS, PlatformTenantService } from './platform-tenant.service';
 
@@ -220,6 +222,78 @@ describe('PlatformTenantService', () => {
 
     expect(store.updatedTenantStatuses).toEqual([]);
     expect(store.subscriptionOverrides).toEqual([]);
+  });
+
+  it('starts an audited read-only platform support access session', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+
+    try {
+      const { service, store, auditService } = createService();
+
+      store.tenantById = createTenantRecord({
+        status: 'suspended',
+      });
+
+      const response = await service.startSupportAccessSession(
+        TENANT_ID,
+        {
+          mode: 'read_only',
+          reason: 'Investigate support ticket without tenant impersonation.',
+          expires_at: '2026-06-28T00:00:00.000Z',
+        },
+        createPlatformSession([PLATFORM_PERMISSIONS.SUPPORT_ACCESS]),
+        {
+          ipAddress: '127.0.0.1',
+          userAgent: 'vitest',
+        },
+      );
+
+      expect(response.support_access_session).toMatchObject({
+        tenant_id: TENANT_ID,
+        platform_admin_user_id: PLATFORM_ADMIN_USER_ID,
+        mode: 'read_only',
+        reason: 'Investigate support ticket without tenant impersonation.',
+        started_at: NOW.toISOString(),
+        expires_at: '2026-06-28T00:00:00.000Z',
+        ended_at: null,
+      });
+
+      expect(store.supportAccessSessions[0]).toMatchObject({
+        tenantId: TENANT_ID,
+        platformAdminUserId: PLATFORM_ADMIN_USER_ID,
+        accessMode: 'read_only',
+        reason: 'Investigate support ticket without tenant impersonation.',
+        startedAt: NOW,
+        expiresAt: new Date('2026-06-28T00:00:00.000Z'),
+      });
+
+      expect(auditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'platform.support_access_session.started',
+          entityType: 'platform_support_access_session',
+          tenantId: TENANT_ID,
+          actorUserId: PLATFORM_ADMIN_USER_ID,
+          actorType: 'platform_admin',
+          supportAccessSessionId: expect.any(String),
+          afterJson: expect.objectContaining({
+            tenant_id: TENANT_ID,
+            platform_admin_user_id: PLATFORM_ADMIN_USER_ID,
+            mode: 'read_only',
+            started_at: NOW.toISOString(),
+            expires_at: '2026-06-28T00:00:00.000Z',
+            ended_at: null,
+          }),
+          metadataJson: expect.objectContaining({
+            tenant_status: 'suspended',
+            tenant_business_name: 'Moto Garage',
+          }),
+          reason: 'Investigate support ticket without tenant impersonation.',
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('requires a reason before updating tenant subscription', async () => {
@@ -748,6 +822,7 @@ class FakePlatformTenantStore extends PlatformTenantStore {
   readonly updatedSubscriptions: UpsertTenantSubscriptionInput[] = [];
   readonly updatedTenantStatuses: UpdateTenantStatusInput[] = [];
   readonly subscriptionOverrides: CreateSubscriptionOverrideInput[] = [];
+  readonly supportAccessSessions: CreatePlatformSupportAccessSessionInput[] = [];
   readonly createdInvitations: CreateOwnerInvitationInput[] = [];
   readonly lifecycleEvents: CreateTenantLifecycleEventInput[] = [];
 
@@ -829,6 +904,23 @@ class FakePlatformTenantStore extends PlatformTenantStore {
 
   async createSubscriptionOverride(input: CreateSubscriptionOverrideInput): Promise<void> {
     this.subscriptionOverrides.push(input);
+  }
+
+  async createPlatformSupportAccessSession(
+    input: CreatePlatformSupportAccessSessionInput,
+  ): Promise<PlatformSupportAccessSessionSummary> {
+    this.supportAccessSessions.push(input);
+
+    return {
+      id: input.id,
+      tenantId: input.tenantId,
+      platformAdminUserId: input.platformAdminUserId,
+      accessMode: input.accessMode,
+      reason: input.reason,
+      startedAt: input.startedAt,
+      expiresAt: input.expiresAt,
+      endedAt: null,
+    };
   }
 
   async createOwnerInvitation(

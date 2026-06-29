@@ -24,6 +24,8 @@ import {
   type ApplyPlatformTenantSuspensionRequest,
   applyPlatformTenantSuspensionRequestSchema,
   type CreatePlatformTenantRequest,
+  type StartPlatformSupportAccessSessionRequest,
+  startPlatformSupportAccessSessionRequestSchema,
   createPlatformTenantRequestSchema,
   type ListPlatformTenantsQuery,
   listPlatformTenantsQuerySchema,
@@ -280,6 +282,68 @@ export class PlatformTenantController {
       await this.idempotencyService.completeSucceeded({
         id: idempotency.record.id,
         responseStatusCode: 200,
+        responseBodyJson: response,
+        now: new Date(),
+      });
+
+      return response;
+    } catch (error) {
+      await this.idempotencyService.completeFailed({
+        id: idempotency.record.id,
+        now: new Date(),
+      });
+
+      throw error;
+    }
+  }
+
+  @Post('tenants/:tenantId/support-access-sessions')
+  @HttpCode(201)
+  async startSupportAccessSession(
+    @Param('tenantId') tenantId: string,
+    @Body(new ZodValidationPipe(startPlatformSupportAccessSessionRequestSchema))
+    request: StartPlatformSupportAccessSessionRequest,
+    @CurrentAuthSessionResponse() session: AuthSessionResponseData,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Headers('user-agent') userAgent: string | undefined,
+    @Ip() ipAddress: string | undefined,
+  ): ReturnType<PlatformTenantService['startSupportAccessSession']> {
+    const now = new Date();
+    const requestIntent = {
+      tenant_id: tenantId,
+      ...request,
+    };
+
+    const idempotency = await this.idempotencyService.begin({
+      tenantId: null,
+      userId: session.user.id,
+      endpoint: 'POST /api/v1/platform/tenants/{tenant_id}/support-access-sessions',
+      idempotencyKey,
+      requestIntent,
+      now,
+      expiresAt: this.platformTenantService.getIdempotencyExpiresAt(now),
+    });
+
+    if (idempotency.type === 'replayed') {
+      return idempotency.responseBodyJson as Awaited<
+        ReturnType<PlatformTenantService['startSupportAccessSession']>
+      >;
+    }
+
+    try {
+      const response = await this.platformTenantService.startSupportAccessSession(
+        tenantId,
+        request,
+        session,
+        {
+          ipAddress: ipAddress ?? null,
+          userAgent: userAgent ?? null,
+        },
+      );
+
+      await this.idempotencyService.completeSucceeded({
+        id: idempotency.record.id,
+        responseStatusCode: 201,
         responseBodyJson: response,
         now: new Date(),
       });
