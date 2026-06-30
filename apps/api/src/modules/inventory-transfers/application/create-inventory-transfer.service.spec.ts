@@ -6,6 +6,7 @@ import type {
   TenantContextAuthenticatedSession,
   TenantStatus,
 } from '../../../shared/tenant-context/tenant-context';
+import { BranchStore, type BranchSummaryRecord } from '../../branches/application/branch.store';
 import { ProductStore, type ProductRecord } from '../../products/application/product.store';
 import { CreateInventoryTransferService } from './create-inventory-transfer.service';
 import { InventoryTransferNumberService } from './inventory-transfer-number.service';
@@ -100,6 +101,60 @@ describe('CreateInventoryTransferService', () => {
     expect(fixture.store.mutatingInventoryTablesTouched).toBe(false);
   });
 
+  it('rejects inactive source branches', async () => {
+    const fixture = createFixture({ inactiveBranchIds: [sourceBranchId] });
+
+    await expect(
+      fixture.service.createDraft(
+        createRequest(),
+        createTenantSession(['inventory.transfer.create']),
+      ),
+    ).rejects.toMatchObject({
+      code: 'validation_failed',
+      details: [
+        expect.objectContaining({
+          field: 'source_branch_id',
+          code: 'branch_not_active',
+          message: 'Source branch must be active.',
+        }),
+      ],
+    });
+  });
+
+  it('rejects inactive destination branches', async () => {
+    const fixture = createFixture({ inactiveBranchIds: [destinationBranchId] });
+
+    await expect(
+      fixture.service.createDraft(
+        createRequest(),
+        createTenantSession(['inventory.transfer.create']),
+      ),
+    ).rejects.toMatchObject({
+      code: 'validation_failed',
+      details: [
+        expect.objectContaining({
+          field: 'destination_branch_id',
+          code: 'branch_not_active',
+          message: 'Destination branch must be active.',
+        }),
+      ],
+    });
+  });
+
+  it('returns resource_not_found when a branch is missing', async () => {
+    const fixture = createFixture({ missingBranchIds: [destinationBranchId] });
+
+    await expect(
+      fixture.service.createDraft(
+        createRequest(),
+        createTenantSession(['inventory.transfer.create']),
+      ),
+    ).rejects.toMatchObject({
+      code: 'resource_not_found',
+      message: 'Branch was not found.',
+    });
+  });
+
   it('rejects inactive products', async () => {
     const fixture = createFixture({ productStatus: 'inactive' });
 
@@ -115,9 +170,19 @@ describe('CreateInventoryTransferService', () => {
   });
 });
 
-function createFixture(options: { productStatus?: 'active' | 'inactive' } = {}) {
+function createFixture(
+  options: {
+    productStatus?: 'active' | 'inactive';
+    inactiveBranchIds?: readonly string[];
+    missingBranchIds?: readonly string[];
+  } = {},
+) {
   const store = new FakeInventoryTransferStore();
   const productStore = new FakeProductStore(options.productStatus ?? 'active');
+  const branchStore = new FakeBranchStore({
+    inactiveBranchIds: options.inactiveBranchIds ?? [],
+    missingBranchIds: options.missingBranchIds ?? [],
+  });
   const numberService = new InventoryTransferNumberService(store);
   const transactionRunner: DatabaseTransactionRunner = {
     runInTransaction: async (work) => work({} as DatabaseQueryClient),
@@ -128,6 +193,7 @@ function createFixture(options: { productStatus?: 'active' | 'inactive' } = {}) 
     service: new CreateInventoryTransferService(
       store,
       productStore,
+      branchStore,
       numberService,
       transactionRunner,
     ),
@@ -183,6 +249,47 @@ class FakeInventoryTransferStore extends InventoryTransferStore {
   async findLatestTransferNumberForDate() {
     return 'TR-20260630-000001';
   }
+}
+
+class FakeBranchStore extends BranchStore {
+  constructor(
+    private readonly options: {
+      inactiveBranchIds: readonly string[];
+      missingBranchIds: readonly string[];
+    },
+  ) {
+    super();
+  }
+
+  async findBranchById(_tenantId: string, branchId: string): Promise<BranchSummaryRecord | null> {
+    if (this.options.missingBranchIds.includes(branchId)) {
+      return null;
+    }
+
+    return {
+      id: branchId,
+      name: branchId === sourceBranchId ? 'Main Branch' : 'Satellite Branch',
+      address: '123 Shop Street',
+      contactNumber: '+639171234567',
+      businessHoursJson: {},
+      status: this.options.inactiveBranchIds.includes(branchId) ? 'inactive' : 'active',
+      lockVersion: 0,
+      createdAt: new Date('2026-06-30T00:00:00.000Z'),
+      updatedAt: new Date('2026-06-30T00:00:00.000Z'),
+      deactivatedAt: null,
+      reactivatedAt: null,
+    };
+  }
+
+  isActiveShopOwner = vi.fn();
+  countActiveBranches = vi.fn();
+  getEffectiveMaxActiveBranches = vi.fn();
+  createBranch = vi.fn();
+  listBranches = vi.fn();
+  updateBranch = vi.fn();
+  changeBranchStatus = vi.fn();
+  createBranchStatusEvent = vi.fn();
+  findBranchDeactivationBlockers = vi.fn();
 }
 
 class FakeProductStore extends ProductStore {

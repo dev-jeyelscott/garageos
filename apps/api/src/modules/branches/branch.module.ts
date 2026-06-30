@@ -12,6 +12,6 @@ import { BRANCH_PROVIDERS } from './branch.providers';
   imports: [AuthModule, AuditModule, DatabaseModule, IdempotencyModule],
   controllers: [BranchController],
   providers: [BranchService, ...BRANCH_PROVIDERS],
-  exports: [BranchService],
+  exports: [BranchService, ...BRANCH_PROVIDERS],
 })
 export class BranchModule {}

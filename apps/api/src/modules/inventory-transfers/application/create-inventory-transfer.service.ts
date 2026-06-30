@@ -17,6 +17,7 @@ import {
   type ResolvedTenantContext,
   type TenantContextAuthenticatedSession,
 } from '../../../shared/tenant-context/tenant-context';
+import { BranchStore, type BranchSummaryRecord } from '../../branches/application/branch.store';
 import { ProductStore, type ProductRecord } from '../../products/application/product.store';
 import type { CreateInventoryTransferRequest } from '../api/inventory-transfer.schemas';
 import { INVENTORY_TRANSFER_STATUSES } from './inventory-transfer.records';
@@ -42,6 +43,8 @@ export class CreateInventoryTransferService {
     private readonly inventoryTransferStore: InventoryTransferStore,
     @Inject(ProductStore)
     private readonly productStore: ProductStore,
+    @Inject(BranchStore)
+    private readonly branchStore: BranchStore,
     private readonly numberService: InventoryTransferNumberService,
     @Inject(API_TRANSACTION_RUNNER)
     private readonly transactionRunner: DatabaseTransactionRunner,
@@ -77,6 +80,20 @@ export class CreateInventoryTransferService {
       const transferNumber = await this.numberService.allocateNumber(
         context.tenantId,
         now,
+        transaction,
+      );
+      await assertActiveTransferBranch(
+        this.branchStore,
+        context.tenantId,
+        request.source_branch_id,
+        'source_branch_id',
+        transaction,
+      );
+      await assertActiveTransferBranch(
+        this.branchStore,
+        context.tenantId,
+        request.destination_branch_id,
+        'destination_branch_id',
         transaction,
       );
       const preparedLines = await this.prepareLines(context, request, transaction);
@@ -145,6 +162,37 @@ export class CreateInventoryTransferService {
     }
 
     return preparedLines;
+  }
+}
+
+async function assertActiveTransferBranch(
+  branchStore: BranchStore,
+  tenantId: string,
+  branchId: string,
+  field: 'source_branch_id' | 'destination_branch_id',
+  client: DatabaseQueryClient,
+): Promise<void> {
+  const branch: BranchSummaryRecord | null = await branchStore.findBranchById(
+    tenantId,
+    branchId,
+    client,
+  );
+
+  if (branch === null) {
+    throw GarageOsApiException.resourceNotFound('Branch was not found.');
+  }
+
+  if (branch.status !== 'active') {
+    throw GarageOsApiException.validationFailed([
+      {
+        field,
+        code: 'branch_not_active',
+        message:
+          field === 'source_branch_id'
+            ? 'Source branch must be active.'
+            : 'Destination branch must be active.',
+      },
+    ]);
   }
 }
 
