@@ -9,8 +9,8 @@ require('dotenv').config({
 const DATABASE_URL = process.env.DATABASE_URL;
 
 const EXPECTED = {
-  migrationCount: 26,
-  publicTableCount: 106,
+  migrationCount: 27,
+  publicTableCount: 107,
   subscriptionPlans: 3,
   subscriptionPlanLimits: 27,
   permissions: 128,
@@ -425,6 +425,113 @@ async function validateStockBalancesFoundationSchema(client) {
   assertEqual('stock balances branch foreign key', branchForeignKeyCount, 1);
   assertEqual('stock balances branch product index', branchProductIndexCount, 1);
   assertEqual('stock balances product branch index', productBranchIndexCount, 1);
+}
+
+async function validateLowStockAlertsSchema(client) {
+  const columnCount = await count(
+    client,
+    `
+      select count(*)
+      from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'inventory_low_stock_alerts'
+        and column_name in (
+          'id',
+          'tenant_id',
+          'branch_id',
+          'product_id',
+          'status',
+          'available_qty',
+          'reorder_level',
+          'triggered_at',
+          'resolved_at',
+          'created_at',
+          'updated_at'
+        )
+    `,
+  );
+
+  const statusConstraintCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_constraint
+      where conname = 'chk_inventory_low_stock_alerts_status'
+    `,
+  );
+
+  const quantityConstraintCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_constraint
+      where conname = 'chk_inventory_low_stock_alerts_quantities'
+    `,
+  );
+
+  const resolutionConstraintCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_constraint
+      where conname = 'chk_inventory_low_stock_alerts_resolution'
+    `,
+  );
+
+  const branchForeignKeyCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_constraint constraint_definition
+      inner join pg_class table_class
+        on table_class.oid = constraint_definition.conrelid
+      inner join pg_namespace namespace
+        on namespace.oid = table_class.relnamespace
+      where namespace.nspname = 'public'
+        and table_class.relname = 'inventory_low_stock_alerts'
+        and constraint_definition.contype = 'f'
+        and pg_get_constraintdef(constraint_definition.oid) ilike '%FOREIGN KEY (tenant_id, branch_id)%'
+    `,
+  );
+
+  const activeUniqueIndexCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_indexes
+      where schemaname = 'public'
+        and indexname = 'ux_inventory_low_stock_alerts_active'
+    `,
+  );
+
+  const branchActiveIndexCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_indexes
+      where schemaname = 'public'
+        and indexname = 'idx_inventory_low_stock_alerts_branch_active'
+    `,
+  );
+
+  const productStatusIndexCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_indexes
+      where schemaname = 'public'
+        and indexname = 'idx_inventory_low_stock_alerts_product_status'
+    `,
+  );
+
+  assertEqual('low stock alert columns', columnCount, 11);
+  assertEqual('low stock alert status constraint', statusConstraintCount, 1);
+  assertEqual('low stock alert quantity constraint', quantityConstraintCount, 1);
+  assertEqual('low stock alert resolution constraint', resolutionConstraintCount, 1);
+  assertEqual('low stock alert branch foreign key', branchForeignKeyCount, 1);
+  assertEqual('low stock alert active unique index', activeUniqueIndexCount, 1);
+  assertEqual('low stock alert branch active index', branchActiveIndexCount, 1);
+  assertEqual('low stock alert product status index', productStatusIndexCount, 1);
 }
 
 async function validateInventoryLedgerFoundationSchema(client) {
@@ -850,6 +957,7 @@ async function main() {
     await validateProductCategoriesSchema(client);
     await validateProductsFoundationSchema(client);
     await validateStockBalancesFoundationSchema(client);
+    await validateLowStockAlertsSchema(client);
     await validateInventoryLedgerFoundationSchema(client);
     await validateFifoLayerFoundationSchema(client);
     await validateEstimatesBaselineSchema(client);

@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 
 import { GarageOsApiException } from '../../../shared/api/api-exception';
 import { assertBranchAccessAllowed } from '../../../shared/authorization/branch-access';
@@ -13,6 +13,7 @@ import {
   type TenantContextAuthenticatedSession,
 } from '../../../shared/tenant-context/tenant-context';
 import type { ListStockBalancesQuery } from '../api/inventory-stock-balances.schemas';
+import { LowStockAlertService } from './low-stock-alert.service';
 import {
   StockBalanceStore,
   type GetStockAvailabilityInput,
@@ -97,6 +98,9 @@ export class InventoryStockBalancesService {
   constructor(
     @Inject(StockBalanceStore)
     private readonly stockBalanceStore: StockBalanceStore,
+    @Optional()
+    @Inject(LowStockAlertService)
+    private readonly lowStockAlertService?: LowStockAlertService,
   ) {}
 
   async listStockBalances(
@@ -207,8 +211,14 @@ export class InventoryStockBalancesService {
       },
       client,
     );
+    const snapshot = toStockAvailabilitySnapshot(stockAvailability);
 
-    return toStockAvailabilitySnapshot(stockAvailability);
+    await this.lowStockAlertService?.refreshForStockAvailability(
+      snapshot,
+      client ?? undefinedClient(),
+    );
+
+    return snapshot;
   }
 
   async decrementOnHandStock(
@@ -238,7 +248,14 @@ export class InventoryStockBalancesService {
       ]);
     }
 
-    return toStockAvailabilitySnapshot(stockAvailability);
+    const snapshot = toStockAvailabilitySnapshot(stockAvailability);
+
+    await this.lowStockAlertService?.refreshForStockAvailability(
+      snapshot,
+      client ?? undefinedClient(),
+    );
+
+    return snapshot;
   }
 }
 
@@ -439,6 +456,10 @@ function toStockBalanceResponse(stockBalance: StockBalanceRecord): StockBalanceR
     updated_at: stockBalance.updatedAt.toISOString(),
     lock_version: stockBalance.lockVersion,
   };
+}
+
+function undefinedClient(): never {
+  throw new Error('A database transaction client is required to refresh low-stock alerts.');
 }
 
 function toStockAvailabilitySnapshot(

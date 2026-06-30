@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 
 import { GarageOsApiException } from '../../../shared/api/api-exception';
@@ -26,6 +26,7 @@ import {
   type StockAvailabilitySnapshot,
 } from './inventory-stock-balances.service';
 import { InventoryLedgerService } from './inventory-ledger.service';
+import { LowStockAlertService } from './low-stock-alert.service';
 import {
   INVENTORY_TRANSACTION_TYPES,
   type InventoryLedgerEntryRecord,
@@ -232,6 +233,9 @@ export class InventoryReservationService {
     private readonly inventoryLedgerService: InventoryLedgerService,
     @Inject(API_TRANSACTION_RUNNER)
     private readonly transactionRunner: DatabaseTransactionRunner,
+    @Optional()
+    @Inject(LowStockAlertService)
+    private readonly lowStockAlertService?: LowStockAlertService,
   ) {}
 
   async reserveInventory(
@@ -421,10 +425,12 @@ export class InventoryReservationService {
       client,
     );
 
+    const stockAvailability = await this.refreshLowStockAlert(updatedStockAvailability, client);
+
     return {
       reservation,
       fifoAllocations,
-      stockAvailability: toStockAvailabilitySnapshot(updatedStockAvailability),
+      stockAvailability,
       ledgerEntry,
     };
   }
@@ -572,10 +578,12 @@ export class InventoryReservationService {
       client,
     );
 
+    const stockAvailability = await this.refreshLowStockAlert(updatedStockAvailability, client);
+
     return {
       reservation: releasedReservation,
       fifoAllocations,
-      stockAvailability: toStockAvailabilitySnapshot(updatedStockAvailability),
+      stockAvailability,
       ledgerEntry,
     };
   }
@@ -859,11 +867,13 @@ export class InventoryReservationService {
       client,
     );
 
+    const stockAvailability = await this.refreshLowStockAlert(updatedStockAvailability, client);
+
     return {
       reservation: consumedReservation,
       fifoAllocations: consumedAllocations,
       fifoConsumptions,
-      stockAvailability: toStockAvailabilitySnapshot(updatedStockAvailability),
+      stockAvailability,
       ledgerEntry,
       totalCost,
     };
@@ -1089,11 +1099,13 @@ export class InventoryReservationService {
       );
     }
 
+    const stockAvailability = await this.refreshLowStockAlert(updatedStockAvailability, client);
+
     return {
       reservation: consumedReservation,
       fifoAllocations: consumedAllocations,
       fifoConsumptions,
-      stockAvailability: toStockAvailabilitySnapshot(updatedStockAvailability),
+      stockAvailability,
       ledgerEntries,
       transferOutCost: splitCosts.transferOutCost,
       varianceLossCost: splitCosts.varianceLossCost,
@@ -1101,6 +1113,17 @@ export class InventoryReservationService {
       receivedQuantity: input.receivedQuantity,
       varianceQuantity,
     };
+  }
+
+  private async refreshLowStockAlert(
+    stockAvailability: StockAvailabilityRecord,
+    client: DatabaseQueryClient,
+  ): Promise<StockAvailabilitySnapshot> {
+    const snapshot = toStockAvailabilitySnapshot(stockAvailability);
+
+    await this.lowStockAlertService?.refreshForStockAvailability(snapshot, client);
+
+    return snapshot;
   }
 }
 
