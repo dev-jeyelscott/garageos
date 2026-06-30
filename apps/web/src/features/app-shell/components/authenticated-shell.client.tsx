@@ -51,15 +51,18 @@ import {
   defaultPlatformSupportAccessForm,
   defaultPlatformTenantDeletionJobForm,
   defaultPlatformTenantExportForm,
+  defaultPlatformTenantListFilters,
   defaultPlatformTenantReadOnlyOverrideForm,
   defaultPlatformTenantSubscriptionForm,
   defaultPlatformTenantSuspensionForm,
+  platformTenantListPageSize,
 } from '../../platform/tenants/platform-tenant.defaults';
 import {
   applyPlatformTenantReadOnlyOverride,
   applyPlatformTenantSuspension,
   endPlatformSupportAccessSession,
   getPlatformTenantDetail,
+  getPlatformTenants,
   queuePlatformTenantDeletionJob,
   queuePlatformTenantExport,
   startPlatformSupportAccessSession,
@@ -77,6 +80,7 @@ import type {
   PlatformTenantDetailState,
   PlatformTenantExportForm,
   PlatformTenantExportSubmitState,
+  PlatformTenantListItem,
   PlatformTenantReadOnlyOverrideForm,
   PlatformTenantReadOnlyOverrideSubmitState,
   PlatformTenantSubscriptionForm,
@@ -87,97 +91,107 @@ import type {
 
 export function PlatformOverviewScreen() {
   const sessionState = useProtectedSession('platform');
+  const [overviewState, setOverviewState] = useState<PlatformOverviewState>({
+    status: 'idle',
+    tenants: [],
+  });
+
+  const canReadTenants =
+    sessionState.status === 'ready' &&
+    hasEffectivePermission(sessionState.session, 'platform.tenants.read');
+
+  useEffect(() => {
+    if (!canReadTenants) {
+      return;
+    }
+
+    let active = true;
+
+    async function loadOverviewTenants() {
+      setOverviewState({
+        status: 'loading',
+        tenants: [],
+      });
+
+      try {
+        const result = await getPlatformTenants({
+          filters: defaultPlatformTenantListFilters,
+          limit: platformTenantListPageSize,
+        });
+
+        if (!active) {
+          return;
+        }
+
+        setOverviewState({
+          status: 'loaded',
+          tenants: result.tenants,
+        });
+      } catch (error) {
+        if (!active) {
+          return;
+        }
+
+        setOverviewState({
+          status: 'error',
+          tenants: [],
+          message: toSafeErrorMessage(error, 'Unable to load platform overview.'),
+          detail: toSafeErrorDetail(error),
+          code: getApiErrorCode(error),
+        });
+      }
+    }
+
+    void loadOverviewTenants();
+
+    return () => {
+      active = false;
+    };
+  }, [canReadTenants]);
 
   if (sessionState.status !== 'ready') {
     return <SessionStateScreen state={sessionState} area="platform" />;
   }
 
   const { session } = sessionState;
+  const canCreateTenant = hasEffectivePermission(session, 'platform.tenants.create');
+  const canReadAuditLogs = hasEffectivePermission(session, 'platform.audit_logs.read');
+  const canStartSupportAccess = hasEffectivePermission(session, 'platform.support_access');
+  const canManagePlans = hasEffectivePermission(session, 'platform.plans.update');
 
-  const platformModules = [
-    {
-      title: 'Tenants',
-      href: '/platform/tenants',
-      status: 'active',
-      requiredPermission: 'platform.tenants.read',
-      description:
-        'Search tenants, review lifecycle status, and open tenant-specific administration workflows.',
-    },
-    {
-      title: 'Create Tenant',
-      href: '/platform/tenants/new',
-      status: 'active',
-      requiredPermission: 'platform.tenants.create',
-      description:
-        'Create platform-managed tenants with subscription dates and owner invitation setup.',
-    },
-    {
-      title: 'Plans',
-      href: undefined,
-      status: 'planned',
-      requiredPermission: 'platform.plans.update',
-      description:
-        'Documented plan-management route for Basic, Mid, High limits and default plan settings.',
-    },
-    {
-      title: 'Support Access',
-      href: undefined,
-      status: 'planned',
-      requiredPermission: 'platform.support_access',
-      description:
-        'Tenant-specific audited support access is available from tenant detail; aggregate session list remains planned.',
-    },
-    {
-      title: 'Exports',
-      href: undefined,
-      status: 'planned',
-      requiredPermission: 'platform.tenants.update',
-      description:
-        'Tenant export queueing is available from tenant detail; aggregate export status route remains planned.',
-    },
-    {
-      title: 'Deletion Jobs',
-      href: undefined,
-      status: 'planned',
-      requiredPermission: 'platform.tenants.update',
-      description:
-        'Deletion job visibility remains planned until deletion eligibility and job list APIs are wired.',
-    },
-    {
-      title: 'Audit Logs',
-      href: '/platform/audit-logs',
-      status: 'active',
-      requiredPermission: 'platform.audit_logs.read',
-      description:
-        'Search platform audit logs by actor, action, tenant, and date range through the documented read API.',
-    },
-    {
-      title: 'Platform Settings',
-      href: undefined,
-      status: 'planned',
-      requiredPermission: 'platform.tenants.update',
-      description: 'Only documented and API-backed platform settings should be added here.',
-    },
-  ] as const;
-
-  const enabledModules = platformModules.filter(
-    (module) =>
-      module.href !== undefined && hasEffectivePermission(session, module.requiredPermission),
-  );
+  const tenants = overviewState.tenants;
+  const totalTenants = tenants.length;
+  const statusSummary = createPlatformTenantStatusSummary(tenants);
+  const attentionItems = createPlatformAttentionItems(tenants).slice(0, 5);
+  const tenantsNeedingAction = attentionItems.length;
+  const pendingSetupCount = statusSummary.pending_setup;
+  const hasTenantData = overviewState.status === 'loaded' && tenants.length > 0;
 
   return (
     <AuthenticatedShell
       area="platform"
       session={session}
-      title="Platform Admin"
-      eyebrow="Platform workspace"
-      description="Operational command center for GarageOS tenant lifecycle, subscriptions, support access, exports, deletion jobs, plans, and audit visibility."
+      title="Platform Overview"
+      eyebrow="Platform Admin"
+      description="Monitor tenants, subscriptions, support access, exports, deletion jobs, and audit activity."
       actions={
         <>
-          <ButtonLink href="/platform/tenants" variant="secondary">
-            View tenants
-          </ButtonLink>
-          {hasEffectivePermission(session, 'platform.tenants.create') ? (
+          {canReadTenants ? (
+            <ButtonLink href="/platform/tenants" variant="secondary">
+              View tenants
+            </ButtonLink>
+          ) : (
+            <Button
+              type="button"
+              variant="secondary"
+              disabled
+              title="Requires platform.tenants.read."
+            >
+              View tenants
+            </Button>
+          )}
+
+          {canCreateTenant ? (
             <ButtonLink href="/platform/tenants/new" variant="primary">
               Create tenant
             </ButtonLink>
@@ -195,101 +209,549 @@ export function PlatformOverviewScreen() {
       }
     >
       <Alert>
-        <p className="text-sm font-bold">Source-aligned dashboard foundation</p>
+        <p className="text-sm font-bold">Platform actions are audited</p>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          This overview does not invent platform metrics or unsupported aggregate APIs. It exposes
-          documented module entry points and planned states only.
+          Support access requires explicit approval, a reason, a time limit, and backend audit
+          logging. Subscription updates must reflect external payment confirmation; GarageOS does
+          not process automatic subscription payments.
         </p>
       </Alert>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard
-          title="Enabled modules"
-          value={String(enabledModules.length)}
-          description="Counts only linked modules that are available to your current platform permissions."
+      {!canReadTenants ? (
+        <ForbiddenState
+          title="Platform overview unavailable"
+          requiredPermission="platform.tenants.read"
+          description="Your platform session does not include permission to view tenant overview data."
         />
-        <SummaryCard
-          title="Platform permissions"
-          value={String(
-            session.effective_permissions.filter((permission) => permission.startsWith('platform.'))
-              .length,
-          )}
-          description="Platform permissions are separate from tenant role permissions."
-        />
-        <SummaryCard
-          title="Support access"
-          value="Explicit only"
-          description="Tenant troubleshooting must use audited support access. Silent impersonation is not allowed."
-        />
-        <SummaryCard
-          title="Workspace width"
-          value="Full"
-          description="Platform pages now use a full-width operations layout instead of a narrow centered page."
-        />
-      </div>
+      ) : null}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Platform modules</CardTitle>
-          <CardDescription>
-            Enabled links open implemented route foundations. Planned modules remain disabled until
-            their source-aligned APIs and screens are implemented.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {platformModules.map((module) => {
-              const hasPermission = hasEffectivePermission(session, module.requiredPermission);
-              const isAvailable = module.href !== undefined && hasPermission;
+      {canReadTenants ? (
+        <>
+          {overviewState.status === 'loading' || overviewState.status === 'idle' ? (
+            <PlatformOverviewSkeleton />
+          ) : null}
 
-              return (
-                <section
-                  key={module.title}
-                  className="grid gap-4 rounded-2xl border border-border bg-muted/40 p-4"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h2 className="font-bold text-foreground">{module.title}</h2>
-                      <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                        {module.description}
-                      </p>
-                    </div>
-                    <StatusBadge
-                      status={isAvailable ? module.status : hasPermission ? 'planned' : 'forbidden'}
-                    />
-                  </div>
-
-                  <p className="text-xs font-bold text-muted-foreground">
-                    Required permission: {module.requiredPermission}
+          {overviewState.status === 'error' ? (
+            overviewState.code === 'forbidden' ? (
+              <ForbiddenState
+                title="Platform overview blocked"
+                requiredPermission="platform.tenants.read"
+                description={overviewState.message}
+                detail={overviewState.detail}
+              />
+            ) : (
+              <Alert variant="destructive">
+                <p className="text-sm font-bold">{overviewState.message}</p>
+                {overviewState.detail === null ? null : (
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                    {overviewState.detail}
                   </p>
+                )}
+              </Alert>
+            )
+          ) : null}
 
-                  {isAvailable ? (
-                    <ButtonLink href={module.href} variant="secondary" size="sm">
-                      Open
-                    </ButtonLink>
-                  ) : (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      disabled
-                      title={
-                        hasPermission
-                          ? 'Route is planned and not yet wired.'
-                          : `Requires ${module.requiredPermission}.`
-                      }
-                    >
-                      {hasPermission ? 'Planned' : 'No access'}
-                    </Button>
-                  )}
-                </section>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
+          {overviewState.status === 'loaded' ? (
+            <>
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <SummaryCard
+                  title="Total tenants"
+                  value={String(totalTenants)}
+                  description={
+                    hasTenantData
+                      ? 'Loaded from the platform tenant list API.'
+                      : 'No tenant records are visible in the current platform view.'
+                  }
+                />
+                <SummaryCard
+                  title="Tenants needing action"
+                  value={String(tenantsNeedingAction)}
+                  description="Includes grace period, read-only, suspended, pending deletion, and setup blockers."
+                />
+                <SummaryCard
+                  title="Setup not finished"
+                  value={String(pendingSetupCount)}
+                  description="Tenants in pending setup remain blocked from operational modules."
+                />
+                <SummaryCard
+                  title="Active support sessions"
+                  value="Planned"
+                  description="Aggregate support-session counts need a dedicated support access list API."
+                />
+              </div>
+
+              <div className="grid gap-5 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.4fr)]">
+                <SubscriptionHealthCard statusSummary={statusSummary} totalTenants={totalTenants} />
+                <PlatformAttentionNeededCard items={attentionItems} />
+              </div>
+
+              <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.8fr)_minmax(0,0.9fr)]">
+                <RecentPlatformActivityCard canReadAuditLogs={canReadAuditLogs} />
+                <PlatformQuickActionsCard
+                  canCreateTenant={canCreateTenant}
+                  canReadTenants={canReadTenants}
+                  canReadAuditLogs={canReadAuditLogs}
+                  canStartSupportAccess={canStartSupportAccess}
+                  canManagePlans={canManagePlans}
+                />
+                <SupportAccessPolicyCard />
+              </div>
+            </>
+          ) : null}
+        </>
+      ) : null}
     </AuthenticatedShell>
   );
+}
+
+type PlatformOverviewState =
+  | {
+      readonly status: 'idle' | 'loading';
+      readonly tenants: readonly PlatformTenantListItem[];
+    }
+  | {
+      readonly status: 'loaded';
+      readonly tenants: readonly PlatformTenantListItem[];
+    }
+  | {
+      readonly status: 'error';
+      readonly tenants: readonly PlatformTenantListItem[];
+      readonly message: string;
+      readonly detail: string | null;
+      readonly code: string | null;
+    };
+
+type PlatformTenantStatusCounts = Record<AuthTenantStatus, number>;
+
+interface PlatformAttentionItem {
+  readonly tenant: PlatformTenantListItem;
+  readonly issue: string;
+  readonly recommendedAction: string;
+}
+
+function PlatformOverviewSkeleton() {
+  return (
+    <div className="grid gap-5" aria-busy="true" aria-live="polite">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <Skeleton className="h-32 w-full" />
+        <Skeleton className="h-32 w-full" />
+        <Skeleton className="h-32 w-full" />
+        <Skeleton className="h-32 w-full" />
+      </div>
+      <div className="grid gap-5 xl:grid-cols-2">
+        <Skeleton className="h-80 w-full" />
+        <Skeleton className="h-80 w-full" />
+      </div>
+      <div className="grid gap-5 xl:grid-cols-3">
+        <Skeleton className="h-72 w-full" />
+        <Skeleton className="h-72 w-full" />
+        <Skeleton className="h-72 w-full" />
+      </div>
+    </div>
+  );
+}
+
+function SubscriptionHealthCard({
+  statusSummary,
+  totalTenants,
+}: {
+  readonly statusSummary: PlatformTenantStatusCounts;
+  readonly totalTenants: number;
+}) {
+  const rows: readonly {
+    readonly status: AuthTenantStatus;
+    readonly label: string;
+    readonly description: string;
+  }[] = [
+    {
+      status: 'active',
+      label: 'Active',
+      description: 'Full access based on permissions and branch scope.',
+    },
+    {
+      status: 'grace_period',
+      label: 'Grace period',
+      description: 'Full access continues with renewal warnings.',
+    },
+    {
+      status: 'read_only',
+      label: 'Read only',
+      description: 'Operational writes are blocked.',
+    },
+    {
+      status: 'suspended',
+      label: 'Suspended',
+      description: 'Owner renewal/export only; non-owner users blocked.',
+    },
+    {
+      status: 'pending_deletion',
+      label: 'Pending deletion',
+      description: 'Tenant is queued for deletion lifecycle handling.',
+    },
+    {
+      status: 'pending_setup',
+      label: 'Setup not finished',
+      description: 'Operational modules remain blocked until onboarding is complete.',
+    },
+  ];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Subscription health</CardTitle>
+        <CardDescription>
+          Tenant lifecycle status summary from the platform tenant list API.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {totalTenants === 0 ? (
+          <EmptyState
+            title="No tenant status data"
+            description="No tenants are visible in the current platform overview."
+          />
+        ) : (
+          <ul className="grid gap-3">
+            {rows.map((row) => {
+              const count = statusSummary[row.status];
+              const percentage = totalTenants === 0 ? 0 : Math.round((count / totalTenants) * 100);
+
+              return (
+                <li
+                  key={row.status}
+                  className="grid gap-3 rounded-2xl border border-border bg-muted/40 p-4 sm:grid-cols-[1fr_auto] sm:items-center"
+                >
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <StatusBadge status={row.status} />
+                      <span className="text-sm font-bold text-foreground">{row.label}</span>
+                    </div>
+                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                      {row.description}
+                    </p>
+                  </div>
+                  <div className="text-left sm:text-right">
+                    <p className="text-xl font-black text-foreground">{count}</p>
+                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">
+                      {percentage}%
+                    </p>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function PlatformAttentionNeededCard({
+  items,
+}: {
+  readonly items: readonly PlatformAttentionItem[];
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <CardTitle>Tenants needing action</CardTitle>
+            <CardDescription>
+              Source-aligned lifecycle and setup blockers. Payment-gateway actions are intentionally
+              excluded.
+            </CardDescription>
+          </div>
+          <ButtonLink href="/platform/tenants" variant="secondary" size="sm">
+            View all
+          </ButtonLink>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {items.length === 0 ? (
+          <EmptyState
+            title="No tenants need action"
+            description="There are no visible tenants in grace period, read-only, suspended, pending deletion, or pending setup status."
+          />
+        ) : (
+          <ul className="grid gap-3">
+            {items.map((item) => (
+              <li
+                key={item.tenant.id}
+                className="grid gap-3 rounded-2xl border border-border bg-muted/40 p-4 lg:grid-cols-[1fr_auto] lg:items-center"
+              >
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-bold text-foreground">{item.tenant.business_name}</p>
+                    <StatusBadge status={item.tenant.status} />
+                  </div>
+                  <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                    {item.tenant.shop_email ?? 'Shop email not returned'}
+                  </p>
+                  <div className="mt-3 grid gap-2 text-sm leading-6 text-muted-foreground md:grid-cols-2">
+                    <p>
+                      <strong className="text-foreground">Issue:</strong> {item.issue}
+                    </p>
+                    <p>
+                      <strong className="text-foreground">Recommended action:</strong>{' '}
+                      {item.recommendedAction}
+                    </p>
+                  </div>
+                </div>
+                <ButtonLink
+                  href={`/platform/tenants/${item.tenant.id}`}
+                  variant="secondary"
+                  size="sm"
+                >
+                  Open tenant
+                </ButtonLink>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function RecentPlatformActivityCard({ canReadAuditLogs }: { readonly canReadAuditLogs: boolean }) {
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <CardTitle>Recent platform activity</CardTitle>
+            <CardDescription>
+              Audit-log-backed activity belongs in the platform audit log slice.
+            </CardDescription>
+          </div>
+          {canReadAuditLogs ? (
+            <ButtonLink href="/platform/audit-logs" variant="secondary" size="sm">
+              View audit logs
+            </ButtonLink>
+          ) : (
+            <Button type="button" variant="secondary" size="sm" disabled>
+              No audit access
+            </Button>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent>
+        {canReadAuditLogs ? (
+          <EmptyState
+            title="Activity feed planned"
+            description="Wire this card to the platform audit log API when the dashboard-specific activity feed is implemented."
+          />
+        ) : (
+          <ForbiddenState
+            title="Recent activity unavailable"
+            requiredPermission="platform.audit_logs.read"
+            description="Your platform session cannot view platform audit activity."
+          />
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function PlatformQuickActionsCard({
+  canCreateTenant,
+  canReadTenants,
+  canReadAuditLogs,
+  canStartSupportAccess,
+  canManagePlans,
+}: {
+  readonly canCreateTenant: boolean;
+  readonly canReadTenants: boolean;
+  readonly canReadAuditLogs: boolean;
+  readonly canStartSupportAccess: boolean;
+  readonly canManagePlans: boolean;
+}) {
+  const actions = [
+    {
+      title: 'Create tenant',
+      description: 'Add a tenant after subscription details are known.',
+      href: '/platform/tenants/new',
+      enabled: canCreateTenant,
+      disabledReason: 'Requires platform.tenants.create.',
+    },
+    {
+      title: 'Review tenants',
+      description: 'Open tenant lifecycle and subscription status.',
+      href: '/platform/tenants',
+      enabled: canReadTenants,
+      disabledReason: 'Requires platform.tenants.read.',
+    },
+    {
+      title: 'View audit logs',
+      description: 'Review platform audit events.',
+      href: '/platform/audit-logs',
+      enabled: canReadAuditLogs,
+      disabledReason: 'Requires platform.audit_logs.read.',
+    },
+    {
+      title: 'Start support access',
+      description: 'Open a tenant detail page and start explicit support access.',
+      href: '/platform/tenants',
+      enabled: canStartSupportAccess && canReadTenants,
+      disabledReason: 'Requires platform.support_access and platform.tenants.read.',
+    },
+    {
+      title: 'Manage plans',
+      description: 'Plan management route remains planned until API support is available.',
+      href: null,
+      enabled: false,
+      disabledReason: canManagePlans
+        ? 'Route is planned until platform plan APIs are implemented.'
+        : 'Requires platform.plans.update.',
+    },
+  ] as const;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Quick actions</CardTitle>
+        <CardDescription>Only documented platform actions are shown.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <ul className="grid gap-3">
+          {actions.map((action) => (
+            <li key={action.title}>
+              {action.enabled && action.href !== null ? (
+                <ButtonLink
+                  href={action.href}
+                  variant={action.title === 'Create tenant' ? 'primary' : 'secondary'}
+                  className="w-full justify-start"
+                >
+                  <span className="grid gap-1 text-left">
+                    <span>{action.title}</span>
+                    <span className="text-xs font-medium opacity-80">{action.description}</span>
+                  </span>
+                </ButtonLink>
+              ) : (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="w-full justify-start"
+                  disabled
+                  title={action.disabledReason}
+                >
+                  <span className="grid gap-1 text-left">
+                    <span>{action.title}</span>
+                    <span className="text-xs font-medium opacity-80">{action.disabledReason}</span>
+                  </span>
+                </Button>
+              )}
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
+  );
+}
+
+function SupportAccessPolicyCard() {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Support access policy</CardTitle>
+        <CardDescription>
+          Tenant troubleshooting must be explicit, time-bound, and audited.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        <Alert>
+          <p className="text-sm leading-6 text-muted-foreground">
+            Platform admins must not silently impersonate tenant users. Support access requires a
+            tenant, reason, mode, expiration, and backend audit log.
+          </p>
+        </Alert>
+
+        <ul className="grid gap-3 text-sm text-muted-foreground">
+          <ChecklistItem label="Request approval before connecting to tenant data." />
+          <ChecklistItem label="Limit access to the approved support scope." />
+          <ChecklistItem label="Keep all actions logged and reviewable." />
+        </ul>
+      </CardContent>
+    </Card>
+  );
+}
+
+function createPlatformTenantStatusSummary(
+  tenants: readonly PlatformTenantListItem[],
+): PlatformTenantStatusCounts {
+  return tenants.reduce<PlatformTenantStatusCounts>(
+    (summary, tenant) => ({
+      ...summary,
+      [tenant.status]: summary[tenant.status] + 1,
+    }),
+    {
+      pending_setup: 0,
+      active: 0,
+      grace_period: 0,
+      read_only: 0,
+      suspended: 0,
+      pending_deletion: 0,
+      deleted: 0,
+    },
+  );
+}
+
+function createPlatformAttentionItems(
+  tenants: readonly PlatformTenantListItem[],
+): readonly PlatformAttentionItem[] {
+  const actionableStatuses = new Set<AuthTenantStatus>([
+    'pending_setup',
+    'grace_period',
+    'read_only',
+    'suspended',
+    'pending_deletion',
+  ]);
+
+  return tenants
+    .filter((tenant) => actionableStatuses.has(tenant.status))
+    .map((tenant) => ({
+      tenant,
+      issue: getPlatformTenantIssue(tenant),
+      recommendedAction: getPlatformTenantRecommendedAction(tenant),
+    }));
+}
+
+function getPlatformTenantIssue(tenant: PlatformTenantListItem): string {
+  switch (tenant.status) {
+    case 'pending_setup':
+      return 'Setup is not finished.';
+    case 'grace_period':
+      return 'Subscription is in grace period.';
+    case 'read_only':
+      return 'Operational writes are blocked.';
+    case 'suspended':
+      return 'Tenant access is suspended.';
+    case 'pending_deletion':
+      return 'Tenant is in the deletion window.';
+    case 'active':
+      return 'No action needed.';
+    case 'deleted':
+      return 'Tenant has been deleted.';
+  }
+}
+
+function getPlatformTenantRecommendedAction(tenant: PlatformTenantListItem): string {
+  switch (tenant.status) {
+    case 'pending_setup':
+      return 'Review onboarding blockers.';
+    case 'grace_period':
+      return 'Confirm external renewal payment and update subscription if approved.';
+    case 'read_only':
+      return 'Review subscription status or active platform override.';
+    case 'suspended':
+      return 'Contact tenant owner or review renewal/export access.';
+    case 'pending_deletion':
+      return 'Review deletion timing and emergency-extension eligibility.';
+    case 'active':
+      return 'No action needed.';
+    case 'deleted':
+      return 'No tenant operational access is available.';
+  }
 }
 
 export function PlatformTenantsScreen() {
