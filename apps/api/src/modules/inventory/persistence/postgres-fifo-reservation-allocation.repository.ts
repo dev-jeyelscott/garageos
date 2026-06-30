@@ -13,9 +13,11 @@ import {
   type ConsumeFifoReservationAllocationsInput,
   type CreateFifoReservationAllocationInput,
   type FifoAllocationStatus,
+  type ReleaseFifoReservationAllocationInput,
   type FifoReservationAllocationRecord,
   type LockFifoReservationAllocationsInput,
   type ReleaseFifoReservationAllocationsInput,
+  type UpdateFifoReservationAllocationQuantityInput,
 } from '../application/fifo-reservation-allocation.store';
 
 interface FifoReservationAllocationRow extends DatabaseRow {
@@ -121,6 +123,77 @@ export class PostgresFifoReservationAllocationRepository extends FifoReservation
     );
 
     return result.rows.map(mapFifoReservationAllocationRow);
+  }
+
+  async updateActiveAllocationQuantity(
+    input: UpdateFifoReservationAllocationQuantityInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<FifoReservationAllocationRecord | null> {
+    const result = await client.query<FifoReservationAllocationRow>(
+      `
+        update fifo_reservation_allocations
+        set reserved_quantity = $3::numeric(14,3)
+        where tenant_id = $1::uuid
+          and id = $2::uuid
+          and status = $4
+          and $3::numeric(14,3) > 0
+        returning
+          id,
+          tenant_id,
+          reservation_id,
+          fifo_layer_id,
+          reserved_quantity::text,
+          unit_cost_snapshot::text,
+          status,
+          allocated_at,
+          released_at,
+          consumed_at
+      `,
+      [input.tenantId, input.allocationId, input.reservedQuantity, FIFO_ALLOCATION_STATUSES.ACTIVE],
+    );
+
+    const [row] = result.rows;
+
+    return row === undefined ? null : mapFifoReservationAllocationRow(row);
+  }
+
+  async releaseActiveAllocation(
+    input: ReleaseFifoReservationAllocationInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<FifoReservationAllocationRecord | null> {
+    const result = await client.query<FifoReservationAllocationRow>(
+      `
+        update fifo_reservation_allocations
+        set
+          status = $3,
+          released_at = $4::timestamptz
+        where tenant_id = $1::uuid
+          and id = $2::uuid
+          and status = $5
+        returning
+          id,
+          tenant_id,
+          reservation_id,
+          fifo_layer_id,
+          reserved_quantity::text,
+          unit_cost_snapshot::text,
+          status,
+          allocated_at,
+          released_at,
+          consumed_at
+      `,
+      [
+        input.tenantId,
+        input.allocationId,
+        FIFO_ALLOCATION_STATUSES.RELEASED,
+        input.releasedAt,
+        FIFO_ALLOCATION_STATUSES.ACTIVE,
+      ],
+    );
+
+    const [row] = result.rows;
+
+    return row === undefined ? null : mapFifoReservationAllocationRow(row);
   }
 
   async markActiveAllocationsConsumedByReservation(

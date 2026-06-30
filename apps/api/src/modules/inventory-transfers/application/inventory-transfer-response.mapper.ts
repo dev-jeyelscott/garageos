@@ -27,11 +27,38 @@ export interface InventoryTransferSubmitResponse {
   readonly reservations: readonly InventoryTransferReservationResponse[];
 }
 
+export interface InventoryTransferSendResponse {
+  readonly transfer: {
+    readonly id: string;
+    readonly transfer_number: string;
+    readonly status: 'in_transit';
+    readonly sent_at: string;
+    readonly lock_version: number;
+  };
+  readonly lines: readonly InventoryTransferSentLineResponse[];
+  readonly released_reservations: readonly InventoryTransferReservationReleaseResponse[];
+  readonly ledger_entry_ids: readonly string[];
+}
+
 export interface InventoryTransferReservationResponse {
   readonly line_id: string;
   readonly product_id: string;
   readonly reservation_id: string;
   readonly reserved_quantity: string;
+  readonly ledger_entry_id: string;
+}
+
+export interface InventoryTransferSentLineResponse {
+  readonly line_id: string;
+  readonly product_id: string;
+  readonly sent_quantity: string;
+}
+
+export interface InventoryTransferReservationReleaseResponse {
+  readonly line_id: string;
+  readonly product_id: string;
+  readonly reservation_id: string;
+  readonly released_quantity: string;
   readonly ledger_entry_id: string;
 }
 
@@ -77,6 +104,29 @@ export function toCreateInventoryTransferResponse(
       lock_version: transfer.lockVersion,
     },
     lines: lines.map(toInventoryTransferLineResponse),
+  };
+}
+
+export function toSendInventoryTransferResponse(
+  transfer: InventoryTransferRecord,
+  lines: readonly InventoryTransferSentLineResponse[],
+  releasedReservations: readonly InventoryTransferReservationReleaseResponse[],
+): InventoryTransferSendResponse {
+  if (transfer.sentAt === null) {
+    throw new Error('Sent transfer response requires sent_at.');
+  }
+
+  return {
+    transfer: {
+      id: transfer.id,
+      transfer_number: transfer.transferNumber,
+      status: 'in_transit',
+      sent_at: transfer.sentAt.toISOString(),
+      lock_version: transfer.lockVersion,
+    },
+    lines,
+    released_reservations: releasedReservations,
+    ledger_entry_ids: releasedReservations.map((release) => release.ledger_entry_id),
   };
 }
 

@@ -15,6 +15,7 @@ import {
   type InventoryReservationRecord,
   type InventoryReservationStatus,
   type LockInventoryReservationInput,
+  type PartiallyReleaseInventoryReservationInput,
   type ReleaseInventoryReservationInput,
 } from '../application/inventory-reservation.store';
 
@@ -176,6 +177,45 @@ export class PostgresInventoryReservationRepository extends InventoryReservation
         input.reservationId,
         INVENTORY_RESERVATION_STATUSES.RELEASED,
         input.releasedAt,
+        INVENTORY_RESERVATION_STATUSES.ACTIVE,
+      ],
+    );
+
+    const [row] = result.rows;
+
+    return row === undefined ? null : mapInventoryReservationRow(row);
+  }
+
+  async decrementActiveReservationQuantity(
+    input: PartiallyReleaseInventoryReservationInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<InventoryReservationRecord | null> {
+    const result = await client.query<InventoryReservationRow>(
+      `
+        update inventory_reservations
+        set reserved_quantity = reserved_quantity - $3::numeric(14,3)
+        where tenant_id = $1::uuid
+          and id = $2::uuid
+          and status = $4
+          and reserved_quantity > $3::numeric(14,3)
+        returning
+          id,
+          tenant_id,
+          branch_id,
+          product_id,
+          source_type,
+          source_id,
+          requested_quantity::text,
+          reserved_quantity::text,
+          status,
+          reserved_at,
+          released_at,
+          consumed_at
+      `,
+      [
+        input.tenantId,
+        input.reservationId,
+        input.releaseQuantity,
         INVENTORY_RESERVATION_STATUSES.ACTIVE,
       ],
     );

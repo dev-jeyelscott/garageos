@@ -123,6 +123,81 @@ describe('PostgresInventoryTransferStore', () => {
     expect(client.queries[0]?.sql).toContain('on conflict');
     expect(client.queries[0]?.values).toEqual([tenantId, '2026-06-30']);
   });
+
+  it('updates transfer line sent quantity under tenant scope', async () => {
+    const lineId = '77777777-7777-4777-8777-777777777777';
+    const client = new RecordingClient([
+      {
+        id: lineId,
+        tenant_id: tenantId,
+        transfer_id: transferId,
+        product_id: productId,
+        requested_quantity: '5.000',
+        reserved_quantity: '5.000',
+        sent_quantity: '3.000',
+        received_quantity: null,
+        variance_quantity: null,
+        variance_reason: null,
+        reservation_id: '88888888-8888-4888-8888-888888888888',
+      },
+    ]);
+    const store = new PostgresInventoryTransferStore(client);
+
+    const line = await store.updateTransferLineSentQuantity({
+      tenantId,
+      lineId,
+      sentQuantity: '3.000',
+    });
+
+    expect(line.sentQuantity).toBe('3.000');
+    expect(client.queries[0]?.sql).toContain('where tenant_id = $1::uuid');
+    expect(client.queries[0]?.sql).toContain('and id = $2::uuid');
+    expect(client.queries[0]?.values).toEqual([tenantId, lineId, '3.000']);
+  });
+
+  it('updates pending transfer to in_transit with sender fields under tenant scope', async () => {
+    const client = new RecordingClient([
+      {
+        id: transferId,
+        tenant_id: tenantId,
+        transfer_number: 'TR-20260630-000001',
+        source_branch_id: sourceBranchId,
+        destination_branch_id: destinationBranchId,
+        status: 'in_transit',
+        created_by_user_id: userId,
+        sent_by_user_id: userId,
+        received_by_user_id: null,
+        cancelled_by_user_id: null,
+        sent_at: now,
+        received_at: null,
+        cancelled_at: null,
+        cancellation_disposition: null,
+        remarks: null,
+        created_at: now,
+        updated_at: now,
+        lock_version: 1,
+      },
+    ]);
+    const store = new PostgresInventoryTransferStore(client);
+
+    const transfer = await store.updateTransferStatusToInTransit({
+      tenantId,
+      transferId,
+      expectedStatus: 'pending',
+      sentByUserId: userId,
+      sentAt: now,
+    });
+
+    expect(transfer).toMatchObject({
+      status: 'in_transit',
+      sentByUserId: userId,
+      sentAt: now,
+    });
+    expect(client.queries[0]?.sql).toContain('where tenant_id = $1::uuid');
+    expect(client.queries[0]?.sql).toContain('and id = $2::uuid');
+    expect(client.queries[0]?.sql).toContain('and status = $3');
+    expect(client.queries[0]?.values).toEqual([tenantId, transferId, 'pending', userId, now]);
+  });
 });
 
 class RecordingClient implements DatabaseQueryClient {

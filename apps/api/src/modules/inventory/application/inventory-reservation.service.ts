@@ -83,6 +83,7 @@ export interface InventoryReservationCommandResult {
 export interface ReleaseInventoryReservationCommand {
   readonly tenantId: string;
   readonly reservationId: string;
+  readonly releaseQuantity?: string;
   readonly transactionType: InventoryReservationReleaseTransactionType | string;
   readonly releasedAt?: Date;
   readonly releasedByUserId?: string | null;
@@ -127,6 +128,7 @@ interface NormalizedReserveInventoryCommand {
 interface NormalizedReleaseInventoryReservationCommand {
   readonly tenantId: string;
   readonly reservationId: string;
+  readonly releaseQuantity: string | null;
   readonly transactionType: InventoryReservationReleaseTransactionType;
   readonly releasedAt: Date;
   readonly releasedByUserId: string | null;
@@ -205,6 +207,34 @@ export class InventoryReservationService {
     const input = normalizeReleaseInventoryCommand(command);
 
     return this.executeRelease(input, client);
+  }
+
+  async assertActiveReservationInTransaction(
+    command: {
+      readonly tenantId: string;
+      readonly reservationId: string;
+    },
+    client: DatabaseQueryClient,
+  ): Promise<InventoryReservationRecord> {
+    const reservation = await this.inventoryReservationStore.lockActiveReservationForUpdate(
+      {
+        tenantId: normalizeUuid(command.tenantId, 'tenant_id'),
+        reservationId: normalizeUuid(command.reservationId, 'reservation_id'),
+      },
+      client,
+    );
+
+    if (reservation === null) {
+      throw GarageOsApiException.workflowTransitionBlocked('Inventory reservation is not active.', [
+        {
+          field: 'reservation_id',
+          code: 'reservation_not_active',
+          message: 'Reservation is not active or does not exist.',
+        },
+      ]);
+    }
+
+    return reservation;
   }
 
   async consumeInventory(
@@ -351,10 +381,27 @@ export class InventoryReservationService {
       );
     }
 
-    const releasedQuantity = normalizePositiveQuantity(
+    const activeReservedQuantity = normalizePositiveQuantity(
       activeReservation.reservedQuantity,
       'reserved_qty',
     );
+    const releasedQuantity =
+      input.releaseQuantity === null
+        ? activeReservedQuantity
+        : normalizePositiveQuantity(input.releaseQuantity, 'release_quantity');
+
+    if (compareQuantities(releasedQuantity, activeReservedQuantity) > 0) {
+      throw GarageOsApiException.workflowTransitionBlocked(
+        'Inventory reservation release exceeds the active reserved quantity.',
+        [
+          {
+            field: 'release_quantity',
+            code: 'reservation_release_exceeds_reserved',
+            message: 'Release quantity cannot exceed reserved quantity.',
+          },
+        ],
+      );
+    }
 
     const updatedStockAvailability = await this.stockBalanceStore.decrementReservedQuantity(
       {
@@ -379,24 +426,41 @@ export class InventoryReservationService {
       );
     }
 
-    const fifoAllocations =
-      await this.fifoReservationAllocationStore.releaseActiveAllocationsByReservation(
-        {
-          tenantId: activeReservation.tenantId,
-          reservationId: activeReservation.id,
-          releasedAt: input.releasedAt,
-        },
-        client,
-      );
+    const isFullRelease = compareQuantities(releasedQuantity, activeReservedQuantity) === 0;
+    const fifoAllocations = isFullRelease
+      ? await this.fifoReservationAllocationStore.releaseActiveAllocationsByReservation(
+          {
+            tenantId: activeReservation.tenantId,
+            reservationId: activeReservation.id,
+            releasedAt: input.releasedAt,
+          },
+          client,
+        )
+      : await this.releasePartialFifoAllocations(
+          activeReservation.tenantId,
+          activeReservation.id,
+          releasedQuantity,
+          input.releasedAt,
+          client,
+        );
 
-    const releasedReservation = await this.inventoryReservationStore.markReservationReleased(
-      {
-        tenantId: activeReservation.tenantId,
-        reservationId: activeReservation.id,
-        releasedAt: input.releasedAt,
-      },
-      client,
-    );
+    const releasedReservation = isFullRelease
+      ? await this.inventoryReservationStore.markReservationReleased(
+          {
+            tenantId: activeReservation.tenantId,
+            reservationId: activeReservation.id,
+            releasedAt: input.releasedAt,
+          },
+          client,
+        )
+      : await this.inventoryReservationStore.decrementActiveReservationQuantity(
+          {
+            tenantId: activeReservation.tenantId,
+            reservationId: activeReservation.id,
+            releaseQuantity: releasedQuantity,
+          },
+          client,
+        );
 
     if (releasedReservation === null) {
       throw GarageOsApiException.workflowTransitionBlocked(
@@ -435,6 +499,103 @@ export class InventoryReservationService {
       stockAvailability: toStockAvailabilitySnapshot(updatedStockAvailability),
       ledgerEntry,
     };
+  }
+
+  private async releasePartialFifoAllocations(
+    tenantId: string,
+    reservationId: string,
+    releaseQuantity: string,
+    releasedAt: Date,
+    client: DatabaseQueryClient,
+  ): Promise<readonly FifoReservationAllocationRecord[]> {
+    const activeAllocations =
+      await this.fifoReservationAllocationStore.lockActiveAllocationsByReservationForUpdate(
+        {
+          tenantId,
+          reservationId,
+        },
+        client,
+      );
+
+    let remainingReleaseUnits = parseQuantityUnits(releaseQuantity, 'release_quantity');
+    const releasedAllocations: FifoReservationAllocationRecord[] = [];
+
+    for (const allocation of [...activeAllocations].reverse()) {
+      if (remainingReleaseUnits === 0n) {
+        break;
+      }
+
+      const allocationUnits = parseQuantityUnits(allocation.reservedQuantity, 'reserved_qty');
+
+      if (allocationUnits <= remainingReleaseUnits) {
+        const releasedAllocation =
+          await this.fifoReservationAllocationStore.releaseActiveAllocation(
+            {
+              tenantId,
+              allocationId: allocation.id,
+              releasedAt,
+            },
+            client,
+          );
+
+        if (releasedAllocation === null) {
+          throw GarageOsApiException.fifoAllocationConflict([
+            {
+              field: 'reservation_id',
+              code: 'fifo_allocation_release_conflict',
+              message: 'FIFO allocation status changed before release completed.',
+            },
+          ]);
+        }
+
+        releasedAllocations.push(releasedAllocation);
+        remainingReleaseUnits -= allocationUnits;
+        continue;
+      }
+
+      const remainingAllocationQuantity = formatQuantityUnits(
+        allocationUnits - remainingReleaseUnits,
+      );
+      const updatedAllocation =
+        await this.fifoReservationAllocationStore.updateActiveAllocationQuantity(
+          {
+            tenantId,
+            allocationId: allocation.id,
+            reservedQuantity: remainingAllocationQuantity,
+          },
+          client,
+        );
+
+      if (updatedAllocation === null) {
+        throw GarageOsApiException.fifoAllocationConflict([
+          {
+            field: 'reservation_id',
+            code: 'fifo_allocation_release_conflict',
+            message: 'FIFO allocation quantity could not be reduced.',
+          },
+        ]);
+      }
+
+      releasedAllocations.push({
+        ...allocation,
+        reservedQuantity: formatQuantityUnits(remainingReleaseUnits),
+        status: FIFO_ALLOCATION_STATUSES.RELEASED,
+        releasedAt,
+      });
+      remainingReleaseUnits = 0n;
+    }
+
+    if (remainingReleaseUnits > 0n) {
+      throw GarageOsApiException.fifoAllocationConflict([
+        {
+          field: 'release_quantity',
+          code: 'insufficient_fifo_allocation_quantity',
+          message: 'Release quantity exceeds active FIFO allocation quantity.',
+        },
+      ]);
+    }
+
+    return releasedAllocations;
   }
 
   private async executeConsumption(
@@ -655,6 +816,10 @@ function normalizeReleaseInventoryCommand(
   return {
     tenantId: normalizeUuid(command.tenantId, 'tenant_id'),
     reservationId: normalizeUuid(command.reservationId, 'reservation_id'),
+    releaseQuantity:
+      command.releaseQuantity === undefined || command.releaseQuantity === null
+        ? null
+        : normalizePositiveQuantity(command.releaseQuantity, 'release_quantity'),
     transactionType: normalizeReservationReleaseTransactionType(command.transactionType),
     releasedAt: normalizeDate(command.releasedAt, 'released_at'),
     releasedByUserId:
@@ -922,6 +1087,17 @@ function parseQuantityUnits(value: string, field: string): bigint {
   const normalizedDecimalPart = decimalPart.padEnd(3, '0');
 
   return BigInt(normalizedWholePart) * 1000n + BigInt(normalizedDecimalPart);
+}
+
+function compareQuantities(left: string, right: string): number {
+  const leftUnits = parseQuantityUnits(left, 'quantity');
+  const rightUnits = parseQuantityUnits(right, 'quantity');
+
+  if (leftUnits === rightUnits) {
+    return 0;
+  }
+
+  return leftUnits > rightUnits ? 1 : -1;
 }
 
 function calculateTotalCost(quantity: string, unitCost: string): string {

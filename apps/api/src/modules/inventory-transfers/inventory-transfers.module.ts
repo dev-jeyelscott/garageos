@@ -9,6 +9,7 @@ import { ProductsModule } from '../products/products.module';
 import { InventoryTransfersController } from './api/inventory-transfers.controller';
 import { CreateInventoryTransferService } from './application/create-inventory-transfer.service';
 import { InventoryTransferNumberService } from './application/inventory-transfer-number.service';
+import { SendInventoryTransferService } from './application/send-inventory-transfer.service';
 import { SubmitInventoryTransferService } from './application/submit-inventory-transfer.service';
 import { INVENTORY_TRANSFER_PROVIDERS } from './inventory-transfer.providers';
 
@@ -25,11 +26,13 @@ import { INVENTORY_TRANSFER_PROVIDERS } from './inventory-transfer.providers';
   providers: [
     CreateInventoryTransferService,
     InventoryTransferNumberService,
+    SendInventoryTransferService,
     SubmitInventoryTransferService,
     ...INVENTORY_TRANSFER_PROVIDERS,
   ],
   exports: [
     CreateInventoryTransferService,
+    SendInventoryTransferService,
     SubmitInventoryTransferService,
     ...INVENTORY_TRANSFER_PROVIDERS,
   ],

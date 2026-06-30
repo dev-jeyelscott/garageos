@@ -36,6 +36,10 @@ export interface ReleaseInventoryReservationInput extends LockInventoryReservati
   readonly releasedAt: Date;
 }
 
+export interface PartiallyReleaseInventoryReservationInput extends LockInventoryReservationInput {
+  readonly releaseQuantity: string;
+}
+
 export interface ConsumeInventoryReservationInput extends LockInventoryReservationInput {
   readonly consumedAt: Date;
 }
@@ -57,6 +61,15 @@ export abstract class InventoryReservationStore {
     input: ReleaseInventoryReservationInput,
     client?: DatabaseQueryClient,
   ): Promise<InventoryReservationRecord | null>;
+
+  decrementActiveReservationQuantity(
+    _input: PartiallyReleaseInventoryReservationInput,
+    _client?: DatabaseQueryClient,
+  ): Promise<InventoryReservationRecord | null> {
+    throw new Error(
+      'InventoryReservationStore.decrementActiveReservationQuantity is not implemented.',
+    );
+  }
 
   abstract markReservationConsumed(
     input: ConsumeInventoryReservationInput,

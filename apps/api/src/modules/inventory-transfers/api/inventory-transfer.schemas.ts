@@ -30,6 +30,13 @@ const createInventoryTransferLineSchema = z
   })
   .strict();
 
+const sendInventoryTransferLineSchema = z
+  .object({
+    line_id: z.string().uuid(),
+    sent_quantity: positiveQuantitySchema,
+  })
+  .strict();
+
 export const createInventoryTransferRequestSchema = z
   .object({
     source_branch_id: z.string().uuid(),
@@ -63,6 +70,29 @@ export const createInventoryTransferRequestSchema = z
   });
 
 export type CreateInventoryTransferRequest = z.infer<typeof createInventoryTransferRequestSchema>;
+
+export const sendInventoryTransferRequestSchema = z
+  .object({
+    lines: z.array(sendInventoryTransferLineSchema).min(1).max(100),
+  })
+  .strict()
+  .superRefine((request, context) => {
+    const lineIds = new Set<string>();
+
+    request.lines.forEach((line, index) => {
+      if (lineIds.has(line.line_id)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['lines', index, 'line_id'],
+          message: 'Duplicate transfer lines are not allowed.',
+        });
+      }
+
+      lineIds.add(line.line_id);
+    });
+  });
+
+export type SendInventoryTransferRequest = z.infer<typeof sendInventoryTransferRequestSchema>;
 
 export const inventoryTransferIdParamsSchema = z
   .object({

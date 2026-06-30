@@ -31,6 +31,18 @@ export interface ReleaseFifoReservationAllocationsInput {
   readonly releasedAt: Date;
 }
 
+export interface UpdateFifoReservationAllocationQuantityInput {
+  readonly tenantId: string;
+  readonly allocationId: string;
+  readonly reservedQuantity: string;
+}
+
+export interface ReleaseFifoReservationAllocationInput {
+  readonly tenantId: string;
+  readonly allocationId: string;
+  readonly releasedAt: Date;
+}
+
 export interface LockFifoReservationAllocationsInput {
   readonly tenantId: string;
   readonly reservationId: string;
@@ -60,6 +72,22 @@ export abstract class FifoReservationAllocationStore {
     input: LockFifoReservationAllocationsInput,
     client?: DatabaseQueryClient,
   ): Promise<readonly FifoReservationAllocationRecord[]>;
+
+  updateActiveAllocationQuantity(
+    _input: UpdateFifoReservationAllocationQuantityInput,
+    _client?: DatabaseQueryClient,
+  ): Promise<FifoReservationAllocationRecord | null> {
+    throw new Error(
+      'FifoReservationAllocationStore.updateActiveAllocationQuantity is not implemented.',
+    );
+  }
+
+  releaseActiveAllocation(
+    _input: ReleaseFifoReservationAllocationInput,
+    _client?: DatabaseQueryClient,
+  ): Promise<FifoReservationAllocationRecord | null> {
+    throw new Error('FifoReservationAllocationStore.releaseActiveAllocation is not implemented.');
+  }
 
   abstract markActiveAllocationsConsumedByReservation(
     input: ConsumeFifoReservationAllocationsInput,
