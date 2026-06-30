@@ -37,6 +37,14 @@ export interface DecrementOnHandAndReservedQuantityInput extends GetStockAvailab
   readonly quantityConsumed: string;
 }
 
+export interface IncrementOnHandQuantityInput extends GetStockAvailabilityInput {
+  readonly quantityReceived: string;
+}
+
+export interface DecrementOnHandQuantityInput extends GetStockAvailabilityInput {
+  readonly quantityConsumed: string;
+}
+
 export interface StockBalanceRecord {
   readonly tenantId: string;
   readonly branchId: string;
@@ -107,5 +115,19 @@ export abstract class StockBalanceStore {
     _client?: DatabaseQueryClient,
   ): Promise<StockAvailabilityRecord | null> {
     throw new Error('StockBalanceStore.decrementOnHandAndReservedQuantity is not implemented.');
+  }
+
+  incrementOnHandQuantity(
+    _input: IncrementOnHandQuantityInput,
+    _client?: DatabaseQueryClient,
+  ): Promise<StockAvailabilityRecord> {
+    throw new Error('StockBalanceStore.incrementOnHandQuantity is not implemented.');
+  }
+
+  decrementOnHandQuantity(
+    _input: DecrementOnHandQuantityInput,
+    _client?: DatabaseQueryClient,
+  ): Promise<StockAvailabilityRecord | null> {
+    throw new Error('StockBalanceStore.decrementOnHandQuantity is not implemented.');
   }
 }

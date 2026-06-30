@@ -8,8 +8,10 @@ import {
 import {
   StockBalanceStore,
   type DecrementOnHandAndReservedQuantityInput,
+  type DecrementOnHandQuantityInput,
   type DecrementReservedQuantityInput,
   type GetStockAvailabilityInput,
+  type IncrementOnHandQuantityInput,
   type IncrementReservedQuantityInput,
   type ListStockBalancesInput,
   type StockAvailabilityRecord,
@@ -271,6 +273,84 @@ export class PostgresStockBalanceRepository extends StockBalanceStore {
     return row === undefined ? null : toStockAvailabilityRecord(row);
   }
 
+  async incrementOnHandQuantity(
+    input: IncrementOnHandQuantityInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<StockAvailabilityRecord> {
+    const result = await client.query<StockAvailabilityRow>(
+      `
+        insert into stock_balances (
+          tenant_id,
+          branch_id,
+          product_id,
+          on_hand_qty,
+          reserved_qty,
+          updated_at,
+          lock_version
+        )
+        values (
+          $1::uuid,
+          $2::uuid,
+          $3::uuid,
+          $4::numeric(14,3),
+          0,
+          now(),
+          0
+        )
+        on conflict (tenant_id, branch_id, product_id)
+        do update
+        set
+          on_hand_qty = stock_balances.on_hand_qty + $4::numeric(14,3),
+          updated_at = now(),
+          lock_version = stock_balances.lock_version + 1
+        returning
+          tenant_id,
+          branch_id,
+          product_id,
+          on_hand_qty::text as on_hand_qty,
+          reserved_qty::text as reserved_qty,
+          (on_hand_qty - reserved_qty)::text as available_qty,
+          lock_version
+      `,
+      [input.tenantId, input.branchId, input.productId, input.quantityReceived],
+    );
+
+    return toStockAvailabilityRecord(getRequiredRow(result, 'increment on-hand quantity'));
+  }
+
+  async decrementOnHandQuantity(
+    input: DecrementOnHandQuantityInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<StockAvailabilityRecord | null> {
+    const result = await client.query<StockAvailabilityRow>(
+      `
+        update stock_balances sb
+        set
+          on_hand_qty = sb.on_hand_qty - $4::numeric(14,3),
+          updated_at = now(),
+          lock_version = sb.lock_version + 1
+        where sb.tenant_id = $1::uuid
+          and sb.branch_id = $2::uuid
+          and sb.product_id = $3::uuid
+          and sb.on_hand_qty >= $4::numeric(14,3)
+          and (sb.on_hand_qty - $4::numeric(14,3)) >= sb.reserved_qty
+        returning
+          sb.tenant_id,
+          sb.branch_id,
+          sb.product_id,
+          sb.on_hand_qty::text as on_hand_qty,
+          sb.reserved_qty::text as reserved_qty,
+          (sb.on_hand_qty - sb.reserved_qty)::text as available_qty,
+          sb.lock_version
+      `,
+      [input.tenantId, input.branchId, input.productId, input.quantityConsumed],
+    );
+
+    const [row] = result.rows;
+
+    return row === undefined ? null : toStockAvailabilityRecord(row);
+  }
+
   private async findStockAvailability(
     input: GetStockAvailabilityInput,
     client: DatabaseQueryClient,
@@ -338,6 +418,19 @@ function toStockAvailabilityRecord(row: StockAvailabilityRow): StockAvailability
     availableQty: row.available_qty,
     lockVersion: row.lock_version,
   };
+}
+
+function getRequiredRow<Row extends DatabaseRow>(
+  result: { readonly rows: readonly Row[] },
+  operation: string,
+): Row {
+  const row = result.rows[0];
+
+  if (row === undefined) {
+    throw new Error(`Stock balance repository failed to ${operation}.`);
+  }
+
+  return row;
 }
 
 function toDate(value: Date | string): Date {

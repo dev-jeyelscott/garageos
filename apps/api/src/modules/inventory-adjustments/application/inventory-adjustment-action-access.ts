@@ -18,7 +18,10 @@ export interface InventoryAdjustmentActionAccess {
 export async function resolveInventoryAdjustmentActionAccess(
   session: TenantContextAuthenticatedSession,
   productStore: ProductStore,
-  requiredPermission: 'inventory.adjust' | 'inventory.adjust.approve',
+  requiredPermission:
+    | 'inventory.adjust'
+    | 'inventory.adjust.approve'
+    | readonly ['inventory.adjust', 'inventory.adjust.approve'],
 ): Promise<InventoryAdjustmentActionAccess> {
   const context = resolveTenantContextFromAuthenticatedSession(session);
   const isShopOwner = await productStore.isActiveShopOwner({
@@ -32,8 +35,15 @@ export async function resolveInventoryAdjustmentActionAccess(
     action: TENANT_ACCESS_ACTIONS.OPERATIONAL_WRITE,
   });
 
-  if (!isShopOwner && !context.effectivePermissions.includes(requiredPermission)) {
-    throw GarageOsApiException.forbidden(requiredPermission);
+  const requiredPermissions = Array.isArray(requiredPermission)
+    ? requiredPermission
+    : [requiredPermission];
+
+  if (
+    !isShopOwner &&
+    !requiredPermissions.some((permission) => context.effectivePermissions.includes(permission))
+  ) {
+    throw GarageOsApiException.forbidden(requiredPermissions.join(' or '));
   }
 
   return { context, isShopOwner };

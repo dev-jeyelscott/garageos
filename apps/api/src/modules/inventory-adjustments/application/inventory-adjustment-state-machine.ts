@@ -43,6 +43,30 @@ export function assertCanReject(
   }
 }
 
+export function assertCanPost(adjustment: InventoryAdjustmentRecord): void {
+  if (
+    adjustment.status === INVENTORY_ADJUSTMENT_STATUSES.APPROVED ||
+    (adjustment.status === INVENTORY_ADJUSTMENT_STATUSES.DRAFT && !adjustment.approvalRequired)
+  ) {
+    return;
+  }
+
+  const expectedStatus = adjustment.approvalRequired
+    ? INVENTORY_ADJUSTMENT_STATUSES.APPROVED
+    : `${INVENTORY_ADJUSTMENT_STATUSES.DRAFT} without approval or ${INVENTORY_ADJUSTMENT_STATUSES.APPROVED}`;
+
+  throw GarageOsApiException.workflowTransitionBlocked(
+    `Inventory adjustment cannot post from ${adjustment.status}.`,
+    [
+      {
+        field: 'status',
+        code: 'invalid_status',
+        message: `Expected ${expectedStatus} status.`,
+      },
+    ],
+  );
+}
+
 function assertCurrentStatus(
   currentStatus: InventoryAdjustmentStatus,
   expectedStatus: InventoryAdjustmentStatus,

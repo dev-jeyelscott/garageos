@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 
+import { AuditModule } from '../../shared/audit/audit.module';
 import { DatabaseModule } from '../../shared/database/database.module';
 import { IdempotencyModule } from '../../shared/idempotency/idempotency.module';
 import { AuthModule } from '../auth/auth.module';
@@ -13,16 +14,25 @@ import { InventoryAdjustmentValueImpactService } from './application/inventory-a
 import { CreateInventoryAdjustmentService } from './application/create-inventory-adjustment.service';
 import { RejectInventoryAdjustmentService } from './application/reject-inventory-adjustment.service';
 import { SubmitInventoryAdjustmentService } from './application/submit-inventory-adjustment.service';
+import { PostInventoryAdjustmentService } from './application/post-inventory-adjustment.service';
 import { INVENTORY_ADJUSTMENT_PROVIDERS } from './inventory-adjustment.providers';
 
 @Module({
-  imports: [AuthModule, DatabaseModule, IdempotencyModule, InventoryModule, ProductsModule],
+  imports: [
+    AuthModule,
+    AuditModule,
+    DatabaseModule,
+    IdempotencyModule,
+    InventoryModule,
+    ProductsModule,
+  ],
   controllers: [InventoryAdjustmentsController],
   providers: [
     CreateInventoryAdjustmentService,
     SubmitInventoryAdjustmentService,
     ApproveInventoryAdjustmentService,
     RejectInventoryAdjustmentService,
+    PostInventoryAdjustmentService,
     InventoryAdjustmentValueImpactService,
     InventoryAdjustmentApprovalPolicy,
     InventoryAdjustmentNumberService,
@@ -34,6 +44,7 @@ import { INVENTORY_ADJUSTMENT_PROVIDERS } from './inventory-adjustment.providers
     SubmitInventoryAdjustmentService,
     ApproveInventoryAdjustmentService,
     RejectInventoryAdjustmentService,
+    PostInventoryAdjustmentService,
   ],
 })
 export class InventoryAdjustmentsModule {}

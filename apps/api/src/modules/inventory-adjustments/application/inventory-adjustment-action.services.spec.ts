@@ -258,6 +258,7 @@ class FakeInventoryAdjustmentStore extends InventoryAdjustmentStore {
   replaceDraftAdjustmentLines = vi.fn();
   findAdjustmentWithLines = vi.fn();
   lockAdjustmentWithLinesForPosting = vi.fn();
+  markAdjustmentPosted = vi.fn();
   listStatusEvents = vi.fn();
   listAdjustments = vi.fn();
   findLatestAdjustmentNumberForDate = vi.fn();

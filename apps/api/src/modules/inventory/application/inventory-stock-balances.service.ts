@@ -74,6 +74,14 @@ export interface AssertSufficientAvailableStockCommand extends StockAvailability
   readonly requestedQuantity: string;
 }
 
+export interface IncrementOnHandStockCommand extends StockAvailabilityQueryCommand {
+  readonly quantityReceived: string;
+}
+
+export interface DecrementOnHandStockCommand extends StockAvailabilityQueryCommand {
+  readonly quantityConsumed: string;
+}
+
 export interface StockAvailabilitySnapshot {
   readonly tenant_id: string;
   readonly branch_id: string;
@@ -181,6 +189,56 @@ export class InventoryStockBalancesService {
     }
 
     return snapshot;
+  }
+
+  async incrementOnHandStock(
+    command: IncrementOnHandStockCommand,
+    client?: DatabaseQueryClient,
+  ): Promise<StockAvailabilitySnapshot> {
+    const input = normalizeStockAvailabilityCommand(command);
+    const quantityReceived = normalizePositiveQuantity(
+      command.quantityReceived,
+      'quantity_received',
+    );
+    const stockAvailability = await this.stockBalanceStore.incrementOnHandQuantity(
+      {
+        ...input,
+        quantityReceived,
+      },
+      client,
+    );
+
+    return toStockAvailabilitySnapshot(stockAvailability);
+  }
+
+  async decrementOnHandStock(
+    command: DecrementOnHandStockCommand,
+    client?: DatabaseQueryClient,
+  ): Promise<StockAvailabilitySnapshot> {
+    const input = normalizeStockAvailabilityCommand(command);
+    const quantityConsumed = normalizePositiveQuantity(
+      command.quantityConsumed,
+      'quantity_consumed',
+    );
+    const stockAvailability = await this.stockBalanceStore.decrementOnHandQuantity(
+      {
+        ...input,
+        quantityConsumed,
+      },
+      client,
+    );
+
+    if (stockAvailability === null) {
+      throw GarageOsApiException.inventoryInsufficientAvailableStock([
+        {
+          field: 'quantity_consumed',
+          code: 'insufficient_available_stock',
+          message: 'Stock decrement would make on-hand lower than reserved.',
+        },
+      ]);
+    }
+
+    return toStockAvailabilitySnapshot(stockAvailability);
   }
 }
 

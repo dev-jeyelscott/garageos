@@ -6,13 +6,16 @@ import { AccessTokenAuthGuard } from '../../auth/api/access-token-auth.guard';
 import { AuthService } from '../../auth/application/auth.service';
 import { ApproveInventoryAdjustmentService } from '../application/approve-inventory-adjustment.service';
 import { CreateInventoryAdjustmentService } from '../application/create-inventory-adjustment.service';
+import { PostInventoryAdjustmentService } from '../application/post-inventory-adjustment.service';
 import { RejectInventoryAdjustmentService } from '../application/reject-inventory-adjustment.service';
 import { SubmitInventoryAdjustmentService } from '../application/submit-inventory-adjustment.service';
 import {
   approveInventoryAdjustmentRequestSchema,
+  postInventoryAdjustmentRequestSchema,
   rejectInventoryAdjustmentRequestSchema,
   submitInventoryAdjustmentRequestSchema,
   type ApproveInventoryAdjustmentRequest,
+  type PostInventoryAdjustmentRequest,
   type RejectInventoryAdjustmentRequest,
   type SubmitInventoryAdjustmentRequest,
 } from './inventory-adjustment-action.schemas';
@@ -30,6 +33,7 @@ export class InventoryAdjustmentsController {
     private readonly submitInventoryAdjustmentService: SubmitInventoryAdjustmentService,
     private readonly approveInventoryAdjustmentService: ApproveInventoryAdjustmentService,
     private readonly rejectInventoryAdjustmentService: RejectInventoryAdjustmentService,
+    private readonly postInventoryAdjustmentService: PostInventoryAdjustmentService,
     private readonly idempotencyService: IdempotencyService,
   ) {}
 
@@ -220,6 +224,58 @@ export class InventoryAdjustmentsController {
       const response = await this.rejectInventoryAdjustmentService.reject(
         adjustmentId,
         request,
+        session.tenantContextSession,
+      );
+
+      await this.idempotencyService.completeSucceeded({
+        id: idempotency.record.id,
+        responseStatusCode: 200,
+        responseBodyJson: response,
+        now: new Date(),
+      });
+
+      return response;
+    } catch (error) {
+      await this.idempotencyService.completeFailed({
+        id: idempotency.record.id,
+        now: new Date(),
+      });
+
+      throw error;
+    }
+  }
+
+  @Post(':adjustment_id/post')
+  @HttpCode(200)
+  async postInventoryAdjustment(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Param('adjustment_id') adjustmentId: string,
+    @Body(new ZodValidationPipe(postInventoryAdjustmentRequestSchema))
+    request: PostInventoryAdjustmentRequest,
+  ): ReturnType<PostInventoryAdjustmentService['post']> {
+    const session = await this.authService.getAuthenticatedRouteSession(authorizationHeader);
+    const now = new Date();
+
+    const idempotency = await this.idempotencyService.begin({
+      tenantId: session.tenantContextSession.actor.tenant_id,
+      userId: session.tenantContextSession.actor.user_id,
+      endpoint: 'POST /api/v1/inventory-adjustments/{adjustment_id}/post',
+      idempotencyKey,
+      requestIntent: { adjustment_id: adjustmentId, ...request },
+      now,
+      expiresAt: this.postInventoryAdjustmentService.getIdempotencyExpiresAt(now),
+    });
+
+    if (idempotency.type === 'replayed') {
+      return idempotency.responseBodyJson as Awaited<
+        ReturnType<PostInventoryAdjustmentService['post']>
+      >;
+    }
+
+    try {
+      const response = await this.postInventoryAdjustmentService.post(
+        adjustmentId,
         session.tenantContextSession,
       );
 

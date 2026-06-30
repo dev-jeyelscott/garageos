@@ -5,6 +5,7 @@ import { DatabaseModule } from '../../shared/database/database.module';
 import { AuthModule } from '../auth/auth.module';
 import { InventoryReadController } from './api/inventory-read.controller';
 import { InventoryStockBalancesController } from './api/inventory-stock-balances.controller';
+import { FifoConsumptionService } from './application/fifo-consumption.service';
 import { FifoLayerService } from './application/fifo-layer.service';
 import { InventoryLedgerService } from './application/inventory-ledger.service';
 import { InventoryReadService } from './application/inventory-read.service';
@@ -19,6 +20,7 @@ import { INVENTORY_PROVIDERS } from './inventory.providers';
   providers: [
     InventoryStockBalancesService,
     InventoryLedgerService,
+    FifoConsumptionService,
     InventoryReadService,
     InventoryReconciliationService,
     FifoLayerService,
@@ -28,6 +30,7 @@ import { INVENTORY_PROVIDERS } from './inventory.providers';
   exports: [
     InventoryStockBalancesService,
     InventoryLedgerService,
+    FifoConsumptionService,
     InventoryReadService,
     InventoryReconciliationService,
     FifoLayerService,

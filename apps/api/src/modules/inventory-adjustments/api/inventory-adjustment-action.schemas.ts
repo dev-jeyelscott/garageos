@@ -14,6 +14,8 @@ export const rejectInventoryAdjustmentRequestSchema = z
   })
   .strict();
 
+export const postInventoryAdjustmentRequestSchema = z.object({}).strict();
+
 export type SubmitInventoryAdjustmentRequest = z.infer<
   typeof submitInventoryAdjustmentRequestSchema
 >;
@@ -23,3 +25,4 @@ export type ApproveInventoryAdjustmentRequest = z.infer<
 export type RejectInventoryAdjustmentRequest = z.infer<
   typeof rejectInventoryAdjustmentRequestSchema
 >;
+export type PostInventoryAdjustmentRequest = z.infer<typeof postInventoryAdjustmentRequestSchema>;

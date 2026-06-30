@@ -22,6 +22,7 @@ import {
   type LockAdjustmentWithLinesForUpdateInput,
   type MarkAdjustmentApprovedInput,
   type MarkAdjustmentPendingApprovalInput,
+  type MarkAdjustmentPostedInput,
   type MarkAdjustmentRejectedInput,
   type ReplaceDraftAdjustmentLinesInput,
   type UpdateDraftAdjustmentInput,
@@ -379,6 +380,33 @@ export class PostgresInventoryAdjustmentStore extends InventoryAdjustmentStore {
         returning ${INVENTORY_ADJUSTMENT_COLUMNS}
       `,
       [input.tenantId, input.adjustmentId, input.updatedAt],
+    );
+
+    const row = result.rows[0];
+    return row === undefined ? null : mapInventoryAdjustmentRow(row);
+  }
+
+  async markAdjustmentPosted(
+    input: MarkAdjustmentPostedInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<InventoryAdjustmentRecord | null> {
+    const result = await client.query<InventoryAdjustmentRow>(
+      `
+        update inventory_adjustments
+        set status = 'posted',
+            posted_at = $3::timestamptz,
+            updated_at = $3::timestamptz,
+            lock_version = lock_version + 1
+        where tenant_id = $1::uuid
+          and id = $2::uuid
+          and (
+            status = 'approved'
+            or (status = 'draft' and approval_required = false)
+          )
+          and posted_at is null
+        returning ${INVENTORY_ADJUSTMENT_COLUMNS}
+      `,
+      [input.tenantId, input.adjustmentId, input.postedAt],
     );
 
     const row = result.rows[0];

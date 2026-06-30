@@ -6,6 +6,7 @@ import type { TenantContextAuthenticatedSession } from '../../../shared/tenant-c
 import type { AuthService } from '../../auth/application/auth.service';
 import type { ApproveInventoryAdjustmentService } from '../application/approve-inventory-adjustment.service';
 import type { CreateInventoryAdjustmentService } from '../application/create-inventory-adjustment.service';
+import type { PostInventoryAdjustmentService } from '../application/post-inventory-adjustment.service';
 import type { RejectInventoryAdjustmentService } from '../application/reject-inventory-adjustment.service';
 import type { SubmitInventoryAdjustmentService } from '../application/submit-inventory-adjustment.service';
 import { InventoryAdjustmentsController } from './inventory-adjustments.controller';
@@ -19,6 +20,7 @@ describe('InventoryAdjustmentsController', () => {
     ['submitInventoryAdjustment'],
     ['approveInventoryAdjustment'],
     ['rejectInventoryAdjustment'],
+    ['postInventoryAdjustment'],
   ] as const)('returns 200 OK for %s', (methodName) => {
     expect(
       Reflect.getMetadata(HTTP_CODE_METADATA, InventoryAdjustmentsController.prototype[methodName]),
@@ -29,6 +31,7 @@ describe('InventoryAdjustmentsController', () => {
     ['submitInventoryAdjustment'],
     ['approveInventoryAdjustment'],
     ['rejectInventoryAdjustment'],
+    ['postInventoryAdjustment'],
   ] as const)('records 200 idempotency success for %s', async (methodName) => {
     const fixture = createFixture();
     const controller = fixture.controller;
@@ -37,10 +40,12 @@ describe('InventoryAdjustmentsController', () => {
       await controller.submitInventoryAdjustment('Bearer token', 'idem-key', adjustmentId, {});
     } else if (methodName === 'approveInventoryAdjustment') {
       await controller.approveInventoryAdjustment('Bearer token', 'idem-key', adjustmentId, {});
-    } else {
+    } else if (methodName === 'rejectInventoryAdjustment') {
       await controller.rejectInventoryAdjustment('Bearer token', 'idem-key', adjustmentId, {
         reason: 'Rejected after review.',
       });
+    } else {
+      await controller.postInventoryAdjustment('Bearer token', 'idem-key', adjustmentId, {});
     }
 
     expect(fixture.idempotencyService.completeSucceeded).toHaveBeenCalledWith(
@@ -75,6 +80,10 @@ function createFixture() {
     getIdempotencyExpiresAt: vi.fn((now: Date) => new Date(now.getTime() + 60_000)),
     reject: vi.fn().mockResolvedValue(response),
   } as unknown as RejectInventoryAdjustmentService;
+  const postService = {
+    getIdempotencyExpiresAt: vi.fn((now: Date) => new Date(now.getTime() + 60_000)),
+    post: vi.fn().mockResolvedValue(response),
+  } as unknown as PostInventoryAdjustmentService;
   const idempotencyService = {
     begin: vi.fn().mockResolvedValue({
       type: 'started',
@@ -91,6 +100,7 @@ function createFixture() {
       submitService,
       approveService,
       rejectService,
+      postService,
       idempotencyService,
     ),
     idempotencyService,
