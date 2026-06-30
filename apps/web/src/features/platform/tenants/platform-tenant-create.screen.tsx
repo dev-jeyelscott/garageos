@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 
 import {
   Alert,
@@ -34,6 +34,7 @@ export function PlatformTenantCreateContent({
   const [submitState, setSubmitState] = useState<PlatformTenantCreateSubmitState>({
     status: 'idle',
   });
+  const isOffline = usePlatformOfflineStatus();
 
   function updateFormField<K extends keyof PlatformTenantCreateForm>(
     field: K,
@@ -48,7 +49,7 @@ export function PlatformTenantCreateContent({
   async function handleCreateTenantSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!canCreateTenant || submitState.status === 'submitting') {
+    if (!canCreateTenant || submitState.status === 'submitting' || isOffline) {
       return;
     }
 
@@ -104,6 +105,21 @@ export function PlatformTenantCreateContent({
               enabling duplicate approval and providing an approval reason.
             </p>
           ) : null}
+          {submitState.code === 'idempotency_conflict' ? (
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              The creation request conflicts with a previous retry. Reload the form before
+              submitting again so the backend receives a fresh idempotency key.
+            </p>
+          ) : null}
+        </Alert>
+      ) : null}
+
+      {isOffline ? (
+        <Alert variant="destructive">
+          <p className="text-sm font-bold">Offline mode</p>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            Tenant creation is disabled while GarageOS is offline. Reconnect before submitting.
+          </p>
         </Alert>
       ) : null}
 
@@ -126,7 +142,9 @@ export function PlatformTenantCreateContent({
                   <h2 className="font-bold text-foreground">Business information</h2>
                   <p className="mt-1 text-sm leading-6 text-muted-foreground">
                     Tenant identity fields are used for duplicate detection and platform
-                    administration.
+                    administration. Country, currency, timezone, contact number, and address are
+                    completed later because the current backend create contract does not accept
+                    those fields.
                   </p>
                 </div>
 
@@ -161,8 +179,9 @@ export function PlatformTenantCreateContent({
                 <div>
                   <h2 className="font-bold text-foreground">Subscription baseline</h2>
                   <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                    Use an active Basic, Mid, or High plan ID. A plan selector should replace this
-                    field when the platform plan management/list API is wired.
+                    Use an active Basic, Mid, or High plan ID after external subscription
+                    confirmation. A plan selector should replace this field when the platform plan
+                    list API is wired.
                   </p>
                 </div>
 
@@ -215,7 +234,8 @@ export function PlatformTenantCreateContent({
                   <h2 className="font-bold text-foreground">Shop owner invitation</h2>
                   <p className="mt-1 text-sm leading-6 text-muted-foreground">
                     The current backend contract creates a single-use owner invitation for the
-                    tenant. Temporary plaintext passwords are not displayed.
+                    tenant. Create-owner mode and temporary plaintext passwords are not supported by
+                    this API contract.
                   </p>
                 </div>
 
@@ -300,13 +320,35 @@ export function PlatformTenantCreateContent({
                   <FieldError message={fieldErrors.duplicate_approval_reason} />
                 </label>
               </section>
+
+              <section className="grid gap-4 rounded-2xl border border-border bg-muted/40 p-4">
+                <div>
+                  <h2 className="font-bold text-foreground">Review</h2>
+                  <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                    Tenant will start in pending setup until onboarding is complete and effective
+                    plan access is available.
+                  </p>
+                </div>
+
+                <dl className="grid gap-3 text-sm md:grid-cols-2">
+                  <ReviewItem label="Business" value={form.business_name || 'Not entered'} />
+                  <ReviewItem label="Shop email" value={form.shop_email || 'Not entered'} />
+                  <ReviewItem label="Plan ID" value={form.plan_id || 'Not entered'} />
+                  <ReviewItem
+                    label="Expiration"
+                    value={form.subscription_expiration_date || 'Not entered'}
+                  />
+                  <ReviewItem label="Owner setup" value="Invite owner" />
+                  <ReviewItem label="Owner email" value={form.owner_email || 'Not entered'} />
+                </dl>
+              </section>
             </fieldset>
 
             <div className="flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:justify-end">
               <ButtonLink href="/platform/tenants" variant="secondary">
                 Cancel
               </ButtonLink>
-              <Button type="submit" variant="primary" disabled={isSubmitting}>
+              <Button type="submit" variant="primary" disabled={isSubmitting || isOffline}>
                 {isSubmitting ? 'Creating tenant...' : 'Create tenant and invite owner'}
               </Button>
             </div>
@@ -317,12 +359,47 @@ export function PlatformTenantCreateContent({
   );
 }
 
+function ReviewItem({ label, value }: { readonly label: string; readonly value: string }) {
+  return (
+    <div className="rounded-2xl border border-border bg-card p-3">
+      <dt className="font-bold text-foreground">{label}</dt>
+      <dd className="mt-1 break-words text-muted-foreground">{value}</dd>
+    </div>
+  );
+}
+
 function FieldError({ message }: { readonly message: string | undefined }) {
   if (message === undefined || message.length === 0) {
     return null;
   }
 
   return <p className="text-sm font-semibold text-destructive">{message}</p>;
+}
+
+function usePlatformOfflineStatus(): boolean {
+  const [isOffline, setIsOffline] = useState(() =>
+    typeof navigator === 'undefined' ? false : !navigator.onLine,
+  );
+
+  useEffect(() => {
+    function handleOnline() {
+      setIsOffline(false);
+    }
+
+    function handleOffline() {
+      setIsOffline(true);
+    }
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  return isOffline;
 }
 
 function toSafeErrorMessage(error: unknown, fallback: string): string {

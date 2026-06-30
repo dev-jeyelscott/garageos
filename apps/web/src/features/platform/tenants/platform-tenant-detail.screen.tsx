@@ -141,11 +141,18 @@ export function PlatformTenantDetailContent({
       status: 'idle',
     });
 
+  const isOffline = usePlatformOfflineStatus();
   const canReadTenantDetail = hasEffectivePermission(session, 'platform.tenants.read');
-  const canUpdateSubscription = hasEffectivePermission(session, 'platform.subscriptions.update');
-  const canStartSupportAccess = hasEffectivePermission(session, 'platform.support_access');
-  const canQueueTenantExport = hasEffectivePermission(session, 'platform.tenants.update');
-  const canQueueTenantDeletionJob = hasEffectivePermission(session, 'platform.tenants.update');
+  const hasSubscriptionUpdatePermission = hasEffectivePermission(
+    session,
+    'platform.subscriptions.update',
+  );
+  const hasSupportAccessPermission = hasEffectivePermission(session, 'platform.support_access');
+  const hasTenantUpdatePermission = hasEffectivePermission(session, 'platform.tenants.update');
+  const canUpdateSubscription = hasSubscriptionUpdatePermission && !isOffline;
+  const canStartSupportAccess = hasSupportAccessPermission && !isOffline;
+  const canQueueTenantExport = hasTenantUpdatePermission && !isOffline;
+  const canQueueTenantDeletionJob = hasTenantUpdatePermission && !isOffline;
 
   useEffect(() => {
     if (!canReadTenantDetail || tenantId.length === 0) {
@@ -795,6 +802,15 @@ export function PlatformTenantDetailContent({
           export packaging remain separate workflow slices.
         </p>
       </Alert>
+
+      {isOffline ? (
+        <Alert variant="destructive">
+          <p className="text-sm font-bold">Offline mode</p>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            You're offline. Reconnect to perform platform actions.
+          </p>
+        </Alert>
+      ) : null}
 
       {isLoadingTenant ? <TenantDetailSkeleton /> : null}
 
@@ -2365,6 +2381,32 @@ function SummaryCard({
       </CardContent>
     </Card>
   );
+}
+
+function usePlatformOfflineStatus(): boolean {
+  const [isOffline, setIsOffline] = useState(() =>
+    typeof navigator === 'undefined' ? false : !navigator.onLine,
+  );
+
+  useEffect(() => {
+    function handleOnline() {
+      setIsOffline(false);
+    }
+
+    function handleOffline() {
+      setIsOffline(true);
+    }
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  return isOffline;
 }
 
 function hasEffectivePermission(session: AuthSessionResponseData, permission: string): boolean {

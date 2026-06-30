@@ -21,6 +21,7 @@ interface PlatformTenantResultsProps {
   readonly isLoadingMore: boolean;
   readonly hasActiveFilters: boolean;
   readonly hasMore: boolean;
+  readonly canCreateTenant: boolean;
   readonly onLoadMore: () => void;
 }
 
@@ -30,6 +31,7 @@ export function PlatformTenantResults({
   isLoadingMore,
   hasActiveFilters,
   hasMore,
+  canCreateTenant,
   onLoadMore,
 }: PlatformTenantResultsProps) {
   return (
@@ -60,12 +62,13 @@ export function PlatformTenantResults({
       tenantListState.status !== 'error' &&
       tenantListState.tenants.length === 0 ? (
         <PlatformTenantEmptyState
-          title={hasActiveFilters ? 'No tenants match the filters' : 'No tenants returned'}
+          title={hasActiveFilters ? 'No tenants match your filters' : 'No tenants found'}
           description={
             hasActiveFilters
               ? 'Adjust the search or status filter and try again.'
-              : 'The platform tenant list endpoint returned an empty list.'
+              : 'Create a platform-managed tenant when the shop is ready for setup.'
           }
+          canCreateTenant={!hasActiveFilters && canCreateTenant}
         />
       ) : null}
 
@@ -126,7 +129,7 @@ function PlatformTenantTable({ tenants }: { readonly tenants: readonly PlatformT
               <TableHead>Status</TableHead>
               <TableHead>Plan</TableHead>
               <TableHead>Expiration</TableHead>
-              <TableHead>Location</TableHead>
+              <TableHead>Setup</TableHead>
               <TableHead className="text-right">Action</TableHead>
             </TableRow>
           </TableHeader>
@@ -157,7 +160,7 @@ function PlatformTenantTable({ tenants }: { readonly tenants: readonly PlatformT
                     {tenant.subscription?.expiration_date ?? 'Expiration not returned'}
                   </TableCell>
                   <TableCell className="text-muted-foreground">
-                    {formatTenantLocation(tenant)}
+                    {formatTenantSetup(tenant)}
                   </TableCell>
                   <TableCell className="text-right">
                     <ButtonLink href={tenantDetailHref} variant="secondary" size="sm">
@@ -209,6 +212,10 @@ function PlatformTenantMobileCard({ tenant }: { readonly tenant: PlatformTenantL
           <dt className="font-bold text-foreground">Location</dt>
           <dd className="mt-1 text-muted-foreground">{formatTenantLocation(tenant)}</dd>
         </div>
+        <div>
+          <dt className="font-bold text-foreground">Setup</dt>
+          <dd className="mt-1 text-muted-foreground">{formatTenantSetup(tenant)}</dd>
+        </div>
       </dl>
 
       <ButtonLink href={tenantDetailHref} variant="secondary" size="sm">
@@ -231,14 +238,23 @@ function PlatformTenantListSkeleton() {
 function PlatformTenantEmptyState({
   title,
   description,
+  canCreateTenant,
 }: {
   readonly title: string;
   readonly description: string;
+  readonly canCreateTenant: boolean;
 }) {
   return (
     <div className="rounded-2xl border border-dashed border-border bg-muted/50 p-6 text-center">
       <h2 className="font-bold text-foreground">{title}</h2>
       <p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p>
+      {canCreateTenant ? (
+        <div className="mt-4 flex justify-center">
+          <ButtonLink href="/platform/tenants/new" variant="primary" size="sm">
+            Create tenant
+          </ButtonLink>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -323,6 +339,18 @@ function formatTenantPlan(tenant: PlatformTenantListItem): string {
     tenant.plan?.code ??
     'Plan not returned'
   );
+}
+
+function formatTenantSetup(tenant: PlatformTenantListItem): string {
+  if (tenant.onboarding_completed_at !== null && tenant.onboarding_completed_at !== undefined) {
+    return 'Complete';
+  }
+
+  if (tenant.status === 'pending_setup') {
+    return 'Pending setup';
+  }
+
+  return 'Not returned';
 }
 
 function formatTenantLocation(tenant: PlatformTenantListItem): string {

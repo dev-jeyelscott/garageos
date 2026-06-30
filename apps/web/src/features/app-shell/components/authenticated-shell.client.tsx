@@ -105,7 +105,10 @@ export function PlatformTenantsScreen() {
         )
       }
     >
-      <PlatformTenantsContent canReadTenantList={canReadTenantList} />
+      <PlatformTenantsContent
+        canReadTenantList={canReadTenantList}
+        canCreateTenant={canCreateTenant}
+      />
     </AuthenticatedShell>
   );
 }

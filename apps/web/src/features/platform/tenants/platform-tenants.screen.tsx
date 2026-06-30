@@ -31,9 +31,13 @@ import type {
 
 interface PlatformTenantsContentProps {
   readonly canReadTenantList: boolean;
+  readonly canCreateTenant: boolean;
 }
 
-export function PlatformTenantsContent({ canReadTenantList }: PlatformTenantsContentProps) {
+export function PlatformTenantsContent({
+  canReadTenantList,
+  canCreateTenant,
+}: PlatformTenantsContentProps) {
   const [searchDraft, setSearchDraft] = useState('');
   const [statusDraft, setStatusDraft] = useState<PlatformTenantStatusFilter>('all');
   const [appliedFilters, setAppliedFilters] = useState<PlatformTenantListFilters>(
@@ -248,6 +252,7 @@ export function PlatformTenantsContent({ canReadTenantList }: PlatformTenantsCon
             isLoadingMore={isLoadingMore}
             hasActiveFilters={hasActiveFilters}
             hasMore={hasMore}
+            canCreateTenant={canCreateTenant}
             onLoadMore={() => void handleLoadMore()}
           />
         </CardContent>
