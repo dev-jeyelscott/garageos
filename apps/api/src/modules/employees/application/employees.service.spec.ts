@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { API_ERROR_CODES } from '../../../shared/api/api-error-code';
 import type { AuditLogRecord } from '../../../shared/audit/audit-log.store';
-import type { AuditService } from '../../../shared/audit/audit.service';
+import { AuditService } from '../../../shared/audit/audit.service';
 import type {
   DatabaseQueryClient,
   DatabaseQueryResult,
@@ -13,7 +13,7 @@ import type {
   TenantContextAuthenticatedSession,
   TenantStatus,
 } from '../../../shared/tenant-context/tenant-context';
-import type { PasswordHashingService } from '../../auth/application/password-hashing.service';
+import { PasswordHashingService } from '../../auth/application/password-hashing.service';
 import type { SecureTokenService } from '../../auth/application/secure-token.service';
 import type { TokenHashingService } from '../../auth/application/token-hashing.service';
 import {

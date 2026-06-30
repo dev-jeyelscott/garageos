@@ -8,7 +8,7 @@ import type {
   EnqueueBackgroundJobInput,
 } from '../../../shared/background-jobs/background-job.service';
 import type { AuditLogRecord } from '../../../shared/audit/audit-log.store';
-import type { AuditService } from '../../../shared/audit/audit.service';
+import { AuditService } from '../../../shared/audit/audit.service';
 import type {
   DatabaseQueryClient,
   DatabaseQueryResult,

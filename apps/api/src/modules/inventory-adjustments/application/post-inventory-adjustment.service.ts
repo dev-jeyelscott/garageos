@@ -10,14 +10,14 @@ import {
   type DatabaseTransactionRunner,
 } from '../../../shared/database/database-transaction';
 import type { TenantContextAuthenticatedSession } from '../../../shared/tenant-context/tenant-context';
-import type { FifoConsumptionService } from '../../inventory/application/fifo-consumption.service';
+import { FifoConsumptionService } from '../../inventory/application/fifo-consumption.service';
 import { type CreateFifoConsumptionCommand } from '../../inventory/application/fifo-consumption.service';
 import type { FifoConsumptionRecord } from '../../inventory/application/fifo-consumption.store';
-import type { FifoLayerService } from '../../inventory/application/fifo-layer.service';
+import { FifoLayerService } from '../../inventory/application/fifo-layer.service';
 import type { FifoLayerAllocationCandidateRecord } from '../../inventory/application/fifo-layer.store';
-import type { InventoryStockBalancesService } from '../../inventory/application/inventory-stock-balances.service';
+import { InventoryStockBalancesService } from '../../inventory/application/inventory-stock-balances.service';
 import { type StockAvailabilitySnapshot } from '../../inventory/application/inventory-stock-balances.service';
-import type { InventoryLedgerService } from '../../inventory/application/inventory-ledger.service';
+import { InventoryLedgerService } from '../../inventory/application/inventory-ledger.service';
 import {
   INVENTORY_TRANSACTION_TYPES,
   type InventoryLedgerEntryRecord,

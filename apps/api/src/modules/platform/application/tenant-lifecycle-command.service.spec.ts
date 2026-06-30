@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { API_ERROR_CODES } from '../../../shared/api/api-error-code';
 import type { AuditLogRecord } from '../../../shared/audit/audit-log.store';
-import type { AuditService, RecordAuditLogInput } from '../../../shared/audit/audit.service';
+import { AuditService, RecordAuditLogInput } from '../../../shared/audit/audit.service';
 import type {
   DatabaseQueryClient,
   DatabaseQueryResult,

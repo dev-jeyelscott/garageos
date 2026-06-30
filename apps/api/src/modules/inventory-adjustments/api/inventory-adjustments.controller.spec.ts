@@ -1,15 +1,15 @@
 import { HTTP_CODE_METADATA } from '@nestjs/common/constants';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { IdempotencyService } from '../../../shared/idempotency/idempotency.service';
+import { IdempotencyService } from '../../../shared/idempotency/idempotency.service';
 import type { TenantContextAuthenticatedSession } from '../../../shared/tenant-context/tenant-context';
-import type { AuthService } from '../../auth/application/auth.service';
-import type { ApproveInventoryAdjustmentService } from '../application/approve-inventory-adjustment.service';
-import type { CreateInventoryAdjustmentService } from '../application/create-inventory-adjustment.service';
-import type { ForceInventoryAdjustmentService } from '../application/force-inventory-adjustment.service';
-import type { PostInventoryAdjustmentService } from '../application/post-inventory-adjustment.service';
-import type { RejectInventoryAdjustmentService } from '../application/reject-inventory-adjustment.service';
-import type { SubmitInventoryAdjustmentService } from '../application/submit-inventory-adjustment.service';
+import { AuthService } from '../../auth/application/auth.service';
+import { ApproveInventoryAdjustmentService } from '../application/approve-inventory-adjustment.service';
+import { CreateInventoryAdjustmentService } from '../application/create-inventory-adjustment.service';
+import { ForceInventoryAdjustmentService } from '../application/force-inventory-adjustment.service';
+import { PostInventoryAdjustmentService } from '../application/post-inventory-adjustment.service';
+import { RejectInventoryAdjustmentService } from '../application/reject-inventory-adjustment.service';
+import { SubmitInventoryAdjustmentService } from '../application/submit-inventory-adjustment.service';
 import { InventoryAdjustmentsController } from './inventory-adjustments.controller';
 
 const tenantId = '11111111-1111-4111-8111-111111111111';

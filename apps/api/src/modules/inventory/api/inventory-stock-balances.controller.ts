@@ -2,8 +2,8 @@ import { Controller, Get, Headers, Query, UseGuards } from '@nestjs/common';
 
 import { ZodValidationPipe } from '../../../shared/api/zod-validation.pipe';
 import { AccessTokenAuthGuard } from '../../auth/api/access-token-auth.guard';
-import type { AuthService } from '../../auth/application/auth.service';
-import type { InventoryStockBalancesService } from '../application/inventory-stock-balances.service';
+import { AuthService } from '../../auth/application/auth.service';
+import { InventoryStockBalancesService } from '../application/inventory-stock-balances.service';
 import {
   listStockBalancesQuerySchema,
   type ListStockBalancesQuery,

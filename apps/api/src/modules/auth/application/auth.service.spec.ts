@@ -5,7 +5,7 @@ import { AuthRateLimitStore } from './auth-rate-limit.store';
 import { AuthRateLimitService } from './auth-rate-limit.service';
 import { AuthSessionService } from './auth-session.service';
 import { AuthUserStore } from './auth-user.store';
-import type { PasswordHashingService } from './password-hashing.service';
+import { PasswordHashingService } from './password-hashing.service';
 import { RefreshSessionStore } from './refresh-session.store';
 import { SecureTokenService } from './secure-token.service';
 import { TokenHashingService } from './token-hashing.service';

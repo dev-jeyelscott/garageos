@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { API_ERROR_CODES } from '../../../shared/api/api-error-code';
 import { GarageOsApiException } from '../../../shared/api/api-exception';
-import type { IdempotencyService } from '../../../shared/idempotency/idempotency.service';
+import { IdempotencyService } from '../../../shared/idempotency/idempotency.service';
 import type { AuthSessionResponseData } from '../../auth/contracts';
 import {
   PLATFORM_PERMISSIONS,

@@ -3,11 +3,11 @@ import { describe, expect, it, vi } from 'vitest';
 import type { DatabaseQueryClient } from '../../../shared/database/database-client';
 import type { DatabaseTransactionRunner } from '../../../shared/database/database-transaction';
 import type { TenantContextAuthenticatedSession } from '../../../shared/tenant-context/tenant-context';
-import type { InventoryStockBalancesService } from '../../inventory/application/inventory-stock-balances.service';
+import { InventoryStockBalancesService } from '../../inventory/application/inventory-stock-balances.service';
 import { ProductStore, type ProductRecord } from '../../products/application/product.store';
 import type { ForceInventoryAdjustmentRequest } from '../api/inventory-adjustment.schemas';
 import { ForceInventoryAdjustmentService } from './force-inventory-adjustment.service';
-import type { InventoryAdjustmentNumberService } from './inventory-adjustment-number.service';
+import { InventoryAdjustmentNumberService } from './inventory-adjustment-number.service';
 import {
   INVENTORY_ADJUSTMENT_STATUSES,
   type InventoryAdjustmentLineRecord,
@@ -19,8 +19,8 @@ import {
   type CreateDraftAdjustmentLinesInput,
   type InsertStatusEventInput,
 } from './inventory-adjustment.store';
-import type { InventoryAdjustmentValueImpactService } from './inventory-adjustment-value-impact.service';
-import type { PostInventoryAdjustmentService } from './post-inventory-adjustment.service';
+import { InventoryAdjustmentValueImpactService } from './inventory-adjustment-value-impact.service';
+import { PostInventoryAdjustmentService } from './post-inventory-adjustment.service';
 
 const tenantId = '11111111-1111-4111-8111-111111111111';
 const branchId = '22222222-2222-4222-8222-222222222222';

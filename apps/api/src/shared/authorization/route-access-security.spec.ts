@@ -3,7 +3,7 @@ import type { Reflector } from '@nestjs/core';
 import { describe, expect, it, vi } from 'vitest';
 
 import { API_ERROR_CODES } from '../api/api-error-code';
-import type { AuditService } from '../audit/audit.service';
+import { AuditService } from '../audit/audit.service';
 import {
   SUBSCRIPTION_STATUS_SOURCES,
   TENANT_STATUSES,

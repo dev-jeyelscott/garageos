@@ -12,10 +12,10 @@ import {
 } from '@nestjs/common';
 
 import { ZodValidationPipe } from '../../../shared/api/zod-validation.pipe';
-import type { IdempotencyService } from '../../../shared/idempotency/idempotency.service';
+import { IdempotencyService } from '../../../shared/idempotency/idempotency.service';
 import { AccessTokenAuthGuard } from '../../auth/api/access-token-auth.guard';
-import type { AuthService } from '../../auth/application/auth.service';
-import type { EstimatesService } from '../application/estimates.service';
+import { AuthService } from '../../auth/application/auth.service';
+import { EstimatesService } from '../application/estimates.service';
 import {
   approveEstimateRequestSchema,
   type ApproveEstimateRequest,

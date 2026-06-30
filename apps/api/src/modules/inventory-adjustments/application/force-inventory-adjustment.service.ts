@@ -12,16 +12,16 @@ import type {
   ResolvedTenantContext,
   TenantContextAuthenticatedSession,
 } from '../../../shared/tenant-context/tenant-context';
-import type { InventoryStockBalancesService } from '../../inventory/application/inventory-stock-balances.service';
+import { InventoryStockBalancesService } from '../../inventory/application/inventory-stock-balances.service';
 import { ProductStore, type ProductRecord } from '../../products/application/product.store';
 import type { ForceInventoryAdjustmentRequest } from '../api/inventory-adjustment.schemas';
-import type { InventoryAdjustmentValueImpactService } from './inventory-adjustment-value-impact.service';
+import { InventoryAdjustmentValueImpactService } from './inventory-adjustment-value-impact.service';
 import {
   addMoney,
   compareQuantity,
   subtractQuantity,
 } from './inventory-adjustment-value-impact.service';
-import type { InventoryAdjustmentNumberService } from './inventory-adjustment-number.service';
+import { InventoryAdjustmentNumberService } from './inventory-adjustment-number.service';
 import {
   INVENTORY_ADJUSTMENT_STATUSES,
   INVENTORY_ADJUSTMENT_TYPES,
@@ -32,7 +32,7 @@ import {
   type CreateDraftAdjustmentLineInput,
 } from './inventory-adjustment.store';
 import { resolveInventoryAdjustmentActionAccess } from './inventory-adjustment-action-access';
-import type { PostInventoryAdjustmentService } from './post-inventory-adjustment.service';
+import { PostInventoryAdjustmentService } from './post-inventory-adjustment.service';
 import { type InventoryAdjustmentPostResponse } from './post-inventory-adjustment.service';
 
 const IDEMPOTENCY_RETENTION_HOURS = 24;

@@ -39,4 +39,18 @@ export default [
       ],
     },
   },
+
+  /**
+   * NestJS API override.
+   *
+   * Do not auto-convert constructor-injected provider imports to `import type`.
+   * Nest can rely on runtime class metadata for dependency injection when
+   * `emitDecoratorMetadata` is enabled.
+   */
+  {
+    files: ['apps/api/src/**/*.ts'],
+    rules: {
+      '@typescript-eslint/consistent-type-imports': 'off',
+    },
+  },
 ];

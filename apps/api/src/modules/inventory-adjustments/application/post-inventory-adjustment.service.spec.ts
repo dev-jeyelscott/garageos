@@ -2,19 +2,19 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { DatabaseQueryClient } from '../../../shared/database/database-client';
 import type { DatabaseTransactionRunner } from '../../../shared/database/database-transaction';
-import type { AuditService } from '../../../shared/audit/audit.service';
+import { AuditService } from '../../../shared/audit/audit.service';
 import type { TenantContextAuthenticatedSession } from '../../../shared/tenant-context/tenant-context';
 import type {
   CreateFifoConsumptionCommand,
   FifoConsumptionService,
 } from '../../inventory/application/fifo-consumption.service';
-import type { FifoLayerService } from '../../inventory/application/fifo-layer.service';
+import { FifoLayerService } from '../../inventory/application/fifo-layer.service';
 import type { FifoLayerAllocationCandidateRecord } from '../../inventory/application/fifo-layer.store';
 import type {
   InventoryStockBalancesService,
   StockAvailabilitySnapshot,
 } from '../../inventory/application/inventory-stock-balances.service';
-import type { InventoryLedgerService } from '../../inventory/application/inventory-ledger.service';
+import { InventoryLedgerService } from '../../inventory/application/inventory-ledger.service';
 import { ProductStore, type ProductRecord } from '../../products/application/product.store';
 import { PostInventoryAdjustmentService } from './post-inventory-adjustment.service';
 import {

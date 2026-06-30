@@ -3,14 +3,14 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { API_ERROR_CODES } from '../../../shared/api/api-error-code';
 import { GarageOsApiException } from '../../../shared/api/api-exception';
-import type { AuditService } from '../../../shared/audit/audit.service';
+import { AuditService } from '../../../shared/audit/audit.service';
 import type { TenantContextAuthenticatedSession } from '../../../shared/tenant-context/tenant-context';
 import {
   SUBSCRIPTION_STATUS_SOURCES,
   TENANT_CONTEXT_USER_TYPES,
   TENANT_STATUSES,
 } from '../../../shared/tenant-context/tenant-context';
-import type { AuthService } from '../application/auth.service';
+import { AuthService } from '../application/auth.service';
 import type { AuthSessionResponseData } from '../contracts';
 import { AccessTokenAuthGuard, type GarageOsAuthenticatedRequest } from './access-token-auth.guard';
 

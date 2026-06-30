@@ -1,15 +1,15 @@
 import { Body, Controller, Headers, HttpCode, Param, Post, UseGuards } from '@nestjs/common';
 
 import { ZodValidationPipe } from '../../../shared/api/zod-validation.pipe';
-import type { IdempotencyService } from '../../../shared/idempotency/idempotency.service';
+import { IdempotencyService } from '../../../shared/idempotency/idempotency.service';
 import { AccessTokenAuthGuard } from '../../auth/api/access-token-auth.guard';
-import type { AuthService } from '../../auth/application/auth.service';
-import type { ApproveInventoryAdjustmentService } from '../application/approve-inventory-adjustment.service';
-import type { CreateInventoryAdjustmentService } from '../application/create-inventory-adjustment.service';
-import type { ForceInventoryAdjustmentService } from '../application/force-inventory-adjustment.service';
-import type { PostInventoryAdjustmentService } from '../application/post-inventory-adjustment.service';
-import type { RejectInventoryAdjustmentService } from '../application/reject-inventory-adjustment.service';
-import type { SubmitInventoryAdjustmentService } from '../application/submit-inventory-adjustment.service';
+import { AuthService } from '../../auth/application/auth.service';
+import { ApproveInventoryAdjustmentService } from '../application/approve-inventory-adjustment.service';
+import { CreateInventoryAdjustmentService } from '../application/create-inventory-adjustment.service';
+import { ForceInventoryAdjustmentService } from '../application/force-inventory-adjustment.service';
+import { PostInventoryAdjustmentService } from '../application/post-inventory-adjustment.service';
+import { RejectInventoryAdjustmentService } from '../application/reject-inventory-adjustment.service';
+import { SubmitInventoryAdjustmentService } from '../application/submit-inventory-adjustment.service';
 import {
   approveInventoryAdjustmentRequestSchema,
   postInventoryAdjustmentRequestSchema,
