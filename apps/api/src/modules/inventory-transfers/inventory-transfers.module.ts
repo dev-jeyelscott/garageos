@@ -8,6 +8,7 @@ import { BranchModule } from '../branches/branch.module';
 import { InventoryModule } from '../inventory/inventory.module';
 import { ProductsModule } from '../products/products.module';
 import { InventoryTransfersController } from './api/inventory-transfers.controller';
+import { CancelInventoryTransferService } from './application/cancel-inventory-transfer.service';
 import { CreateInventoryTransferService } from './application/create-inventory-transfer.service';
 import { InventoryTransferNumberService } from './application/inventory-transfer-number.service';
 import { ReceiveInventoryTransferService } from './application/receive-inventory-transfer.service';
@@ -28,6 +29,7 @@ import { INVENTORY_TRANSFER_PROVIDERS } from './inventory-transfer.providers';
   controllers: [InventoryTransfersController],
   providers: [
     CreateInventoryTransferService,
+    CancelInventoryTransferService,
     InventoryTransferNumberService,
     ReceiveInventoryTransferService,
     SendInventoryTransferService,
@@ -36,6 +38,7 @@ import { INVENTORY_TRANSFER_PROVIDERS } from './inventory-transfer.providers';
   ],
   exports: [
     CreateInventoryTransferService,
+    CancelInventoryTransferService,
     ReceiveInventoryTransferService,
     SendInventoryTransferService,
     SubmitInventoryTransferService,

@@ -17,6 +17,7 @@ import {
   type UpdateTransferLineSentQuantityInput,
   type UpdateTransferStatusInput,
   type UpdateTransferStatusToInTransitInput,
+  type UpdateTransferStatusToCancelledInput,
   type UpdateTransferStatusToReceivedInput,
 } from '../application/inventory-transfer.store';
 import {
@@ -404,6 +405,38 @@ export class PostgresInventoryTransferStore extends InventoryTransferStore {
         input.expectedStatus,
         input.receivedByUserId,
         input.receivedAt,
+      ],
+    );
+
+    return result.rows[0] === undefined ? null : mapInventoryTransferRow(result.rows[0]);
+  }
+
+  async updateTransferStatusToCancelled(
+    input: UpdateTransferStatusToCancelledInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<InventoryTransferRecord | null> {
+    const result = await client.query<InventoryTransferRow>(
+      `
+        update inventory_transfers
+        set
+          status = 'cancelled',
+          cancelled_by_user_id = $4::uuid,
+          cancelled_at = $5::timestamptz,
+          cancellation_disposition = $6,
+          updated_at = $5::timestamptz,
+          lock_version = lock_version + 1
+        where tenant_id = $1::uuid
+          and id = $2::uuid
+          and status = $3
+        returning ${INVENTORY_TRANSFER_COLUMNS}
+      `,
+      [
+        input.tenantId,
+        input.transferId,
+        input.expectedStatus,
+        input.cancelledByUserId,
+        input.cancelledAt,
+        input.cancellationDisposition,
       ],
     );
 

@@ -85,6 +85,15 @@ export interface UpdateTransferStatusToReceivedInput {
   readonly receivedAt: Date;
 }
 
+export interface UpdateTransferStatusToCancelledInput {
+  readonly tenantId: string;
+  readonly transferId: string;
+  readonly expectedStatus: InventoryTransferStatus;
+  readonly cancelledByUserId: string;
+  readonly cancelledAt: Date;
+  readonly cancellationDisposition: string | null;
+}
+
 export interface FindLatestTransferNumberForDateInput {
   readonly tenantId: string;
   readonly datePrefix: string;
@@ -156,6 +165,13 @@ export abstract class InventoryTransferStore {
     _client?: DatabaseQueryClient,
   ): Promise<InventoryTransferRecord | null> {
     throw new Error('InventoryTransferStore.updateTransferStatusToReceived is not implemented.');
+  }
+
+  updateTransferStatusToCancelled(
+    _input: UpdateTransferStatusToCancelledInput,
+    _client?: DatabaseQueryClient,
+  ): Promise<InventoryTransferRecord | null> {
+    throw new Error('InventoryTransferStore.updateTransferStatusToCancelled is not implemented.');
   }
 
   abstract findLatestTransferNumberForDate(

@@ -54,6 +54,24 @@ export interface InventoryTransferReceiveResponse {
   };
 }
 
+export interface InventoryTransferCancelResponse {
+  readonly transfer: {
+    readonly id: string;
+    readonly transfer_number: string;
+    readonly status: 'cancelled';
+    readonly cancelled_at: string;
+    readonly cancellation_disposition: 'returned_to_source' | 'lost_or_damaged' | null;
+    readonly lock_version: number;
+  };
+  readonly inventory_effects: {
+    readonly source_branch_id: string;
+    readonly destination_branch_id: string;
+    readonly ledger_entry_ids: readonly string[];
+    readonly disposition: 'returned_to_source' | 'lost_or_damaged' | null;
+    readonly variance_loss_amount: string;
+  };
+}
+
 export interface InventoryTransferReservationResponse {
   readonly line_id: string;
   readonly product_id: string;
@@ -163,6 +181,35 @@ export function toReceiveInventoryTransferResponse(
       source_branch_id: transfer.sourceBranchId,
       destination_branch_id: transfer.destinationBranchId,
       ledger_entry_ids: ledgerEntryIds,
+      variance_loss_amount: varianceLossAmount,
+    },
+  };
+}
+
+export function toCancelInventoryTransferResponse(
+  transfer: InventoryTransferRecord,
+  ledgerEntryIds: readonly string[],
+  disposition: 'returned_to_source' | 'lost_or_damaged' | null,
+  varianceLossAmount: string,
+): InventoryTransferCancelResponse {
+  if (transfer.cancelledAt === null) {
+    throw new Error('Cancelled transfer response requires cancelled_at.');
+  }
+
+  return {
+    transfer: {
+      id: transfer.id,
+      transfer_number: transfer.transferNumber,
+      status: 'cancelled',
+      cancelled_at: transfer.cancelledAt.toISOString(),
+      cancellation_disposition: disposition,
+      lock_version: transfer.lockVersion,
+    },
+    inventory_effects: {
+      source_branch_id: transfer.sourceBranchId,
+      destination_branch_id: transfer.destinationBranchId,
+      ledger_entry_ids: ledgerEntryIds,
+      disposition,
       variance_loss_amount: varianceLossAmount,
     },
   };

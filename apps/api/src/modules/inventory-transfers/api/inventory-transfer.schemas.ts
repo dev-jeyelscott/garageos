@@ -63,6 +63,15 @@ const receiveInventoryTransferLineSchema = z
   })
   .strict();
 
+export const cancelInventoryTransferRequestSchema = z
+  .object({
+    disposition: z.enum(['returned_to_source', 'lost_or_damaged']).optional(),
+    reason: z.string().trim().min(1).max(1000).optional(),
+  })
+  .strict();
+
+export type CancelInventoryTransferRequest = z.infer<typeof cancelInventoryTransferRequestSchema>;
+
 export const createInventoryTransferRequestSchema = z
   .object({
     source_branch_id: z.string().uuid(),

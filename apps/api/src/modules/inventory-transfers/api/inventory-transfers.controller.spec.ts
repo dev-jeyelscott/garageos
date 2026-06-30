@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { IdempotencyService } from '../../../shared/idempotency/idempotency.service';
 import type { TenantContextAuthenticatedSession } from '../../../shared/tenant-context/tenant-context';
 import { AuthService } from '../../auth/application/auth.service';
+import { CancelInventoryTransferService } from '../application/cancel-inventory-transfer.service';
 import { CreateInventoryTransferService } from '../application/create-inventory-transfer.service';
 import { ReceiveInventoryTransferService } from '../application/receive-inventory-transfer.service';
 import { SendInventoryTransferService } from '../application/send-inventory-transfer.service';
@@ -158,6 +159,35 @@ describe('InventoryTransfersController', () => {
       }),
     );
   });
+
+  it('cancels transfers through idempotency and records 200 success', async () => {
+    const fixture = createFixture();
+    const params = { transfer_id: '22222222-2222-4222-8222-222222222222' };
+    const request = createCancelRequest();
+
+    await fixture.controller.cancelInventoryTransfer('Bearer token', 'cancel-key', params, request);
+
+    expect(fixture.idempotencyService.begin).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId,
+        userId,
+        endpoint: 'POST /api/v1/inventory-transfers/{transfer_id}/cancel',
+        idempotencyKey: 'cancel-key',
+        requestIntent: { params, body: request },
+      }),
+    );
+    expect(fixture.cancelService.cancelTransfer).toHaveBeenCalledWith(
+      params.transfer_id,
+      request,
+      fixture.session,
+    );
+    expect(fixture.idempotencyService.completeSucceeded).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'idempotency-record-id',
+        responseStatusCode: 200,
+      }),
+    );
+  });
 });
 
 function createFixture(
@@ -207,6 +237,14 @@ function createFixture(
   } as unknown as ReceiveInventoryTransferService & {
     receiveInTransit: ReturnType<typeof vi.fn>;
   };
+  const cancelService = {
+    getIdempotencyExpiresAt: vi.fn((now: Date) => new Date(now.getTime() + 60_000)),
+    cancelTransfer: vi
+      .fn()
+      .mockResolvedValue({ transfer: { id: 'transfer-id' }, inventory_effects: {} }),
+  } as unknown as CancelInventoryTransferService & {
+    cancelTransfer: ReturnType<typeof vi.fn>;
+  };
 
   return {
     session,
@@ -214,6 +252,7 @@ function createFixture(
     submitService,
     sendService,
     receiveService,
+    cancelService,
     idempotencyService,
     controller: new InventoryTransfersController(
       authService,
@@ -221,6 +260,7 @@ function createFixture(
       submitService,
       sendService,
       receiveService,
+      cancelService,
       idempotencyService,
     ),
   };
@@ -259,6 +299,13 @@ function createReceiveRequest() {
         received_quantity: '5.000',
       },
     ],
+  };
+}
+
+function createCancelRequest() {
+  return {
+    disposition: 'lost_or_damaged' as const,
+    reason: 'Damaged in transit.',
   };
 }
 
