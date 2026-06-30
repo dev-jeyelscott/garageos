@@ -8,11 +8,7 @@ import {
   type DatabaseTransactionRunner,
 } from '../../../shared/database/database-transaction';
 import { FifoLayerService } from './fifo-layer.service';
-import {
-  FifoConsumptionStore,
-  type CreateFifoConsumptionInput,
-  type FifoConsumptionRecord,
-} from './fifo-consumption.store';
+import { FifoConsumptionStore, type FifoConsumptionRecord } from './fifo-consumption.store';
 import type { FifoLayerAllocationCandidateRecord } from './fifo-layer.store';
 import {
   FIFO_ALLOCATION_STATUSES,
@@ -971,12 +967,6 @@ function toStockAvailabilitySnapshot(record: StockAvailabilityRecord): StockAvai
   };
 }
 
-function sumQuantities(values: readonly string[]): string {
-  return formatQuantityUnits(
-    values.reduce((total, value) => total + parseQuantityUnits(value, 'reserved_qty'), 0n),
-  );
-}
-
 function parseMoneyCents(value: string, field: string): bigint {
   const normalizedValue = normalizeRequiredText(value, field);
 
@@ -1002,19 +992,4 @@ function formatMoneyCents(value: bigint): string {
   const decimalPart = value % 100n;
 
   return `${wholePart.toString()}.${decimalPart.toString().padStart(2, '0')}`;
-}
-
-function multiplyQuantityByMoney(quantity: string, unitCost: string): string {
-  const quantityUnits = parseQuantityUnits(quantity, 'quantity_consumed');
-  const unitCostCents = parseMoneyCents(unitCost, 'unit_cost');
-  const totalMills = quantityUnits * unitCostCents;
-  const roundedCents = (totalMills + 500n) / 1000n;
-
-  return formatMoneyCents(roundedCents);
-}
-
-function sumMoney(values: readonly string[]): string {
-  return formatMoneyCents(
-    values.reduce((total, value) => total + parseMoneyCents(value, 'total_cost'), 0n),
-  );
 }

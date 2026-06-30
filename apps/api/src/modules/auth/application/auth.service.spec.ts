@@ -4,8 +4,8 @@ import { GarageOsApiException } from '../../../shared/api/api-exception';
 import { AuthRateLimitStore } from './auth-rate-limit.store';
 import { AuthRateLimitService } from './auth-rate-limit.service';
 import { AuthSessionService } from './auth-session.service';
-import { AuthLoginContext, AuthUserStore } from './auth-user.store';
-import { PasswordHashingService } from './password-hashing.service';
+import { AuthUserStore } from './auth-user.store';
+import type { PasswordHashingService } from './password-hashing.service';
 import { RefreshSessionStore } from './refresh-session.store';
 import { SecureTokenService } from './secure-token.service';
 import { TokenHashingService } from './token-hashing.service';
@@ -31,7 +31,7 @@ import type {
   CreateEmailVerificationTokenInput,
   EmailVerificationTokenRecord,
 } from './email-verification-token.store';
-import type { MarkAuthUserEmailVerifiedInput } from './auth-user.store';
+import type { MarkAuthUserEmailVerifiedInput, AuthLoginContext } from './auth-user.store';
 
 const signingOptions = {
   issuer: 'garageos-api',

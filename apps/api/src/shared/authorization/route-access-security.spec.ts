@@ -1,5 +1,5 @@
 import type { ExecutionContext } from '@nestjs/common';
-import { Reflector } from '@nestjs/core';
+import type { Reflector } from '@nestjs/core';
 import { describe, expect, it, vi } from 'vitest';
 
 import { API_ERROR_CODES } from '../api/api-error-code';

@@ -10,18 +10,14 @@ import {
   type DatabaseTransactionRunner,
 } from '../../../shared/database/database-transaction';
 import type { TenantContextAuthenticatedSession } from '../../../shared/tenant-context/tenant-context';
-import {
-  FifoConsumptionService,
-  type CreateFifoConsumptionCommand,
-} from '../../inventory/application/fifo-consumption.service';
+import type { FifoConsumptionService } from '../../inventory/application/fifo-consumption.service';
+import { type CreateFifoConsumptionCommand } from '../../inventory/application/fifo-consumption.service';
 import type { FifoConsumptionRecord } from '../../inventory/application/fifo-consumption.store';
-import { FifoLayerService } from '../../inventory/application/fifo-layer.service';
+import type { FifoLayerService } from '../../inventory/application/fifo-layer.service';
 import type { FifoLayerAllocationCandidateRecord } from '../../inventory/application/fifo-layer.store';
-import {
-  InventoryStockBalancesService,
-  type StockAvailabilitySnapshot,
-} from '../../inventory/application/inventory-stock-balances.service';
-import { InventoryLedgerService } from '../../inventory/application/inventory-ledger.service';
+import type { InventoryStockBalancesService } from '../../inventory/application/inventory-stock-balances.service';
+import { type StockAvailabilitySnapshot } from '../../inventory/application/inventory-stock-balances.service';
+import type { InventoryLedgerService } from '../../inventory/application/inventory-ledger.service';
 import {
   INVENTORY_TRANSACTION_TYPES,
   type InventoryLedgerEntryRecord,
@@ -70,6 +66,16 @@ export interface InventoryAdjustmentPostLineResult {
 
 export interface InventoryAdjustmentPostResponse extends InventoryAdjustmentStatusResponse {
   readonly line_results: readonly InventoryAdjustmentPostLineResult[];
+}
+
+interface PostLockedAdjustmentInput {
+  readonly context: Awaited<ReturnType<typeof resolveInventoryAdjustmentActionAccess>>['context'];
+  readonly adjustment: InventoryAdjustmentRecord;
+  readonly lines: readonly InventoryAdjustmentLineRecord[];
+  readonly auditAction?: string;
+  readonly auditReason?: string;
+  readonly auditMetadata?: Record<string, unknown>;
+  readonly transaction: DatabaseQueryClient;
 }
 
 @Injectable()
@@ -123,116 +129,128 @@ export class PostInventoryAdjustmentService {
         throw GarageOsApiException.resourceNotFound('Inventory adjustment was not found.');
       }
 
-      assertBranchAccessAllowed({ context, branchId: locked.adjustment.branchId });
-      assertCanPost(locked.adjustment);
-      assertHasLines(locked.lines);
-
-      const postedAt = new Date();
-      const lineResults: InventoryAdjustmentPostLineResult[] = [];
-      const productCache = new Map<string, ProductRecord>();
-
-      for (const line of locked.lines) {
-        const product = await this.getProduct(
-          context.tenantId,
-          line.productId,
-          productCache,
-          transaction,
-        );
-        const quantityDelta = await this.resolvePostingQuantityDelta(
-          locked.adjustment,
-          line,
-          transaction,
-        );
-
-        if (compareQuantity(quantityDelta, ZERO_QUANTITY) === 0) {
-          throw GarageOsApiException.workflowTransitionBlocked(
-            'Inventory adjustment line has no stock effect at posting time.',
-            [
-              {
-                field: 'lines.quantity_difference',
-                code: 'zero_posting_quantity_delta',
-                message: 'Posting a zero-quantity adjustment is not allowed.',
-              },
-            ],
-          );
-        }
-
-        if (compareQuantity(quantityDelta, ZERO_QUANTITY) > 0) {
-          lineResults.push(
-            await this.postPositiveLine({
-              adjustment: locked.adjustment,
-              line,
-              quantityDelta,
-              unitCost: line.unitCost ?? product.defaultCost,
-              postedAt,
-              actorUserId: context.actorUserId,
-              transaction,
-            }),
-          );
-        } else {
-          lineResults.push(
-            await this.postNegativeLine({
-              adjustment: locked.adjustment,
-              line,
-              quantity: absQuantity(quantityDelta),
-              postedAt,
-              actorUserId: context.actorUserId,
-              transaction,
-            }),
-          );
-        }
-      }
-
-      const posted = await this.inventoryAdjustmentStore.markAdjustmentPosted(
-        {
-          tenantId: context.tenantId,
-          adjustmentId,
-          postedAt,
-        },
+      return this.postLockedAdjustment({
+        context,
+        adjustment: locked.adjustment,
+        lines: locked.lines,
         transaction,
-      );
-
-      if (posted === null) {
-        throw GarageOsApiException.workflowTransitionBlocked();
-      }
-
-      await this.inventoryAdjustmentStore.insertStatusEvent(
-        {
-          id: randomUUID(),
-          tenantId: context.tenantId,
-          adjustmentId,
-          fromStatus: locked.adjustment.status,
-          toStatus: INVENTORY_ADJUSTMENT_STATUSES.POSTED,
-          reason: null,
-          createdByUserId: context.actorUserId,
-          createdAt: postedAt,
-        },
-        transaction,
-      );
-
-      await this.auditService.record({
-        tenantId: context.tenantId,
-        actorUserId: context.actorUserId,
-        actorType: AUDIT_ACTOR_TYPES.TENANT_USER,
-        supportAccessSessionId: context.platformSupportAccessSessionId,
-        action: 'inventory_adjustments.posted',
-        entityType: 'inventory_adjustment',
-        entityId: posted.id,
-        branchId: posted.branchId,
-        beforeJson: toAuditAdjustmentSnapshot(locked.adjustment),
-        afterJson: toAuditAdjustmentSnapshot(posted),
-        metadataJson: {
-          line_results: lineResults,
-        },
-        reason: 'inventory_adjustment_posted',
-        client: transaction,
       });
-
-      return {
-        ...toInventoryAdjustmentStatusResponse(posted, locked.lines),
-        line_results: lineResults,
-      };
     });
+  }
+
+  async postLockedAdjustment(
+    input: PostLockedAdjustmentInput,
+  ): Promise<InventoryAdjustmentPostResponse> {
+    assertBranchAccessAllowed({ context: input.context, branchId: input.adjustment.branchId });
+    assertCanPost(input.adjustment);
+    assertHasLines(input.lines);
+
+    const postedAt = new Date();
+    const lineResults: InventoryAdjustmentPostLineResult[] = [];
+    const productCache = new Map<string, ProductRecord>();
+
+    for (const line of input.lines) {
+      const product = await this.getProduct(
+        input.context.tenantId,
+        line.productId,
+        productCache,
+        input.transaction,
+      );
+      const quantityDelta = await this.resolvePostingQuantityDelta(
+        input.adjustment,
+        line,
+        input.transaction,
+      );
+
+      if (compareQuantity(quantityDelta, ZERO_QUANTITY) === 0) {
+        throw GarageOsApiException.workflowTransitionBlocked(
+          'Inventory adjustment line has no stock effect at posting time.',
+          [
+            {
+              field: 'lines.quantity_difference',
+              code: 'zero_posting_quantity_delta',
+              message: 'Posting a zero-quantity adjustment is not allowed.',
+            },
+          ],
+        );
+      }
+
+      if (compareQuantity(quantityDelta, ZERO_QUANTITY) > 0) {
+        lineResults.push(
+          await this.postPositiveLine({
+            adjustment: input.adjustment,
+            line,
+            quantityDelta,
+            unitCost: line.unitCost ?? product.defaultCost,
+            postedAt,
+            actorUserId: input.context.actorUserId,
+            transaction: input.transaction,
+          }),
+        );
+      } else {
+        lineResults.push(
+          await this.postNegativeLine({
+            adjustment: input.adjustment,
+            line,
+            quantity: absQuantity(quantityDelta),
+            postedAt,
+            actorUserId: input.context.actorUserId,
+            transaction: input.transaction,
+          }),
+        );
+      }
+    }
+
+    const posted = await this.inventoryAdjustmentStore.markAdjustmentPosted(
+      {
+        tenantId: input.context.tenantId,
+        adjustmentId: input.adjustment.id,
+        postedAt,
+      },
+      input.transaction,
+    );
+
+    if (posted === null) {
+      throw GarageOsApiException.workflowTransitionBlocked();
+    }
+
+    await this.inventoryAdjustmentStore.insertStatusEvent(
+      {
+        id: randomUUID(),
+        tenantId: input.context.tenantId,
+        adjustmentId: input.adjustment.id,
+        fromStatus: input.adjustment.status,
+        toStatus: INVENTORY_ADJUSTMENT_STATUSES.POSTED,
+        reason: null,
+        createdByUserId: input.context.actorUserId,
+        createdAt: postedAt,
+      },
+      input.transaction,
+    );
+
+    await this.auditService.record({
+      tenantId: input.context.tenantId,
+      actorUserId: input.context.actorUserId,
+      actorType: AUDIT_ACTOR_TYPES.TENANT_USER,
+      supportAccessSessionId: input.context.platformSupportAccessSessionId,
+      action: input.auditAction ?? 'inventory_adjustments.posted',
+      entityType: 'inventory_adjustment',
+      entityId: posted.id,
+      branchId: posted.branchId,
+      beforeJson: toAuditAdjustmentSnapshot(input.adjustment),
+      afterJson: toAuditAdjustmentSnapshot(posted),
+      metadataJson: {
+        ...(input.auditMetadata ?? {}),
+        line_results: lineResults,
+      },
+      reason: input.auditReason ?? 'inventory_adjustment_posted',
+      client: input.transaction,
+    });
+
+    return {
+      ...toInventoryAdjustmentStatusResponse(posted, input.lines),
+      line_results: lineResults,
+    };
   }
 
   private async getProduct(

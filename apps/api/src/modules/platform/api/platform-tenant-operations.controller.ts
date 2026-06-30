@@ -16,7 +16,7 @@ import {
   type TenantStatusOverrideRequest,
   tenantStatusOverrideRequestSchema,
 } from './platform-tenant-operations.schemas';
-import { PlatformTenantOperationsService } from '../application/platform-tenant-operations.service';
+import type { PlatformTenantOperationsService } from '../application/platform-tenant-operations.service';
 
 @Controller('platform')
 @UseGuards(AccessTokenAuthGuard)

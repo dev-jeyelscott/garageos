@@ -1,11 +1,5 @@
-import {
-  ArgumentsHost,
-  Catch,
-  ExceptionFilter,
-  HttpException,
-  HttpStatus,
-  Logger,
-} from '@nestjs/common';
+import type { ArgumentsHost, ExceptionFilter } from '@nestjs/common';
+import { Catch, HttpException, HttpStatus, Logger } from '@nestjs/common';
 
 import { API_ERROR_CODES, type ApiErrorCode } from './api-error-code';
 import { GarageOsApiException } from './api-exception';

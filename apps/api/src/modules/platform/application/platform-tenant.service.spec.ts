@@ -18,9 +18,9 @@ import type { DatabaseTransactionRunner } from '../../../shared/database/databas
 import { SecureTokenService } from '../../auth/application/secure-token.service';
 import { TokenHashingService } from '../../auth/application/token-hashing.service';
 import type { AuthSessionResponseData } from '../../auth/contracts';
+import type { EndPlatformSupportAccessSessionInput } from './platform-tenant.store';
 import {
   PlatformTenantStore,
-  EndPlatformSupportAccessSessionInput,
   type CreateOwnerInvitationInput,
   type CreateSubscriptionOverrideInput,
   type CreateTenantInput,
@@ -47,7 +47,6 @@ import { PLATFORM_PERMISSIONS, PlatformTenantService } from './platform-tenant.s
 const PLATFORM_ADMIN_USER_ID = '11111111-1111-4111-8111-111111111111';
 const TENANT_ID = '22222222-2222-4222-8222-222222222222';
 const PLAN_ID = '33333333-3333-4333-8333-333333333333';
-const INVITATION_ID = '44444444-4444-4444-8444-444444444444';
 const NOW = new Date('2026-06-27T00:00:00.000Z');
 
 describe('PlatformTenantService', () => {
@@ -203,7 +202,7 @@ describe('PlatformTenantService', () => {
   });
 
   it('requires a reason before applying a tenant read-only override', async () => {
-    const { service, store, backgroundJobService } = createService();
+    const { service, store } = createService();
 
     store.tenantById = createTenantRecord({
       status: 'active',
@@ -236,7 +235,7 @@ describe('PlatformTenantService', () => {
   });
 
   it('lists platform audit logs with filters, safe metadata, and cursor pagination', async () => {
-    const { service, store, backgroundJobService } = createService();
+    const { service, store } = createService();
 
     store.auditLogRows = [
       createPlatformAuditLogRecord({
@@ -306,7 +305,7 @@ describe('PlatformTenantService', () => {
   });
 
   it('requires platform.audit_logs.read before listing platform audit logs', async () => {
-    const { service, store, backgroundJobService } = createService();
+    const { service, store } = createService();
 
     store.auditLogRows = [createPlatformAuditLogRecord()];
 
@@ -477,7 +476,7 @@ describe('PlatformTenantService', () => {
   });
 
   it('blocks ending an already ended platform support access session', async () => {
-    const { service, store, backgroundJobService } = createService();
+    const { service, store } = createService();
     const supportAccessSessionId = '55555555-5555-4555-8555-555555555555';
 
     store.supportAccessSessionById = createSupportAccessSessionRecord({
@@ -505,7 +504,7 @@ describe('PlatformTenantService', () => {
   });
 
   it('returns not_found when ending a missing platform support access session', async () => {
-    const { service, store, backgroundJobService } = createService();
+    const { service, store } = createService();
 
     await expect(
       service.endSupportAccessSession(
@@ -527,7 +526,7 @@ describe('PlatformTenantService', () => {
   });
 
   it('requires platform.support_access before ending support access session', async () => {
-    const { service, store, backgroundJobService } = createService();
+    const { service, store } = createService();
     const supportAccessSessionId = '55555555-5555-4555-8555-555555555555';
 
     store.supportAccessSessionById = createSupportAccessSessionRecord({
@@ -559,7 +558,7 @@ describe('PlatformTenantService', () => {
   });
 
   it('requires a reason before ending support access session', async () => {
-    const { service, store, backgroundJobService } = createService();
+    const { service, store } = createService();
     const supportAccessSessionId = '55555555-5555-4555-8555-555555555555';
 
     store.supportAccessSessionById = createSupportAccessSessionRecord({
@@ -592,7 +591,7 @@ describe('PlatformTenantService', () => {
   });
 
   it('requires a reason before updating tenant subscription', async () => {
-    const { service, store, backgroundJobService } = createService();
+    const { service, store } = createService();
 
     store.tenantById = createTenantRecord({
       subscription: createSubscriptionRecord(),
@@ -864,7 +863,7 @@ describe('PlatformTenantService', () => {
   });
 
   it('denies queueTenantDeletionJob without platform.tenants.update', async () => {
-    const { service, store, backgroundJobService } = createService();
+    const { service, store } = createService();
 
     store.tenantById = createTenantRecord({
       status: 'pending_deletion',
@@ -899,7 +898,7 @@ describe('PlatformTenantService', () => {
     const blockedStatuses = ['active', 'grace_period', 'read_only', 'suspended'] as const;
 
     for (const status of blockedStatuses) {
-      const { service, store, backgroundJobService } = createService();
+      const { service, store } = createService();
 
       store.tenantById = createTenantRecord({
         status,
@@ -926,7 +925,7 @@ describe('PlatformTenantService', () => {
   });
 
   it('blocks queueTenantDeletionJob when tenant status is deleted', async () => {
-    const { service, store, backgroundJobService } = createService();
+    const { service, store } = createService();
 
     store.tenantById = createTenantRecord({
       status: 'deleted',
@@ -952,7 +951,7 @@ describe('PlatformTenantService', () => {
   });
 
   it('blocks queueTenantDeletionJob when pending_deletion tenant has no scheduled deletion date', async () => {
-    const { service, store, backgroundJobService } = createService();
+    const { service, store } = createService();
 
     store.tenantById = createTenantRecord({
       status: 'pending_deletion',
@@ -979,7 +978,7 @@ describe('PlatformTenantService', () => {
   });
 
   it('blocks duplicate active tenant deletion jobs', async () => {
-    const { service, store, backgroundJobService } = createService();
+    const { service, store } = createService();
 
     store.tenantById = createTenantRecord({
       status: 'pending_deletion',
@@ -1185,7 +1184,7 @@ describe('PlatformTenantService', () => {
   });
 
   it('lists tenants with API-safe pagination metadata', async () => {
-    const { service, store, backgroundJobService } = createService();
+    const { service, store } = createService();
     store.listRows = [
       createTenantRecord({
         id: '55555555-5555-4555-8555-555555555555',
@@ -1344,7 +1343,7 @@ describe('PlatformTenantService', () => {
   });
 
   it('blocks duplicate approval when the approval reason is blank', async () => {
-    const { service, store, backgroundJobService } = createService();
+    const { service, store } = createService();
     store.duplicate = createTenantRecord({
       id: '99999999-9999-4999-8999-999999999999',
       businessName: 'Moto Garage',
@@ -1377,7 +1376,7 @@ describe('PlatformTenantService', () => {
   });
 
   it('requires an active subscription plan', async () => {
-    const { service, store, backgroundJobService } = createService();
+    const { service, store } = createService();
     store.plan = null;
 
     await expect(

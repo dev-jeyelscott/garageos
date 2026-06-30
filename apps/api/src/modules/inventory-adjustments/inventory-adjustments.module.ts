@@ -12,6 +12,7 @@ import { InventoryAdjustmentApprovalPolicy } from './application/inventory-adjus
 import { InventoryAdjustmentNumberService } from './application/inventory-adjustment-number.service';
 import { InventoryAdjustmentValueImpactService } from './application/inventory-adjustment-value-impact.service';
 import { CreateInventoryAdjustmentService } from './application/create-inventory-adjustment.service';
+import { ForceInventoryAdjustmentService } from './application/force-inventory-adjustment.service';
 import { RejectInventoryAdjustmentService } from './application/reject-inventory-adjustment.service';
 import { SubmitInventoryAdjustmentService } from './application/submit-inventory-adjustment.service';
 import { PostInventoryAdjustmentService } from './application/post-inventory-adjustment.service';
@@ -33,6 +34,7 @@ import { INVENTORY_ADJUSTMENT_PROVIDERS } from './inventory-adjustment.providers
     ApproveInventoryAdjustmentService,
     RejectInventoryAdjustmentService,
     PostInventoryAdjustmentService,
+    ForceInventoryAdjustmentService,
     InventoryAdjustmentValueImpactService,
     InventoryAdjustmentApprovalPolicy,
     InventoryAdjustmentNumberService,
@@ -45,6 +47,7 @@ import { INVENTORY_ADJUSTMENT_PROVIDERS } from './inventory-adjustment.providers
     ApproveInventoryAdjustmentService,
     RejectInventoryAdjustmentService,
     PostInventoryAdjustmentService,
+    ForceInventoryAdjustmentService,
   ],
 })
 export class InventoryAdjustmentsModule {}

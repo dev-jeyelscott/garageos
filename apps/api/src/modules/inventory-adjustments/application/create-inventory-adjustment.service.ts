@@ -17,7 +17,7 @@ import {
   type ResolvedTenantContext,
   type TenantContextAuthenticatedSession,
 } from '../../../shared/tenant-context/tenant-context';
-import { InventoryStockBalancesService } from '../../inventory/application/inventory-stock-balances.service';
+import type { InventoryStockBalancesService } from '../../inventory/application/inventory-stock-balances.service';
 import { ProductStore, type ProductRecord } from '../../products/application/product.store';
 import type { CreateInventoryAdjustmentRequest } from '../api/inventory-adjustment.schemas';
 import {
@@ -25,13 +25,13 @@ import {
   INVENTORY_ADJUSTMENT_TYPES,
   type InventoryAdjustmentType,
 } from './inventory-adjustment.records';
-import { InventoryAdjustmentApprovalPolicy } from './inventory-adjustment-approval-policy';
-import { InventoryAdjustmentNumberService } from './inventory-adjustment-number.service';
+import type { InventoryAdjustmentApprovalPolicy } from './inventory-adjustment-approval-policy';
+import type { InventoryAdjustmentNumberService } from './inventory-adjustment-number.service';
+import type { InventoryAdjustmentValueImpactService } from './inventory-adjustment-value-impact.service';
 import {
   addMoney,
   compareQuantity,
   subtractQuantity,
-  InventoryAdjustmentValueImpactService,
 } from './inventory-adjustment-value-impact.service';
 import {
   type ApiInventoryAdjustmentType,

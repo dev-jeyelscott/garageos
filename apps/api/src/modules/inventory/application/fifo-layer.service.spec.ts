@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { API_ERROR_CODES } from '../../../shared/api/api-error-code';
 import type { DatabaseQueryClient } from '../../../shared/database/database-client';
+import type { DecrementFifoLayerRemainingQuantityInput } from './fifo-layer.store';
 import {
-  DecrementFifoLayerRemainingQuantityInput,
   FIFO_LAYER_SOURCE_TRANSACTION_TYPES,
   FifoLayerStore,
   type CreateFifoLayerInput,

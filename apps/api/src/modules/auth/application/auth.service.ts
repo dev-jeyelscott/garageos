@@ -2,14 +2,14 @@ import { Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 
 import { GarageOsApiException } from '../../../shared/api/api-exception';
-import {
+import type {
   ChangePasswordRequest,
   EmailVerificationConfirmRequest,
   ForgotPasswordRequest,
   LoginRequest,
   ResetPasswordRequest,
 } from '../api/auth.schemas';
-import {
+import type {
   AuthAccessTokenPayload,
   AuthLoginResponseData,
   AuthRefreshResponseData,
@@ -19,7 +19,8 @@ import {
 } from '../contracts';
 import { AUTH_RATE_LIMIT_RULES, normalizeAuthRateLimitEmailKey } from './auth-rate-limit.policy';
 import { AuthRateLimitService } from './auth-rate-limit.service';
-import { AuthLoginContext, AuthUserStore } from './auth-user.store';
+import type { AuthLoginContext } from './auth-user.store';
+import { AuthUserStore } from './auth-user.store';
 import { PasswordHashingService } from './password-hashing.service';
 import { AccessTokenService } from '../security/access-token.service';
 import { AUTH_SECURITY } from './auth-security.constants';

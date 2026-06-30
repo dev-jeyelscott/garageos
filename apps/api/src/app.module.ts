@@ -1,11 +1,5 @@
-import {
-  Controller,
-  Get,
-  MiddlewareConsumer,
-  Module,
-  RequestMethod,
-  type NestModule,
-} from '@nestjs/common';
+import type { MiddlewareConsumer } from '@nestjs/common';
+import { Controller, Get, Module, RequestMethod, type NestModule } from '@nestjs/common';
 
 import { AuthModule } from './modules/auth/auth.module';
 import { BranchModule } from './modules/branches/branch.module';

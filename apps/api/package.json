@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "tsx watch src/main.ts",
     "start": "tsx src/main.ts",
+    "lint": "eslint \"src/**/*.ts\" --max-warnings=0",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",

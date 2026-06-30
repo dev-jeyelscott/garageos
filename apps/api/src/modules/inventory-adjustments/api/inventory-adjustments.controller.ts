@@ -1,14 +1,15 @@
 import { Body, Controller, Headers, HttpCode, Param, Post, UseGuards } from '@nestjs/common';
 
 import { ZodValidationPipe } from '../../../shared/api/zod-validation.pipe';
-import { IdempotencyService } from '../../../shared/idempotency/idempotency.service';
+import type { IdempotencyService } from '../../../shared/idempotency/idempotency.service';
 import { AccessTokenAuthGuard } from '../../auth/api/access-token-auth.guard';
-import { AuthService } from '../../auth/application/auth.service';
-import { ApproveInventoryAdjustmentService } from '../application/approve-inventory-adjustment.service';
-import { CreateInventoryAdjustmentService } from '../application/create-inventory-adjustment.service';
-import { PostInventoryAdjustmentService } from '../application/post-inventory-adjustment.service';
-import { RejectInventoryAdjustmentService } from '../application/reject-inventory-adjustment.service';
-import { SubmitInventoryAdjustmentService } from '../application/submit-inventory-adjustment.service';
+import type { AuthService } from '../../auth/application/auth.service';
+import type { ApproveInventoryAdjustmentService } from '../application/approve-inventory-adjustment.service';
+import type { CreateInventoryAdjustmentService } from '../application/create-inventory-adjustment.service';
+import type { ForceInventoryAdjustmentService } from '../application/force-inventory-adjustment.service';
+import type { PostInventoryAdjustmentService } from '../application/post-inventory-adjustment.service';
+import type { RejectInventoryAdjustmentService } from '../application/reject-inventory-adjustment.service';
+import type { SubmitInventoryAdjustmentService } from '../application/submit-inventory-adjustment.service';
 import {
   approveInventoryAdjustmentRequestSchema,
   postInventoryAdjustmentRequestSchema,
@@ -21,7 +22,9 @@ import {
 } from './inventory-adjustment-action.schemas';
 import {
   createInventoryAdjustmentRequestSchema,
+  forceInventoryAdjustmentRequestSchema,
   type CreateInventoryAdjustmentRequest,
+  type ForceInventoryAdjustmentRequest,
 } from './inventory-adjustment.schemas';
 
 @UseGuards(AccessTokenAuthGuard)
@@ -34,6 +37,7 @@ export class InventoryAdjustmentsController {
     private readonly approveInventoryAdjustmentService: ApproveInventoryAdjustmentService,
     private readonly rejectInventoryAdjustmentService: RejectInventoryAdjustmentService,
     private readonly postInventoryAdjustmentService: PostInventoryAdjustmentService,
+    private readonly forceInventoryAdjustmentService: ForceInventoryAdjustmentService,
     private readonly idempotencyService: IdempotencyService,
   ) {}
 
@@ -72,6 +76,57 @@ export class InventoryAdjustmentsController {
       await this.idempotencyService.completeSucceeded({
         id: idempotency.record.id,
         responseStatusCode: 201,
+        responseBodyJson: response,
+        now: new Date(),
+      });
+
+      return response;
+    } catch (error) {
+      await this.idempotencyService.completeFailed({
+        id: idempotency.record.id,
+        now: new Date(),
+      });
+
+      throw error;
+    }
+  }
+
+  @Post('force')
+  @HttpCode(200)
+  async forceInventoryAdjustment(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Body(new ZodValidationPipe(forceInventoryAdjustmentRequestSchema))
+    request: ForceInventoryAdjustmentRequest,
+  ): ReturnType<ForceInventoryAdjustmentService['forceAdjust']> {
+    const session = await this.authService.getAuthenticatedRouteSession(authorizationHeader);
+    const now = new Date();
+
+    const idempotency = await this.idempotencyService.begin({
+      tenantId: session.tenantContextSession.actor.tenant_id,
+      userId: session.tenantContextSession.actor.user_id,
+      endpoint: 'POST /api/v1/inventory-adjustments/force',
+      idempotencyKey,
+      requestIntent: request,
+      now,
+      expiresAt: this.forceInventoryAdjustmentService.getIdempotencyExpiresAt(now),
+    });
+
+    if (idempotency.type === 'replayed') {
+      return idempotency.responseBodyJson as Awaited<
+        ReturnType<ForceInventoryAdjustmentService['forceAdjust']>
+      >;
+    }
+
+    try {
+      const response = await this.forceInventoryAdjustmentService.forceAdjust(
+        request,
+        session.tenantContextSession,
+      );
+
+      await this.idempotencyService.completeSucceeded({
+        id: idempotency.record.id,
+        responseStatusCode: 200,
         responseBodyJson: response,
         now: new Date(),
       });

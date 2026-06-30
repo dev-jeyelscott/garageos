@@ -11,14 +11,16 @@ import type {
   AuthTenantSummary,
 } from '../contracts';
 
-import {
+import type {
   AuthLoginContext,
-  AuthUserStore,
   MarkAuthUserEmailVerifiedInput,
+  UpdateAuthUserPasswordHashInput,
+} from '../application/auth-user.store';
+import {
+  AuthUserStore,
   toAuthTenantStatus,
   toAuthUserStatus,
   toAuthUserType,
-  UpdateAuthUserPasswordHashInput,
 } from '../application/auth-user.store';
 import { AUTH_DATABASE_CLIENT, type DatabaseQueryClient } from './database-client';
 import {

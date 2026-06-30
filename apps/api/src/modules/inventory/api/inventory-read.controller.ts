@@ -2,8 +2,8 @@ import { Controller, Get, Headers, Param, Query, UseGuards } from '@nestjs/commo
 
 import { ZodValidationPipe } from '../../../shared/api/zod-validation.pipe';
 import { AccessTokenAuthGuard } from '../../auth/api/access-token-auth.guard';
-import { AuthService } from '../../auth/application/auth.service';
-import { InventoryReadService } from '../application/inventory-read.service';
+import type { AuthService } from '../../auth/application/auth.service';
+import type { InventoryReadService } from '../application/inventory-read.service';
 import {
   listInventoryLedgerQuerySchema,
   type ListInventoryLedgerQuery,

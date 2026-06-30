@@ -51,7 +51,6 @@ import {
   StockBalanceStore,
   type DecrementOnHandAndReservedQuantityInput,
   type DecrementReservedQuantityInput,
-  type GetStockAvailabilityInput,
   type IncrementReservedQuantityInput,
   type ListStockBalancesInput,
   type StockAvailabilityRecord,

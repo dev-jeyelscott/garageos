@@ -19,7 +19,6 @@ import {
   type CreateProductCategoryInput,
   type ListProductCategoriesInput,
   type ProductCategoryDeactivationBlocker,
-  type ProductCategoryListStatusFilter,
   type ProductCategoryRecord,
   type UpdateProductCategoryInput,
 } from './product-category.store';

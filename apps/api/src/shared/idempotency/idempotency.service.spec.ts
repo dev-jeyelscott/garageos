@@ -8,17 +8,17 @@ import type {
   DatabaseRow,
 } from '../database/database-client';
 import type { DatabaseTransactionRunner } from '../database/database-transaction';
-import {
-  IDEMPOTENCY_STATUSES,
+import type {
   IdempotencyKeyRecord,
-  IdempotencyKeyStore,
   CreateProcessingIdempotencyKeyInput,
   FindActiveIdempotencyKeyInput,
   LockIdempotencyScopeInput,
   MarkIdempotencyKeyFailedInput,
   MarkIdempotencyKeySucceededInput,
 } from './idempotency-key.store';
-import { IdempotencyService, IdempotencyBeginResult } from './idempotency.service';
+import { IDEMPOTENCY_STATUSES, IdempotencyKeyStore } from './idempotency-key.store';
+import type { IdempotencyBeginResult } from './idempotency.service';
+import { IdempotencyService } from './idempotency.service';
 
 const TENANT_ID = '11111111-1111-4111-8111-111111111111';
 const USER_ID = '22222222-2222-4222-8222-222222222222';

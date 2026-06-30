@@ -6,6 +6,7 @@ import type { TenantContextAuthenticatedSession } from '../../../shared/tenant-c
 import type { AuthService } from '../../auth/application/auth.service';
 import type { ApproveInventoryAdjustmentService } from '../application/approve-inventory-adjustment.service';
 import type { CreateInventoryAdjustmentService } from '../application/create-inventory-adjustment.service';
+import type { ForceInventoryAdjustmentService } from '../application/force-inventory-adjustment.service';
 import type { PostInventoryAdjustmentService } from '../application/post-inventory-adjustment.service';
 import type { RejectInventoryAdjustmentService } from '../application/reject-inventory-adjustment.service';
 import type { SubmitInventoryAdjustmentService } from '../application/submit-inventory-adjustment.service';
@@ -21,6 +22,7 @@ describe('InventoryAdjustmentsController', () => {
     ['approveInventoryAdjustment'],
     ['rejectInventoryAdjustment'],
     ['postInventoryAdjustment'],
+    ['forceInventoryAdjustment'],
   ] as const)('returns 200 OK for %s', (methodName) => {
     expect(
       Reflect.getMetadata(HTTP_CODE_METADATA, InventoryAdjustmentsController.prototype[methodName]),
@@ -32,6 +34,7 @@ describe('InventoryAdjustmentsController', () => {
     ['approveInventoryAdjustment'],
     ['rejectInventoryAdjustment'],
     ['postInventoryAdjustment'],
+    ['forceInventoryAdjustment'],
   ] as const)('records 200 idempotency success for %s', async (methodName) => {
     const fixture = createFixture();
     const controller = fixture.controller;
@@ -44,8 +47,19 @@ describe('InventoryAdjustmentsController', () => {
       await controller.rejectInventoryAdjustment('Bearer token', 'idem-key', adjustmentId, {
         reason: 'Rejected after review.',
       });
-    } else {
+    } else if (methodName === 'postInventoryAdjustment') {
       await controller.postInventoryAdjustment('Bearer token', 'idem-key', adjustmentId, {});
+    } else {
+      await controller.forceInventoryAdjustment('Bearer token', 'idem-key', {
+        branch_id: '22222222-2222-4222-8222-222222222222',
+        reason: 'Correct exceptional count drift.',
+        lines: [
+          {
+            product_id: '44444444-4444-4444-8444-444444444444',
+            quantity_difference: '1.000',
+          },
+        ],
+      });
     }
 
     expect(fixture.idempotencyService.completeSucceeded).toHaveBeenCalledWith(
@@ -84,6 +98,10 @@ function createFixture() {
     getIdempotencyExpiresAt: vi.fn((now: Date) => new Date(now.getTime() + 60_000)),
     post: vi.fn().mockResolvedValue(response),
   } as unknown as PostInventoryAdjustmentService;
+  const forceService = {
+    getIdempotencyExpiresAt: vi.fn((now: Date) => new Date(now.getTime() + 60_000)),
+    forceAdjust: vi.fn().mockResolvedValue(response),
+  } as unknown as ForceInventoryAdjustmentService;
   const idempotencyService = {
     begin: vi.fn().mockResolvedValue({
       type: 'started',
@@ -101,6 +119,7 @@ function createFixture() {
       approveService,
       rejectService,
       postService,
+      forceService,
       idempotencyService,
     ),
     idempotencyService,

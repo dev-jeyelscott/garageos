@@ -19,7 +19,6 @@ import {
   type CreateServiceInput,
   type ListServicesInput,
   type ServiceDeactivationBlocker,
-  type ServiceListStatusFilter,
   type ServiceRecord,
   type UpdateServiceInput,
 } from './service.store';

@@ -1,11 +1,8 @@
 import { SignJWT } from 'jose';
 import { describe, expect, it } from 'vitest';
 import { GarageOsApiException } from '../../../shared/api/api-exception';
-import {
-  AccessTokenService,
-  AuthAccessTokenSignPayload,
-  type AccessTokenSigningOptions,
-} from './access-token.service';
+import type { AuthAccessTokenSignPayload } from './access-token.service';
+import { AccessTokenService, type AccessTokenSigningOptions } from './access-token.service';
 import { AUTH_SESSION_POLICY } from '../application/auth-session.policy';
 
 const signingOptions: AccessTokenSigningOptions = {

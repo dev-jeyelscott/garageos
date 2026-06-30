@@ -21,6 +21,22 @@ export default [
           prefer: 'type-imports',
         },
       ],
+      '@typescript-eslint/no-empty-object-type': [
+        'error',
+        {
+          allowInterfaces: 'with-single-extends',
+        },
+      ],
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+          destructuredArrayIgnorePattern: '^_',
+          ignoreRestSiblings: true,
+          varsIgnorePattern: '^_',
+        },
+      ],
     },
   },
 ];

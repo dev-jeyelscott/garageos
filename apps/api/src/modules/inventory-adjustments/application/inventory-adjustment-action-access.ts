@@ -21,6 +21,7 @@ export async function resolveInventoryAdjustmentActionAccess(
   requiredPermission:
     | 'inventory.adjust'
     | 'inventory.adjust.approve'
+    | 'inventory.force_adjust'
     | readonly ['inventory.adjust', 'inventory.adjust.approve'],
 ): Promise<InventoryAdjustmentActionAccess> {
   const context = resolveTenantContextFromAuthenticatedSession(session);

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { DatabaseQueryClient } from '../../../shared/database/database-client';
 import type { DatabaseTransactionRunner } from '../../../shared/database/database-transaction';
 import type { TenantContextAuthenticatedSession } from '../../../shared/tenant-context/tenant-context';
-import { InventoryStockBalancesService } from '../../inventory/application/inventory-stock-balances.service';
+import type { InventoryStockBalancesService } from '../../inventory/application/inventory-stock-balances.service';
 import { ProductStore, type ProductRecord } from '../../products/application/product.store';
 import { CreateInventoryAdjustmentService } from './create-inventory-adjustment.service';
 import { InventoryAdjustmentApprovalPolicy } from './inventory-adjustment-approval-policy';

@@ -143,6 +143,52 @@ export type CreateInventoryAdjustmentRequest = z.infer<
   typeof createInventoryAdjustmentRequestSchema
 >;
 
+const forceInventoryAdjustmentLineSchema = z
+  .object({
+    product_id: z.string().uuid(),
+    quantity_difference: signedQuantitySchema.optional(),
+    final_counted_quantity: nonNegativeQuantitySchema.optional(),
+    unit_cost: nonNegativeMoneySchema.optional(),
+  })
+  .strict()
+  .superRefine((line, context) => {
+    const hasQuantityDifference = line.quantity_difference !== undefined;
+    const hasFinalCountedQuantity = line.final_counted_quantity !== undefined;
+
+    if (hasQuantityDifference === hasFinalCountedQuantity) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['quantity_difference'],
+        message: 'Exactly one force adjustment intent is required.',
+      });
+    }
+  });
+
+export const forceInventoryAdjustmentRequestSchema = z
+  .object({
+    branch_id: z.string().uuid(),
+    reason: z.string().trim().min(1).max(1000),
+    lines: z.array(forceInventoryAdjustmentLineSchema).min(1).max(100),
+  })
+  .strict()
+  .superRefine((request, context) => {
+    const productIds = new Set<string>();
+
+    request.lines.forEach((line, index) => {
+      if (productIds.has(line.product_id)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['lines', index, 'product_id'],
+          message: 'Duplicate product lines are not allowed.',
+        });
+      }
+
+      productIds.add(line.product_id);
+    });
+  });
+
+export type ForceInventoryAdjustmentRequest = z.infer<typeof forceInventoryAdjustmentRequestSchema>;
+
 function normalizeDecimalString(value: string, scale: number): string {
   const isNegative = value.startsWith('-');
   const unsignedValue = isNegative ? value.slice(1) : value;

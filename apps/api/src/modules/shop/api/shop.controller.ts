@@ -2,14 +2,14 @@ import { Body, Controller, Get, Headers, Post, Put, UseGuards } from '@nestjs/co
 
 import { ZodValidationPipe } from '../../../shared/api/zod-validation.pipe';
 import { AccessTokenAuthGuard } from '../../auth/api/access-token-auth.guard';
-import { AuthService } from '../../auth/application/auth.service';
+import type { AuthService } from '../../auth/application/auth.service';
 import {
   type RenewalRequest,
   renewalRequestSchema,
   type ShopProfileRequest,
   shopProfileRequestSchema,
 } from './shop.schemas';
-import { ShopService } from '../application/shop.service';
+import type { ShopService } from '../application/shop.service';
 
 @Controller()
 @UseGuards(AccessTokenAuthGuard)

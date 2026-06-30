@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
-import { errors, jwtVerify, SignJWT } from 'jose';
+import { jwtVerify, SignJWT } from 'jose';
 import { GarageOsApiException } from '../../../shared/api/api-exception';
 import type { AuthAccessTokenPayload } from '../contracts';
 import { AUTH_SESSION_POLICY } from '../application/auth-session.policy';
@@ -24,10 +24,6 @@ export interface SignedAccessToken {
   readonly access_token: string;
   readonly expires_in_seconds: number;
 }
-
-type JwtAccessTokenPayload = AuthAccessTokenPayload & {
-  readonly token_use: typeof ACCESS_TOKEN_TYPE;
-};
 
 @Injectable()
 export class AccessTokenService {
