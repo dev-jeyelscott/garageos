@@ -137,15 +137,6 @@ export function PlatformOverviewContent({
 
   return (
     <>
-      <Alert>
-        <p className="text-sm font-bold">Platform actions are audited</p>
-        <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          Support access requires explicit approval, a reason, a time limit, and backend audit
-          logging. Subscription updates must reflect external payment confirmation; GarageOS does
-          not collect subscription payments automatically.
-        </p>
-      </Alert>
-
       {!permissions.canReadTenants ? (
         <ForbiddenState
           title="Platform overview unavailable"

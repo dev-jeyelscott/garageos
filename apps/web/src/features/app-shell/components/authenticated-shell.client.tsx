@@ -3425,14 +3425,6 @@ function PlatformAuthenticatedShell({
           </div>
 
           <div className="grid w-full max-w-none gap-5 px-4 py-6 sm:px-6 lg:px-8">
-            <Alert>
-              <p className="text-sm font-bold">Platform admin context</p>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                Tenant support access is not active in this shell. Tenant troubleshooting must use
-                explicit audited support access and must never behave as silent impersonation.
-              </p>
-            </Alert>
-
             <header className="grid gap-4 rounded-[2rem] border border-border bg-card p-5 shadow-sm sm:p-6 xl:grid-cols-[1fr_auto] xl:items-end">
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.22em] text-muted-foreground">
