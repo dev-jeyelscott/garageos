@@ -7,3 +7,4 @@ allowBuilds:
   sharp: true
 overrides:
   multer: ^2.2.0
+  postcss: 8.5.15
