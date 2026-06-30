@@ -5,6 +5,7 @@ import { IdempotencyService } from '../../../shared/idempotency/idempotency.serv
 import type { TenantContextAuthenticatedSession } from '../../../shared/tenant-context/tenant-context';
 import { AuthService } from '../../auth/application/auth.service';
 import { ApproveInventoryAdjustmentService } from '../application/approve-inventory-adjustment.service';
+import { CancelInventoryAdjustmentService } from '../application/cancel-inventory-adjustment.service';
 import { CreateInventoryAdjustmentService } from '../application/create-inventory-adjustment.service';
 import { ForceInventoryAdjustmentService } from '../application/force-inventory-adjustment.service';
 import { PostInventoryAdjustmentService } from '../application/post-inventory-adjustment.service';
@@ -21,6 +22,7 @@ describe('InventoryAdjustmentsController', () => {
     ['submitInventoryAdjustment'],
     ['approveInventoryAdjustment'],
     ['rejectInventoryAdjustment'],
+    ['cancelInventoryAdjustment'],
     ['postInventoryAdjustment'],
     ['forceInventoryAdjustment'],
   ] as const)('returns 200 OK for %s', (methodName) => {
@@ -33,6 +35,7 @@ describe('InventoryAdjustmentsController', () => {
     ['submitInventoryAdjustment'],
     ['approveInventoryAdjustment'],
     ['rejectInventoryAdjustment'],
+    ['cancelInventoryAdjustment'],
     ['postInventoryAdjustment'],
     ['forceInventoryAdjustment'],
   ] as const)('records 200 idempotency success for %s', async (methodName) => {
@@ -46,6 +49,10 @@ describe('InventoryAdjustmentsController', () => {
     } else if (methodName === 'rejectInventoryAdjustment') {
       await controller.rejectInventoryAdjustment('Bearer token', 'idem-key', adjustmentId, {
         reason: 'Rejected after review.',
+      });
+    } else if (methodName === 'cancelInventoryAdjustment') {
+      await controller.cancelInventoryAdjustment('Bearer token', 'idem-key', adjustmentId, {
+        reason: 'Cancelled before posting.',
       });
     } else if (methodName === 'postInventoryAdjustment') {
       await controller.postInventoryAdjustment('Bearer token', 'idem-key', adjustmentId, {});
@@ -90,6 +97,10 @@ function createFixture() {
     getIdempotencyExpiresAt: vi.fn((now: Date) => new Date(now.getTime() + 60_000)),
     approve: vi.fn().mockResolvedValue(response),
   } as unknown as ApproveInventoryAdjustmentService;
+  const cancelService = {
+    getIdempotencyExpiresAt: vi.fn((now: Date) => new Date(now.getTime() + 60_000)),
+    cancel: vi.fn().mockResolvedValue(response),
+  } as unknown as CancelInventoryAdjustmentService;
   const rejectService = {
     getIdempotencyExpiresAt: vi.fn((now: Date) => new Date(now.getTime() + 60_000)),
     reject: vi.fn().mockResolvedValue(response),
@@ -117,6 +128,7 @@ function createFixture() {
       createService,
       submitService,
       approveService,
+      cancelService,
       rejectService,
       postService,
       forceService,

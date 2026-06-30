@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 
 import { GarageOsApiException } from '../../../shared/api/api-exception';
 import { assertBranchAccessAllowed } from '../../../shared/authorization/branch-access';
+import { AUDIT_ACTOR_TYPES, AuditService } from '../../../shared/audit/audit.service';
 import {
   API_TRANSACTION_RUNNER,
   type DatabaseTransactionRunner,
@@ -11,6 +12,7 @@ import type { TenantContextAuthenticatedSession } from '../../../shared/tenant-c
 import { ProductStore } from '../../products/application/product.store';
 import type { ApproveInventoryAdjustmentRequest } from '../api/inventory-adjustment-action.schemas';
 import { INVENTORY_ADJUSTMENT_STATUSES } from './inventory-adjustment.records';
+import { toInventoryAdjustmentAuditSnapshot } from './inventory-adjustment-audit-snapshot';
 import {
   type InventoryAdjustmentStatusResponse,
   toInventoryAdjustmentStatusResponse,
@@ -28,6 +30,8 @@ export class ApproveInventoryAdjustmentService {
     private readonly inventoryAdjustmentStore: InventoryAdjustmentStore,
     @Inject(ProductStore)
     private readonly productStore: ProductStore,
+    @Inject(AuditService)
+    private readonly auditService: AuditService,
     @Inject(API_TRANSACTION_RUNNER)
     private readonly transactionRunner: DatabaseTransactionRunner,
   ) {}
@@ -88,6 +92,21 @@ export class ApproveInventoryAdjustmentService {
         },
         transaction,
       );
+
+      await this.auditService.record({
+        tenantId: context.tenantId,
+        actorUserId: context.actorUserId,
+        actorType: AUDIT_ACTOR_TYPES.TENANT_USER,
+        supportAccessSessionId: context.platformSupportAccessSessionId,
+        action: 'inventory_adjustments.approved',
+        entityType: 'inventory_adjustment',
+        entityId: updated.id,
+        branchId: updated.branchId,
+        beforeJson: toInventoryAdjustmentAuditSnapshot(locked.adjustment),
+        afterJson: toInventoryAdjustmentAuditSnapshot(updated),
+        reason: request.reason?.trim() || 'inventory_adjustment_approved',
+        client: transaction,
+      });
 
       return toInventoryAdjustmentStatusResponse(updated, locked.lines);
     });

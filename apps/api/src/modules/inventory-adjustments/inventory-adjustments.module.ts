@@ -16,6 +16,7 @@ import { ForceInventoryAdjustmentService } from './application/force-inventory-a
 import { RejectInventoryAdjustmentService } from './application/reject-inventory-adjustment.service';
 import { SubmitInventoryAdjustmentService } from './application/submit-inventory-adjustment.service';
 import { PostInventoryAdjustmentService } from './application/post-inventory-adjustment.service';
+import { CancelInventoryAdjustmentService } from './application/cancel-inventory-adjustment.service';
 import { INVENTORY_ADJUSTMENT_PROVIDERS } from './inventory-adjustment.providers';
 
 @Module({
@@ -32,6 +33,7 @@ import { INVENTORY_ADJUSTMENT_PROVIDERS } from './inventory-adjustment.providers
     CreateInventoryAdjustmentService,
     SubmitInventoryAdjustmentService,
     ApproveInventoryAdjustmentService,
+    CancelInventoryAdjustmentService,
     RejectInventoryAdjustmentService,
     PostInventoryAdjustmentService,
     ForceInventoryAdjustmentService,
@@ -45,6 +47,7 @@ import { INVENTORY_ADJUSTMENT_PROVIDERS } from './inventory-adjustment.providers
     CreateInventoryAdjustmentService,
     SubmitInventoryAdjustmentService,
     ApproveInventoryAdjustmentService,
+    CancelInventoryAdjustmentService,
     RejectInventoryAdjustmentService,
     PostInventoryAdjustmentService,
     ForceInventoryAdjustmentService,

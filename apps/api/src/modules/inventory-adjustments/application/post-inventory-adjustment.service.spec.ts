@@ -381,6 +381,7 @@ class FakeInventoryAdjustmentStore extends InventoryAdjustmentStore {
   markAdjustmentPendingApproval = vi.fn();
   markAdjustmentApproved = vi.fn();
   markAdjustmentRejected = vi.fn();
+  markAdjustmentCancelled = vi.fn();
   listStatusEvents = vi.fn();
   listAdjustments = vi.fn();
   findLatestAdjustmentNumberForDate = vi.fn();

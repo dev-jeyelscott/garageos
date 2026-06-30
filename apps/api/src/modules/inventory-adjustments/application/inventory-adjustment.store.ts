@@ -87,6 +87,12 @@ export interface MarkAdjustmentRejectedInput {
   readonly updatedAt: Date;
 }
 
+export interface MarkAdjustmentCancelledInput {
+  readonly tenantId: string;
+  readonly adjustmentId: string;
+  readonly updatedAt: Date;
+}
+
 export interface MarkAdjustmentPostedInput {
   readonly tenantId: string;
   readonly adjustmentId: string;
@@ -182,6 +188,11 @@ export abstract class InventoryAdjustmentStore {
 
   abstract markAdjustmentRejected(
     input: MarkAdjustmentRejectedInput,
+    client?: DatabaseQueryClient,
+  ): Promise<InventoryAdjustmentRecord | null>;
+
+  abstract markAdjustmentCancelled(
+    input: MarkAdjustmentCancelledInput,
     client?: DatabaseQueryClient,
   ): Promise<InventoryAdjustmentRecord | null>;
 

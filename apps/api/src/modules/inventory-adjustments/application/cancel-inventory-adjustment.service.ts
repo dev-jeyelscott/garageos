@@ -10,21 +10,21 @@ import {
 } from '../../../shared/database/database-transaction';
 import type { TenantContextAuthenticatedSession } from '../../../shared/tenant-context/tenant-context';
 import { ProductStore } from '../../products/application/product.store';
-import type { RejectInventoryAdjustmentRequest } from '../api/inventory-adjustment-action.schemas';
-import { INVENTORY_ADJUSTMENT_STATUSES } from './inventory-adjustment.records';
+import type { CancelInventoryAdjustmentRequest } from '../api/inventory-adjustment-action.schemas';
 import { toInventoryAdjustmentAuditSnapshot } from './inventory-adjustment-audit-snapshot';
+import { INVENTORY_ADJUSTMENT_STATUSES } from './inventory-adjustment.records';
 import {
   type InventoryAdjustmentStatusResponse,
   toInventoryAdjustmentStatusResponse,
 } from './inventory-adjustment-status-response.mapper';
-import { assertCanReject } from './inventory-adjustment-state-machine';
+import { assertCanCancel } from './inventory-adjustment-state-machine';
 import { InventoryAdjustmentStore } from './inventory-adjustment.store';
 import { resolveInventoryAdjustmentActionAccess } from './inventory-adjustment-action-access';
 
 const IDEMPOTENCY_RETENTION_HOURS = 24;
 
 @Injectable()
-export class RejectInventoryAdjustmentService {
+export class CancelInventoryAdjustmentService {
   constructor(
     @Inject(InventoryAdjustmentStore)
     private readonly inventoryAdjustmentStore: InventoryAdjustmentStore,
@@ -40,15 +40,15 @@ export class RejectInventoryAdjustmentService {
     return new Date(now.getTime() + IDEMPOTENCY_RETENTION_HOURS * 60 * 60 * 1000);
   }
 
-  async reject(
+  async cancel(
     adjustmentId: string,
-    request: RejectInventoryAdjustmentRequest,
+    request: CancelInventoryAdjustmentRequest,
     session: TenantContextAuthenticatedSession,
   ): Promise<InventoryAdjustmentStatusResponse> {
     const { context } = await resolveInventoryAdjustmentActionAccess(
       session,
       this.productStore,
-      'inventory.adjust.approve',
+      'inventory.adjust',
     );
 
     return this.transactionRunner.runInTransaction(async (transaction) => {
@@ -64,11 +64,15 @@ export class RejectInventoryAdjustmentService {
       const reason = request.reason.trim();
 
       assertBranchAccessAllowed({ context, branchId: locked.adjustment.branchId });
-      assertCanReject(locked.adjustment, reason);
+      assertCanCancel(locked.adjustment, reason);
 
       const now = new Date();
-      const updated = await this.inventoryAdjustmentStore.markAdjustmentRejected(
-        { tenantId: context.tenantId, adjustmentId, updatedAt: now },
+      const updated = await this.inventoryAdjustmentStore.markAdjustmentCancelled(
+        {
+          tenantId: context.tenantId,
+          adjustmentId,
+          updatedAt: now,
+        },
         transaction,
       );
 
@@ -81,8 +85,8 @@ export class RejectInventoryAdjustmentService {
           id: randomUUID(),
           tenantId: context.tenantId,
           adjustmentId,
-          fromStatus: INVENTORY_ADJUSTMENT_STATUSES.PENDING_APPROVAL,
-          toStatus: INVENTORY_ADJUSTMENT_STATUSES.REJECTED,
+          fromStatus: locked.adjustment.status,
+          toStatus: INVENTORY_ADJUSTMENT_STATUSES.CANCELLED,
           reason,
           createdByUserId: context.actorUserId,
           createdAt: now,
@@ -95,7 +99,7 @@ export class RejectInventoryAdjustmentService {
         actorUserId: context.actorUserId,
         actorType: AUDIT_ACTOR_TYPES.TENANT_USER,
         supportAccessSessionId: context.platformSupportAccessSessionId,
-        action: 'inventory_adjustments.rejected',
+        action: 'inventory_adjustments.cancelled',
         entityType: 'inventory_adjustment',
         entityId: updated.id,
         branchId: updated.branchId,

@@ -14,6 +14,12 @@ export const rejectInventoryAdjustmentRequestSchema = z
   })
   .strict();
 
+export const cancelInventoryAdjustmentRequestSchema = z
+  .object({
+    reason: z.string().trim().min(1).max(500),
+  })
+  .strict();
+
 export const postInventoryAdjustmentRequestSchema = z.object({}).strict();
 
 export type SubmitInventoryAdjustmentRequest = z.infer<
@@ -24,5 +30,8 @@ export type ApproveInventoryAdjustmentRequest = z.infer<
 >;
 export type RejectInventoryAdjustmentRequest = z.infer<
   typeof rejectInventoryAdjustmentRequestSchema
+>;
+export type CancelInventoryAdjustmentRequest = z.infer<
+  typeof cancelInventoryAdjustmentRequestSchema
 >;
 export type PostInventoryAdjustmentRequest = z.infer<typeof postInventoryAdjustmentRequestSchema>;

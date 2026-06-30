@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-
+import { AuditService } from '../../../shared/audit/audit.service';
 import type { DatabaseQueryClient } from '../../../shared/database/database-client';
 import type { DatabaseTransactionRunner } from '../../../shared/database/database-transaction';
 import type { TenantContextAuthenticatedSession } from '../../../shared/tenant-context/tenant-context';
@@ -90,6 +90,14 @@ describe('Inventory adjustment action services', () => {
       toStatus: 'approved',
       reason: 'Approved after manager review.',
     });
+    expect(fixture.auditService.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'inventory_adjustments.approved',
+        entityType: 'inventory_adjustment',
+        entityId: adjustmentId,
+        branchId,
+      }),
+    );
     expect(fixture.store.mutatingInventoryTablesTouched).toBe(false);
   });
 
@@ -111,6 +119,15 @@ describe('Inventory adjustment action services', () => {
       toStatus: 'rejected',
       reason: 'Count sheet did not match physical recount.',
     });
+    expect(fixture.auditService.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'inventory_adjustments.rejected',
+        entityType: 'inventory_adjustment',
+        entityId: adjustmentId,
+        branchId,
+        reason: 'Count sheet did not match physical recount.',
+      }),
+    );
     expect(fixture.store.mutatingInventoryTablesTouched).toBe(false);
   });
 
@@ -167,15 +184,29 @@ describe('Inventory adjustment action services', () => {
 function createFixture(adjustment: InventoryAdjustmentRecord | null) {
   const store = new FakeInventoryAdjustmentStore(adjustment);
   const productStore = new FakeProductStore();
+  const auditService = {
+    record: vi.fn().mockResolvedValue({ id: 'audit-id' }),
+  } as unknown as AuditService;
   const transactionRunner: DatabaseTransactionRunner = {
     runInTransaction: async (work) => work({} as DatabaseQueryClient),
   };
 
   return {
     store,
+    auditService,
     submitService: new SubmitInventoryAdjustmentService(store, productStore, transactionRunner),
-    approveService: new ApproveInventoryAdjustmentService(store, productStore, transactionRunner),
-    rejectService: new RejectInventoryAdjustmentService(store, productStore, transactionRunner),
+    approveService: new ApproveInventoryAdjustmentService(
+      store,
+      productStore,
+      auditService,
+      transactionRunner,
+    ),
+    rejectService: new RejectInventoryAdjustmentService(
+      store,
+      productStore,
+      auditService,
+      transactionRunner,
+    ),
   };
 }
 
@@ -258,6 +289,7 @@ class FakeInventoryAdjustmentStore extends InventoryAdjustmentStore {
   replaceDraftAdjustmentLines = vi.fn();
   findAdjustmentWithLines = vi.fn();
   lockAdjustmentWithLinesForPosting = vi.fn();
+  markAdjustmentCancelled = vi.fn();
   markAdjustmentPosted = vi.fn();
   listStatusEvents = vi.fn();
   listAdjustments = vi.fn();

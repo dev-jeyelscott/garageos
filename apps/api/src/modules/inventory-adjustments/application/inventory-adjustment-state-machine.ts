@@ -43,6 +43,37 @@ export function assertCanReject(
   }
 }
 
+export function assertCanCancel(
+  adjustment: InventoryAdjustmentRecord,
+  cancellationReason: string,
+): void {
+  if (
+    adjustment.status !== INVENTORY_ADJUSTMENT_STATUSES.DRAFT &&
+    adjustment.status !== INVENTORY_ADJUSTMENT_STATUSES.PENDING_APPROVAL
+  ) {
+    throw GarageOsApiException.workflowTransitionBlocked(
+      `Inventory adjustment cannot cancel from ${adjustment.status}.`,
+      [
+        {
+          field: 'status',
+          code: 'invalid_status',
+          message: 'Expected draft or pending_approval status.',
+        },
+      ],
+    );
+  }
+
+  if (cancellationReason.trim().length === 0) {
+    throw GarageOsApiException.validationFailed([
+      {
+        field: 'reason',
+        code: 'required',
+        message: 'Cancellation reason is required.',
+      },
+    ]);
+  }
+}
+
 export function assertCanPost(adjustment: InventoryAdjustmentRecord): void {
   if (
     adjustment.status === INVENTORY_ADJUSTMENT_STATUSES.APPROVED ||
