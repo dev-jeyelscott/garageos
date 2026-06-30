@@ -46,6 +46,7 @@ export class SendInventoryTransferService {
     private readonly inventoryReservationService: InventoryReservationService,
     @Inject(API_TRANSACTION_RUNNER)
     private readonly transactionRunner: DatabaseTransactionRunner,
+    @Inject(AuditService)
     private readonly auditService: AuditService,
   ) {}
 
