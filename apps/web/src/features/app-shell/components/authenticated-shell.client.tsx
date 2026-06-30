@@ -15,6 +15,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  Input,
   Sheet,
   SheetClose,
   SheetContent,
@@ -36,6 +37,12 @@ import {
   tenantMoreMenuItems,
   tenantPlannedRouteConfigs,
 } from '../constants/tenant-route.constants';
+import {
+  filterStockBalanceRows,
+  stockBalanceRows,
+  summarizeStockBalanceRows,
+  type StockBalanceFilters,
+} from '../utils/stock-balance-ui';
 import type { ProtectedRouteKind, SessionLoadState, ShellNavItem } from '../types/app-shell.types';
 import type { TenantMoreMenuItem, TenantPlannedRouteKey } from '../types/tenant-route.types';
 import { PlatformAuditLogsContent } from '../../platform/audit-logs/platform-audit-logs.screen';
@@ -353,6 +360,260 @@ export function TenantPlannedRouteScreen({ route }: { readonly route: TenantPlan
               branch access.
             </p>
           </InfoBlock>
+        </CardContent>
+      </Card>
+    </AuthenticatedShell>
+  );
+}
+
+export function TenantInventoryStockBalancesScreen() {
+  const sessionState = useProtectedSession('tenant-operational');
+  const [filters, setFilters] = useState<StockBalanceFilters>({
+    branchId: 'all',
+    search: '',
+    stockState: 'all',
+  });
+
+  if (sessionState.status !== 'ready') {
+    return <SessionStateScreen state={sessionState} area="tenant" />;
+  }
+
+  const { session } = sessionState;
+  const canReadInventory = hasEffectivePermission(session, 'inventory.read');
+  const hasBranchContext = session.tenant_wide_branch_access || session.branches.length > 0;
+  const visibleRows = canReadInventory ? filterStockBalanceRows(stockBalanceRows, filters) : [];
+  const summary = summarizeStockBalanceRows(visibleRows);
+  const branchOptions = Array.from(
+    new Map(stockBalanceRows.map((row) => [row.branchId, row.branchName])).entries(),
+  );
+
+  return (
+    <AuthenticatedShell
+      area="tenant"
+      session={session}
+      title="Stock Balances"
+      eyebrow="Inventory"
+      description="Read-oriented branch stock lookup for documented inventory quantities. Stock-changing workflows remain disabled until the verified API clients, idempotency, lifecycle gates, branch access, validation, audit, status states, and tests are wired."
+      actions={
+        <>
+          <ButtonLink href="/more" variant="secondary">
+            Inventory workflows
+          </ButtonLink>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled
+            title="Requires a verified write slice."
+          >
+            Create adjustment
+          </Button>
+        </>
+      }
+    >
+      {!canReadInventory ? (
+        <ForbiddenState
+          title="Inventory access unavailable"
+          requiredPermission="inventory.read"
+          description="Stock balance visibility requires the documented inventory.read permission. Permission-aware UI is only a UX aid; backend authorization remains authoritative."
+        />
+      ) : null}
+
+      {canReadInventory && !hasBranchContext ? (
+        <Alert variant="destructive">
+          <p className="text-sm font-bold">Branch access required</p>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            Branch-scoped stock balances require assigned branch access or tenant-wide branch access
+            before operational inventory rows should be shown.
+          </p>
+        </Alert>
+      ) : null}
+
+      {canReadInventory && session.access.read_only ? (
+        <Alert>
+          <p className="text-sm font-bold">Read-only tenant access</p>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            Stock lookup remains read-oriented. Creates, edits, approvals, transfers, receiving,
+            force adjustments, and inventory actions stay blocked.
+          </p>
+        </Alert>
+      ) : null}
+
+      <Alert>
+        <p className="text-sm font-bold">Inventory UI foundation</p>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">
+          Rows on this screen use an isolated typed local data boundary until the stock-balance API
+          client shape is verified. Quantity fields are display-only and do not mutate stock,
+          ledger, FIFO layers, reservations, adjustments, or transfers.
+        </p>
+      </Alert>
+
+      <div className="grid gap-4 lg:grid-cols-4">
+        <SummaryCard
+          title="Visible rows"
+          value={String(summary.totalRows)}
+          description="Filtered stock-balance records visible in this read-only UI."
+        />
+        <SummaryCard
+          title="Low stock"
+          value={String(summary.lowStockRows)}
+          description="Derived where available quantity is at or below reorder level."
+        />
+        <SummaryCard
+          title="Reserved"
+          value={String(summary.reservedRows)}
+          description="Rows with reserved quantity from documented inventory concepts."
+        />
+        <SummaryCard
+          title="Available"
+          value={String(summary.availableQuantity)}
+          description="Display total only; backend remains the source of truth."
+        />
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Filters</CardTitle>
+          <CardDescription>
+            Branch, product, SKU, category, and stock-state filters for the read-oriented list.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-[1fr_1fr_1fr]">
+          <label className="grid gap-2 text-sm font-semibold text-foreground">
+            <span>Search</span>
+            <Input
+              value={filters.search}
+              placeholder="Product, SKU, or category"
+              onChange={(event) =>
+                setFilters((current) => ({ ...current, search: event.target.value }))
+              }
+            />
+          </label>
+
+          <label className="grid gap-2 text-sm font-semibold text-foreground">
+            <span>Branch</span>
+            <select
+              className="min-h-11 rounded-xl border border-input bg-background px-3 py-2 text-base text-foreground shadow-sm outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20"
+              value={filters.branchId}
+              onChange={(event) =>
+                setFilters((current) => ({ ...current, branchId: event.target.value }))
+              }
+            >
+              <option value="all">All visible branches</option>
+              {branchOptions.map(([branchId, branchName]) => (
+                <option key={branchId} value={branchId}>
+                  {branchName}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="grid gap-2 text-sm font-semibold text-foreground">
+            <span>Stock state</span>
+            <select
+              className="min-h-11 rounded-xl border border-input bg-background px-3 py-2 text-base text-foreground shadow-sm outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20"
+              value={filters.stockState}
+              onChange={(event) =>
+                setFilters((current) => ({
+                  ...current,
+                  stockState: event.target.value as StockBalanceFilters['stockState'],
+                }))
+              }
+            >
+              <option value="all">All stock</option>
+              <option value="low_stock">Low stock</option>
+              <option value="available">Available</option>
+              <option value="reserved">Reserved</option>
+            </select>
+          </label>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Stock balance list</CardTitle>
+          <CardDescription>
+            Detail-ready mobile cards for branch, product, category, quantity, reserved, available,
+            and reorder information.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {visibleRows.length === 0 ? (
+            <EmptyState
+              title="No stock balances found"
+              description={
+                canReadInventory
+                  ? 'Adjust the filters or wait for the verified stock-balance API client slice.'
+                  : 'Inventory rows are hidden until inventory.read is present.'
+              }
+            />
+          ) : (
+            <ul className="grid gap-4">
+              {visibleRows.map((row) => (
+                <li
+                  key={row.id}
+                  className="grid gap-4 rounded-2xl border border-border bg-card p-4 shadow-sm lg:grid-cols-[1.35fr_1fr]"
+                >
+                  <div>
+                    <div className="flex flex-wrap gap-2">
+                      <Badge>{row.branchName}</Badge>
+                      <Badge
+                        variant={row.availableQuantity <= row.reorderLevel ? 'warning' : 'success'}
+                      >
+                        {row.availableQuantity <= row.reorderLevel ? 'Low stock' : 'Available'}
+                      </Badge>
+                      {row.reservedQuantity > 0 ? <Badge variant="info">Reserved</Badge> : null}
+                    </div>
+                    <h2 className="mt-3 text-lg font-black text-foreground">{row.productName}</h2>
+                    <p className="mt-1 break-words text-sm text-muted-foreground">
+                      {row.sku} - {row.categoryName}
+                    </p>
+                    <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                      {row.lastMovementLabel}. Ledger, FIFO, reservation, adjustment, transfer, and
+                      receiving details stay disabled until their verified read slices are wired.
+                    </p>
+                  </div>
+
+                  <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4 lg:grid-cols-2">
+                    <QuantityBlock label="On hand" value={row.onHandQuantity} unit={row.unit} />
+                    <QuantityBlock label="Reserved" value={row.reservedQuantity} unit={row.unit} />
+                    <QuantityBlock
+                      label="Available"
+                      value={row.availableQuantity}
+                      unit={row.unit}
+                    />
+                    <QuantityBlock label="Reorder" value={row.reorderLevel} unit={row.unit} />
+                  </dl>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Disabled workflow entry points</CardTitle>
+          <CardDescription>
+            These documented inventory workflows are intentionally visible as unavailable planning
+            targets, not active actions.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 md:grid-cols-3">
+          <DisabledWorkflowCard
+            title="Inventory adjustments"
+            permission="inventory.adjust"
+            description="Submit, approve, reject, post, and force-adjust actions require verified write clients and idempotency handling."
+          />
+          <DisabledWorkflowCard
+            title="Inventory transfers"
+            permission="inventory.transfer.create"
+            description="Submit, send, receive, and cancel actions require verified source and destination branch access handling."
+          />
+          <DisabledWorkflowCard
+            title="Ledger and FIFO detail"
+            permission="inventory.read"
+            description="Immutable ledger, FIFO layer, and reservation read paths should be added as their own verified slices."
+          />
         </CardContent>
       </Card>
     </AuthenticatedShell>
@@ -1523,6 +1784,57 @@ function InfoBlock({ title, children }: { readonly title: string; readonly child
     <section className="rounded-2xl border border-border bg-muted/50 p-4 text-sm">
       <h2 className="font-bold text-foreground">{title}</h2>
       <div className="mt-2 leading-6 text-muted-foreground">{children}</div>
+    </section>
+  );
+}
+
+function QuantityBlock({
+  label,
+  value,
+  unit,
+}: {
+  readonly label: string;
+  readonly value: number;
+  readonly unit: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-border bg-muted/50 p-3">
+      <dt className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">
+        {label}
+      </dt>
+      <dd className="mt-2 text-lg font-black text-foreground">
+        {value} <span className="text-xs font-semibold text-muted-foreground">{unit}</span>
+      </dd>
+    </div>
+  );
+}
+
+function DisabledWorkflowCard({
+  title,
+  permission,
+  description,
+}: {
+  readonly title: string;
+  readonly permission: string;
+  readonly description: string;
+}) {
+  return (
+    <section className="grid gap-3 rounded-2xl border border-border bg-muted/50 p-4 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge variant="readonly">Disabled</Badge>
+        <Badge>{permission}</Badge>
+      </div>
+      <h2 className="font-bold text-foreground">{title}</h2>
+      <p className="leading-6 text-muted-foreground">{description}</p>
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        disabled
+        title="Not enabled in this slice."
+      >
+        Planned
+      </Button>
     </section>
   );
 }
