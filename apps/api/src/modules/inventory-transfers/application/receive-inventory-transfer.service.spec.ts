@@ -188,6 +188,7 @@ describe('ReceiveInventoryTransferService', () => {
         expectedProductId: productId,
         expectedSourceType: 'inventory_transfer_line',
         expectedSourceId: lineId,
+        expectedSentQuantity: '5.000',
         consumedByUserId: userId,
       }),
       expect.any(Object),

@@ -159,6 +159,7 @@ export class ReceiveInventoryTransferService {
               expectedProductId: persistedLine.productId,
               expectedSourceType: 'inventory_transfer_line',
               expectedSourceId: persistedLine.id,
+              expectedSentQuantity: persistedLine.sentQuantity,
               consumedAt: now,
               consumedByUserId: context.actorUserId,
             },

@@ -1371,6 +1371,7 @@ describe('InventoryReservationService', () => {
     ['wrong expectedProductId', { expectedProductId: OTHER_PRODUCT_ID }],
     ['wrong expectedSourceType', { expectedSourceType: 'job_order_line' }],
     ['wrong expectedSourceId', { expectedSourceId: OTHER_SOURCE_ID }],
+    ['wrong expectedSentQuantity', { expectedSentQuantity: '4.000' }],
   ])('blocks transfer reservation mismatch before mutation: %s', async (_caseName, overrides) => {
     const {
       service,
@@ -1796,6 +1797,7 @@ function createTransferConsumptionCommand(
     expectedProductId: PRODUCT_ID,
     expectedSourceType: 'inventory_transfer_line',
     expectedSourceId: SOURCE_ID,
+    expectedSentQuantity: '5.000',
     consumedAt: CONSUMED_AT,
     consumedByUserId: USER_ID,
     ...overrides,

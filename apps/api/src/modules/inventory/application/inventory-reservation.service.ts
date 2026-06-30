@@ -125,6 +125,7 @@ export interface ConsumeInventoryTransferReservationCommand {
   readonly expectedProductId: string;
   readonly expectedSourceType: string;
   readonly expectedSourceId: string;
+  readonly expectedSentQuantity: string;
   readonly consumedAt?: Date;
   readonly consumedByUserId?: string | null;
 }
@@ -179,9 +180,11 @@ interface NormalizedConsumeInventoryTransferReservationCommand {
   readonly expectedProductId: string;
   readonly expectedSourceType: string;
   readonly expectedSourceId: string;
+  readonly expectedSentQuantity: string;
   readonly consumedAt: Date;
   readonly consumedByUserId: string | null;
 }
+
 interface SplitConsumptionCostInput {
   readonly fifoConsumptions: readonly CreateFifoConsumptionInput[];
   readonly receivedQuantity: string;
@@ -1148,6 +1151,10 @@ function normalizeConsumeInventoryTransferReservationCommand(
     expectedProductId: normalizeUuid(command.expectedProductId, 'expected_product_id'),
     expectedSourceType: normalizeSourceType(command.expectedSourceType),
     expectedSourceId: normalizeUuid(command.expectedSourceId, 'expected_source_id'),
+    expectedSentQuantity: normalizePositiveQuantity(
+      command.expectedSentQuantity,
+      'expected_sent_quantity',
+    ),
     consumedAt: normalizeDate(command.consumedAt, 'consumed_at'),
     consumedByUserId:
       command.consumedByUserId === null || command.consumedByUserId === undefined
@@ -1166,6 +1173,7 @@ function assertTransferReservationMatchesExpectedContext(
     reservation.productId === command.expectedProductId &&
     reservation.sourceType === command.expectedSourceType &&
     reservation.sourceId === command.expectedSourceId &&
+    compareQuantities(reservation.reservedQuantity, command.expectedSentQuantity) === 0 &&
     reservation.status === INVENTORY_RESERVATION_STATUSES.ACTIVE
   ) {
     return;
