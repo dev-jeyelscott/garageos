@@ -554,6 +554,55 @@ describe('InventoryReservationService', () => {
     });
   });
 
+  it.each([
+    ['wrong expectedBranchId', { expectedBranchId: OTHER_BRANCH_ID }],
+    ['wrong expectedProductId', { expectedProductId: OTHER_PRODUCT_ID }],
+    ['wrong expectedSourceType', { expectedSourceType: 'job_order_line' }],
+    ['wrong expectedSourceId', { expectedSourceId: OTHER_SOURCE_ID }],
+    ['wrong expectedReservedQuantity', { expectedReservedQuantity: '1.000' }],
+  ])('blocks reservation release mismatch before mutation: %s', async (_caseName, overrides) => {
+    const { service, stockStore, reservationStore, fifoReservationAllocationStore, ledgerStore } =
+      createService();
+
+    reservationStore.activeReservation = createInventoryReservationRecord({
+      id: RESERVATION_ID,
+      branchId: BRANCH_ID,
+      productId: PRODUCT_ID,
+      sourceType: 'inventory_transfer_line',
+      sourceId: SOURCE_ID,
+      reservedQuantity: '2.000',
+    });
+
+    await expect(
+      service.releaseInventory({
+        tenantId: TENANT_ID,
+        reservationId: RESERVATION_ID,
+        releaseQuantity: '2.000',
+        transactionType: INVENTORY_TRANSACTION_TYPES.INVENTORY_TRANSFER_RESERVATION_RELEASE,
+        expectedBranchId: BRANCH_ID,
+        expectedProductId: PRODUCT_ID,
+        expectedSourceType: 'inventory_transfer_line',
+        expectedSourceId: SOURCE_ID,
+        expectedReservedQuantity: '2.000',
+        releasedAt: RELEASED_AT,
+        releasedByUserId: USER_ID,
+        ...overrides,
+      }),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.WORKFLOW_TRANSITION_BLOCKED,
+      details: [expect.objectContaining({ code: 'transfer_reservation_mismatch' })],
+    });
+
+    expect(stockStore.decrementReservedQuantityInputs).toEqual([]);
+    expect(fifoReservationAllocationStore.releaseActiveAllocationsByReservationInputs).toEqual([]);
+    expect(
+      fifoReservationAllocationStore.lockActiveAllocationsByReservationForUpdateInputs,
+    ).toEqual([]);
+    expect(reservationStore.markReservationReleasedInputs).toEqual([]);
+    expect(reservationStore.decrementActiveReservationQuantityInputs).toEqual([]);
+    expect(ledgerStore.createLedgerEntryInputs).toEqual([]);
+  });
+
   it('partially releases a single FIFO allocation and keeps the allocation active', async () => {
     const { service, stockStore, reservationStore, fifoReservationAllocationStore, ledgerStore } =
       createService();

@@ -89,6 +89,11 @@ export interface ReleaseInventoryReservationCommand {
   readonly reservationId: string;
   readonly releaseQuantity?: string;
   readonly transactionType: InventoryReservationReleaseTransactionType | string;
+  readonly expectedBranchId?: string;
+  readonly expectedProductId?: string;
+  readonly expectedSourceType?: string;
+  readonly expectedSourceId?: string;
+  readonly expectedReservedQuantity?: string;
   readonly releasedAt?: Date;
   readonly releasedByUserId?: string | null;
 }
@@ -160,6 +165,11 @@ interface NormalizedReleaseInventoryReservationCommand {
   readonly reservationId: string;
   readonly releaseQuantity: string | null;
   readonly transactionType: InventoryReservationReleaseTransactionType;
+  readonly expectedBranchId: string | null;
+  readonly expectedProductId: string | null;
+  readonly expectedSourceType: string | null;
+  readonly expectedSourceId: string | null;
+  readonly expectedReservedQuantity: string | null;
   readonly releasedAt: Date;
   readonly releasedByUserId: string | null;
 }
@@ -464,6 +474,13 @@ export class InventoryReservationService {
         ],
       );
     }
+
+    assertReleaseReservationMatchesExpectedContext(
+      activeReservation,
+      input,
+      releasedQuantity,
+      activeReservedQuantity,
+    );
 
     const updatedStockAvailability = await this.stockBalanceStore.decrementReservedQuantity(
       {
@@ -1117,6 +1134,26 @@ function normalizeReleaseInventoryCommand(
         ? null
         : normalizePositiveQuantity(command.releaseQuantity, 'release_quantity'),
     transactionType: normalizeReservationReleaseTransactionType(command.transactionType),
+    expectedBranchId:
+      command.expectedBranchId === undefined
+        ? null
+        : normalizeUuid(command.expectedBranchId, 'expected_branch_id'),
+    expectedProductId:
+      command.expectedProductId === undefined
+        ? null
+        : normalizeUuid(command.expectedProductId, 'expected_product_id'),
+    expectedSourceType:
+      command.expectedSourceType === undefined
+        ? null
+        : normalizeSourceType(command.expectedSourceType),
+    expectedSourceId:
+      command.expectedSourceId === undefined
+        ? null
+        : normalizeUuid(command.expectedSourceId, 'expected_source_id'),
+    expectedReservedQuantity:
+      command.expectedReservedQuantity === undefined
+        ? null
+        : normalizePositiveQuantity(command.expectedReservedQuantity, 'expected_reserved_quantity'),
     releasedAt: normalizeDate(command.releasedAt, 'released_at'),
     releasedByUserId:
       command.releasedByUserId === null || command.releasedByUserId === undefined
@@ -1161,6 +1198,42 @@ function normalizeConsumeInventoryTransferReservationCommand(
         ? null
         : normalizeUuid(command.consumedByUserId, 'consumed_by_user_id'),
   };
+}
+
+function assertReleaseReservationMatchesExpectedContext(
+  reservation: InventoryReservationRecord,
+  command: NormalizedReleaseInventoryReservationCommand,
+  releasedQuantity: string,
+  activeReservedQuantity: string,
+): void {
+  const expectedReservedQuantityMatches =
+    command.expectedReservedQuantity === null ||
+    (compareQuantities(activeReservedQuantity, command.expectedReservedQuantity) === 0 &&
+      compareQuantities(releasedQuantity, command.expectedReservedQuantity) === 0);
+
+  if (
+    (command.expectedBranchId === null || reservation.branchId === command.expectedBranchId) &&
+    (command.expectedProductId === null || reservation.productId === command.expectedProductId) &&
+    (command.expectedSourceType === null ||
+      reservation.sourceType === command.expectedSourceType) &&
+    (command.expectedSourceId === null || reservation.sourceId === command.expectedSourceId) &&
+    expectedReservedQuantityMatches &&
+    reservation.status === INVENTORY_RESERVATION_STATUSES.ACTIVE
+  ) {
+    return;
+  }
+
+  throw GarageOsApiException.workflowTransitionBlocked(
+    'Inventory reservation does not match the expected release context.',
+    [
+      {
+        field: 'reservation_id',
+        code: 'transfer_reservation_mismatch',
+        message:
+          'Reservation does not match the expected transfer branch, product, source, or reserved quantity.',
+      },
+    ],
+  );
 }
 
 function assertTransferReservationMatchesExpectedContext(

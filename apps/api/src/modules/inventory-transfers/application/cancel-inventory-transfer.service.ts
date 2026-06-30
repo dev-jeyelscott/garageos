@@ -82,6 +82,8 @@ export class CancelInventoryTransferService {
     });
     assertInventoryTransferCancelPermission(context, isShopOwner);
 
+    const reason = normalizeCancellationReason(request.reason);
+
     return this.transactionRunner.runInTransaction(async (transaction) => {
       const now = new Date();
       const transfer = await this.inventoryTransferStore.lockTransferForUpdate(
@@ -116,7 +118,13 @@ export class CancelInventoryTransferService {
               {
                 tenantId: context.tenantId,
                 reservationId: line.reservationId,
+                releaseQuantity: line.reservedQuantity,
                 transactionType: INVENTORY_TRANSACTION_TYPES.INVENTORY_TRANSFER_RESERVATION_RELEASE,
+                expectedBranchId: transfer.sourceBranchId,
+                expectedProductId: line.productId,
+                expectedSourceType: 'inventory_transfer_line',
+                expectedSourceId: line.id,
+                expectedReservedQuantity: line.reservedQuantity,
                 releasedAt: now,
                 releasedByUserId: context.actorUserId,
               },
@@ -148,12 +156,20 @@ export class CancelInventoryTransferService {
         disposition === 'returned_to_source'
       ) {
         for (const line of persistedLines) {
-          assertLineHasReservation(line);
+          assertLineReadyForReturn(line);
+
+          const releaseQuantity = line.sentQuantity;
           const releaseResult =
             await this.inventoryReservationService.releaseInventoryInTransaction(
               {
                 tenantId: context.tenantId,
                 reservationId: line.reservationId,
+                releaseQuantity,
+                expectedBranchId: transfer.sourceBranchId,
+                expectedProductId: line.productId,
+                expectedSourceType: 'inventory_transfer_line',
+                expectedSourceId: line.id,
+                expectedReservedQuantity: line.sentQuantity,
                 transactionType: INVENTORY_TRANSACTION_TYPES.INVENTORY_TRANSFER_RESERVATION_RELEASE,
                 releasedAt: now,
                 releasedByUserId: context.actorUserId,
@@ -166,14 +182,14 @@ export class CancelInventoryTransferService {
             line_id: line.id,
             product_id: line.productId,
             reservation_id: releaseResult.reservation.id,
-            released_quantity: line.reservedQuantity,
+            released_quantity: releaseQuantity,
             ledger_entry_id: releaseResult.ledgerEntry.id,
           });
           lineEffects.push({
             line_id: line.id,
             product_id: line.productId,
             reservation_id: line.reservationId,
-            released_quantity: line.reservedQuantity,
+            released_quantity: releaseQuantity,
             consumed_quantity: null,
             variance_loss_amount: '0.00',
             ledger_entry_ids: [releaseResult.ledgerEntry.id],
@@ -210,7 +226,7 @@ export class CancelInventoryTransferService {
               lineId: line.id,
               receivedQuantity: '0.000',
               varianceQuantity: consumeResult.varianceQuantity,
-              varianceReason: request.reason ?? null,
+              varianceReason: reason,
             },
             transaction,
           );
@@ -261,7 +277,7 @@ export class CancelInventoryTransferService {
           transferId: transfer.id,
           fromStatus: transfer.status,
           toStatus: INVENTORY_TRANSFER_STATUSES.CANCELLED,
-          reason: request.reason ?? null,
+          reason: reason,
           createdByUserId: context.actorUserId,
           createdAt: now,
         },
@@ -287,12 +303,12 @@ export class CancelInventoryTransferService {
           source_branch_id: transfer.sourceBranchId,
           destination_branch_id: transfer.destinationBranchId,
           disposition,
-          reason: request.reason ?? null,
+          reason: reason,
           line_effects: lineEffects,
           released_reservations: releasedReservations,
           ledger_entry_ids: ledgerEntryIds,
         },
-        reason: request.reason ?? null,
+        reason: reason,
         createdAt: now,
         client: transaction,
       });
@@ -337,12 +353,48 @@ function assertCancellableStatus(status: InventoryTransferStatus): void {
   );
 }
 
+function normalizeCancellationReason(reason: string | undefined): string {
+  const normalizedReason = reason?.trim() ?? '';
+
+  if (normalizedReason.length === 0) {
+    throw GarageOsApiException.validationFailed([
+      {
+        field: 'reason',
+        code: 'cancellation_reason_required',
+        message: 'Cancellation reason is required.',
+      },
+    ]);
+  }
+
+  if (normalizedReason.length > 1000) {
+    throw GarageOsApiException.validationFailed([
+      {
+        field: 'reason',
+        code: 'cancellation_reason_too_long',
+        message: 'Cancellation reason must be at most 1000 characters.',
+      },
+    ]);
+  }
+
+  return normalizedReason;
+}
+
 function resolveDisposition(
   status: InventoryTransferStatus,
   request: CancelInventoryTransferRequest,
 ): CancellationDisposition | null {
   if (status !== INVENTORY_TRANSFER_STATUSES.IN_TRANSIT) {
-    return request.disposition ?? null;
+    if (request.disposition !== undefined) {
+      throw GarageOsApiException.validationFailed([
+        {
+          field: 'disposition',
+          code: 'disposition_not_allowed',
+          message: 'Disposition is only allowed when cancelling an in-transit transfer.',
+        },
+      ]);
+    }
+
+    return null;
   }
 
   if (request.disposition === undefined) {
@@ -351,16 +403,6 @@ function resolveDisposition(
         field: 'disposition',
         code: 'disposition_required',
         message: 'Disposition is required when cancelling an in-transit transfer.',
-      },
-    ]);
-  }
-
-  if (request.disposition === 'lost_or_damaged' && request.reason === undefined) {
-    throw GarageOsApiException.validationFailed([
-      {
-        field: 'reason',
-        code: 'variance_reason_required',
-        message: 'Reason is required when cancelling lost or damaged in-transit stock.',
       },
     ]);
   }
@@ -402,6 +444,26 @@ function assertLineReadyForLoss(
           field: 'lines',
           code: 'transfer_line_not_sent',
           message: 'Every lost or damaged transfer line must have a sent quantity.',
+        },
+      ],
+    );
+  }
+}
+
+function assertLineReadyForReturn(
+  line: InventoryTransferLineRecord,
+): asserts line is InventoryTransferLineRecord & {
+  readonly sentQuantity: string;
+  readonly reservationId: string;
+} {
+  if (line.sentQuantity === null || line.reservationId === null) {
+    throw GarageOsApiException.workflowTransitionBlocked(
+      'Inventory transfer line has not been sent.',
+      [
+        {
+          field: 'lines',
+          code: 'transfer_line_not_sent',
+          message: 'Every returned transfer line must have a sent quantity.',
         },
       ],
     );

@@ -66,7 +66,7 @@ const receiveInventoryTransferLineSchema = z
 export const cancelInventoryTransferRequestSchema = z
   .object({
     disposition: z.enum(['returned_to_source', 'lost_or_damaged']).optional(),
-    reason: z.string().trim().min(1).max(1000).optional(),
+    reason: z.string().trim().min(1).max(1000),
   })
   .strict();
 

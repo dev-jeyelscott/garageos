@@ -49,7 +49,7 @@ describe('CancelInventoryTransferService', () => {
     const fixture = createFixture();
 
     await expect(
-      fixture.service.cancelTransfer(transferId, {}, createTenantSession([])),
+      fixture.service.cancelTransfer(transferId, createCancelRequest(), createTenantSession([])),
     ).rejects.toMatchObject({
       code: 'forbidden',
       details: [{ required_permission: 'inventory.transfer.cancel' }],
@@ -62,7 +62,7 @@ describe('CancelInventoryTransferService', () => {
     await expect(
       fixture.service.cancelTransfer(
         transferId,
-        {},
+        createCancelRequest(),
         createTenantSession(['inventory.transfer.cancel'], { tenantStatus: 'read_only' }),
       ),
     ).rejects.toMatchObject({ code: 'subscription_access_blocked' });
@@ -77,7 +77,7 @@ describe('CancelInventoryTransferService', () => {
     await expect(
       fixture.service.cancelTransfer(
         transferId,
-        {},
+        createCancelRequest(),
         createTenantSession(['inventory.transfer.cancel'], {
           branches: [{ id: destinationBranchId }],
         }),
@@ -93,7 +93,7 @@ describe('CancelInventoryTransferService', () => {
     await expect(
       fixture.service.cancelTransfer(
         transferId,
-        {},
+        createCancelRequest(),
         createTenantSession(['inventory.transfer.cancel'], {
           branches: [{ id: sourceBranchId }],
         }),
@@ -103,12 +103,65 @@ describe('CancelInventoryTransferService', () => {
     expectNoCancelMutation(fixture);
   });
 
+  it.each(['draft', 'pending', 'in_transit'] as const)(
+    'requires cancellation reason for %s transfers before mutation',
+    async (status) => {
+      const fixture = createFixture({
+        transferStatus: status,
+        ...(status === 'draft' ? { lines: [createLineDraft()] } : {}),
+      });
+      const request =
+        status === 'in_transit'
+          ? ({
+              disposition: 'returned_to_source',
+            } as Parameters<CancelInventoryTransferService['cancelTransfer']>[1])
+          : ({} as Parameters<CancelInventoryTransferService['cancelTransfer']>[1]);
+
+      await expect(
+        fixture.service.cancelTransfer(
+          transferId,
+          request,
+          createTenantSession(['inventory.transfer.cancel']),
+        ),
+      ).rejects.toMatchObject({
+        code: 'validation_failed',
+        details: [expect.objectContaining({ code: 'cancellation_reason_required' })],
+      });
+
+      expect(fixture.transactionRunner.runCount).toBe(0);
+      expectNoCancelMutation(fixture);
+    },
+  );
+
+  it.each(['draft', 'pending'] as const)(
+    'rejects disposition for %s transfer cancellation',
+    async (status) => {
+      const fixture = createFixture({
+        transferStatus: status,
+        ...(status === 'draft' ? { lines: [createLineDraft()] } : {}),
+      });
+
+      await expect(
+        fixture.service.cancelTransfer(
+          transferId,
+          createCancelRequest({ disposition: 'returned_to_source' }),
+          createTenantSession(['inventory.transfer.cancel']),
+        ),
+      ).rejects.toMatchObject({
+        code: 'validation_failed',
+        details: [expect.objectContaining({ code: 'disposition_not_allowed' })],
+      });
+
+      expectNoCancelMutation(fixture);
+    },
+  );
+
   it('cancels draft transfers without inventory effects', async () => {
     const fixture = createFixture({ transferStatus: 'draft', lines: [createLineDraft()] });
 
     const response = await fixture.service.cancelTransfer(
       transferId,
-      {},
+      createCancelRequest(),
       createTenantSession(['inventory.transfer.cancel']),
     );
 
@@ -136,7 +189,7 @@ describe('CancelInventoryTransferService', () => {
 
     const response = await fixture.service.cancelTransfer(
       transferId,
-      {},
+      createCancelRequest(),
       createTenantSession(['inventory.transfer.cancel']),
     );
 
@@ -144,7 +197,13 @@ describe('CancelInventoryTransferService', () => {
       expect.objectContaining({
         tenantId,
         reservationId,
+        releaseQuantity: '5.000',
         transactionType: 'inventory_transfer_reservation_release',
+        expectedBranchId: sourceBranchId,
+        expectedProductId: productId,
+        expectedSourceType: 'inventory_transfer_line',
+        expectedSourceId: lineId,
+        expectedReservedQuantity: '5.000',
         releasedByUserId: userId,
       }),
       expect.any(Object),
@@ -159,7 +218,7 @@ describe('CancelInventoryTransferService', () => {
     await expect(
       fixture.service.cancelTransfer(
         transferId,
-        {},
+        createCancelRequest(),
         createTenantSession(['inventory.transfer.cancel']),
       ),
     ).rejects.toMatchObject({
@@ -175,11 +234,26 @@ describe('CancelInventoryTransferService', () => {
 
     const response = await fixture.service.cancelTransfer(
       transferId,
-      { disposition: 'returned_to_source' },
+      createCancelRequest({ disposition: 'returned_to_source' }),
       createTenantSession(['inventory.transfer.cancel']),
     );
 
     expect(fixture.reservationService.releaseInventoryInTransaction).toHaveBeenCalledOnce();
+    expect(fixture.reservationService.releaseInventoryInTransaction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId,
+        reservationId,
+        releaseQuantity: '5.000',
+        transactionType: 'inventory_transfer_reservation_release',
+        expectedBranchId: sourceBranchId,
+        expectedProductId: productId,
+        expectedSourceType: 'inventory_transfer_line',
+        expectedSourceId: lineId,
+        expectedReservedQuantity: '5.000',
+        releasedByUserId: userId,
+      }),
+      expect.any(Object),
+    );
     expect(
       fixture.reservationService.consumeInventoryTransferReservationInTransaction,
     ).not.toHaveBeenCalled();
@@ -195,13 +269,18 @@ describe('CancelInventoryTransferService', () => {
     await expect(
       fixture.service.cancelTransfer(
         transferId,
-        { disposition: 'lost_or_damaged' },
+        { disposition: 'lost_or_damaged' } as Parameters<
+          CancelInventoryTransferService['cancelTransfer']
+        >[1],
         createTenantSession(['inventory.transfer.cancel']),
       ),
     ).rejects.toMatchObject({
       code: 'validation_failed',
-      details: [expect.objectContaining({ code: 'variance_reason_required' })],
+      details: [expect.objectContaining({ code: 'cancellation_reason_required' })],
     });
+
+    expect(fixture.transactionRunner.runCount).toBe(0);
+    expectNoCancelMutation(fixture);
   });
 
   it('cancels in-transit lost-or-damaged transfers by consuming FIFO and recording variance loss', async () => {
@@ -209,7 +288,7 @@ describe('CancelInventoryTransferService', () => {
 
     const response = await fixture.service.cancelTransfer(
       transferId,
-      { disposition: 'lost_or_damaged', reason: 'Destroyed during transit.' },
+      createCancelRequest({ disposition: 'lost_or_damaged', reason: 'Destroyed during transit.' }),
       createTenantSession(['inventory.transfer.cancel']),
     );
 
@@ -251,7 +330,7 @@ describe('CancelInventoryTransferService', () => {
       await expect(
         fixture.service.cancelTransfer(
           transferId,
-          {},
+          createCancelRequest(),
           createTenantSession(['inventory.transfer.cancel']),
         ),
       ).rejects.toMatchObject({
@@ -269,7 +348,7 @@ describe('CancelInventoryTransferService', () => {
     await expect(
       fixture.service.cancelTransfer(
         transferId,
-        {},
+        createCancelRequest(),
         createTenantSession(['inventory.transfer.cancel']),
       ),
     ).rejects.toMatchObject({
@@ -277,6 +356,29 @@ describe('CancelInventoryTransferService', () => {
       details: [expect.objectContaining({ code: 'transfer_status_conflict' })],
     });
 
+    expect(fixture.store.insertStatusEventInput).toBeNull();
+    expect(fixture.auditService.record).not.toHaveBeenCalled();
+  });
+
+  it('does not mark transfer cancelled when reservation release context validation fails', async () => {
+    const fixture = createFixture({ transferStatus: 'pending' });
+    fixture.reservationService.releaseInventoryInTransaction.mockRejectedValueOnce({
+      code: 'workflow_transition_blocked',
+      details: [{ code: 'transfer_reservation_mismatch' }],
+    });
+
+    await expect(
+      fixture.service.cancelTransfer(
+        transferId,
+        createCancelRequest(),
+        createTenantSession(['inventory.transfer.cancel']),
+      ),
+    ).rejects.toMatchObject({
+      code: 'workflow_transition_blocked',
+      details: [expect.objectContaining({ code: 'transfer_reservation_mismatch' })],
+    });
+
+    expect(fixture.store.cancelledStatusInput).toBeNull();
     expect(fixture.store.insertStatusEventInput).toBeNull();
     expect(fixture.auditService.record).not.toHaveBeenCalled();
   });
@@ -292,7 +394,10 @@ describe('CancelInventoryTransferService', () => {
     await expect(
       fixture.service.cancelTransfer(
         transferId,
-        { disposition: 'lost_or_damaged', reason: 'Destroyed during transit.' },
+        createCancelRequest({
+          disposition: 'lost_or_damaged',
+          reason: 'Destroyed during transit.',
+        }),
         createTenantSession(['inventory.transfer.cancel']),
       ),
     ).rejects.toMatchObject({ code: 'fifo_allocation_conflict' });
@@ -301,6 +406,15 @@ describe('CancelInventoryTransferService', () => {
     expect(fixture.auditService.record).not.toHaveBeenCalled();
   });
 });
+
+function createCancelRequest(
+  overrides: Partial<Parameters<CancelInventoryTransferService['cancelTransfer']>[1]> = {},
+): Parameters<CancelInventoryTransferService['cancelTransfer']>[1] {
+  return {
+    reason: 'Transfer cancelled by request.',
+    ...overrides,
+  } as Parameters<CancelInventoryTransferService['cancelTransfer']>[1];
+}
 
 function createFixture(
   options: {
