@@ -121,11 +121,11 @@ export interface ConsumeInventoryTransferReservationCommand {
   readonly tenantId: string;
   readonly reservationId: string;
   readonly receivedQuantity: string;
+  readonly expectedSentQuantity: string;
   readonly expectedBranchId: string;
   readonly expectedProductId: string;
   readonly expectedSourceType: string;
   readonly expectedSourceId: string;
-  readonly expectedSentQuantity: string;
   readonly consumedAt?: Date;
   readonly consumedByUserId?: string | null;
 }
@@ -177,10 +177,10 @@ interface NormalizedConsumeInventoryTransferReservationCommand {
   readonly reservationId: string;
   readonly receivedQuantity: string;
   readonly expectedBranchId: string;
+  readonly expectedSentQuantity: string;
   readonly expectedProductId: string;
   readonly expectedSourceType: string;
   readonly expectedSourceId: string;
-  readonly expectedSentQuantity: string;
   readonly consumedAt: Date;
   readonly consumedByUserId: string | null;
 }
@@ -1185,7 +1185,8 @@ function assertTransferReservationMatchesExpectedContext(
       {
         field: 'reservation_id',
         code: 'transfer_reservation_mismatch',
-        message: 'Reservation does not match the expected transfer branch, product, or source.',
+        message:
+          'Reservation does not match the expected transfer branch, product, source, or sent quantity.',
       },
     ],
   );
