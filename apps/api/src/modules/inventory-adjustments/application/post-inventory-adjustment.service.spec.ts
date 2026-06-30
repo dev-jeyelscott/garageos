@@ -44,7 +44,7 @@ describe('PostInventoryAdjustmentService', () => {
 
     const response = await fixture.service.post(
       adjustmentId,
-      createTenantSession(['inventory.adjust.approve']),
+      createTenantSession(['inventory.adjust']),
     );
 
     expect(response.adjustment.status).toBe('posted');
@@ -92,6 +92,23 @@ describe('PostInventoryAdjustmentService', () => {
         entityId: adjustmentId,
       }),
     );
+  });
+
+  it('blocks users with approval-only permission from posting stock-changing adjustments', async () => {
+    const fixture = createFixture({
+      adjustment: createAdjustment({ status: INVENTORY_ADJUSTMENT_STATUSES.APPROVED }),
+      lines: [createLine({ adjustmentType: 'increase', quantityDifference: '2.000' })],
+    });
+
+    await expect(
+      fixture.service.post(adjustmentId, createTenantSession(['inventory.adjust.approve'])),
+    ).rejects.toMatchObject({ code: 'forbidden' });
+
+    expect(fixture.stockBalancesService.incrementOnHandStock).not.toHaveBeenCalled();
+    expect(fixture.stockBalancesService.decrementOnHandStock).not.toHaveBeenCalled();
+    expect(fixture.fifoLayerService.createLayer).not.toHaveBeenCalled();
+    expect(fixture.ledgerService.recordLedgerEntry).not.toHaveBeenCalled();
+    expect(fixture.store.markPostedInput).toBeNull();
   });
 
   it('posts approved negative adjustments by consuming FIFO oldest first', async () => {

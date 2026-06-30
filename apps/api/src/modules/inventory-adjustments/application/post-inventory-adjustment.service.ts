@@ -97,10 +97,11 @@ export class PostInventoryAdjustmentService {
     adjustmentId: string,
     session: TenantContextAuthenticatedSession,
   ): Promise<InventoryAdjustmentPostResponse> {
-    const { context } = await resolveInventoryAdjustmentActionAccess(session, this.productStore, [
+    const { context } = await resolveInventoryAdjustmentActionAccess(
+      session,
+      this.productStore,
       'inventory.adjust',
-      'inventory.adjust.approve',
-    ]);
+    );
 
     return this.transactionRunner.runInTransaction(async (transaction) => {
       const locked = await this.inventoryAdjustmentStore.lockAdjustmentWithLinesForPosting(
