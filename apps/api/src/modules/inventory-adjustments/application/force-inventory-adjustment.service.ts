@@ -57,9 +57,13 @@ export class ForceInventoryAdjustmentService {
     private readonly inventoryAdjustmentStore: InventoryAdjustmentStore,
     @Inject(ProductStore)
     private readonly productStore: ProductStore,
+    @Inject(InventoryStockBalancesService)
     private readonly stockBalancesService: InventoryStockBalancesService,
+    @Inject(InventoryAdjustmentValueImpactService)
     private readonly valueImpactService: InventoryAdjustmentValueImpactService,
+    @Inject(InventoryAdjustmentNumberService)
     private readonly numberService: InventoryAdjustmentNumberService,
+    @Inject(PostInventoryAdjustmentService)
     private readonly postInventoryAdjustmentService: PostInventoryAdjustmentService,
     @Inject(API_TRANSACTION_RUNNER)
     private readonly transactionRunner: DatabaseTransactionRunner,

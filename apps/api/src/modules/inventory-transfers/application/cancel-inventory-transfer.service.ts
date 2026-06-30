@@ -54,6 +54,7 @@ export class CancelInventoryTransferService {
     private readonly inventoryTransferStore: InventoryTransferStore,
     @Inject(ProductStore)
     private readonly productStore: ProductStore,
+    @Inject(InventoryReservationService)
     private readonly inventoryReservationService: InventoryReservationService,
     @Inject(API_TRANSACTION_RUNNER)
     private readonly transactionRunner: DatabaseTransactionRunner,

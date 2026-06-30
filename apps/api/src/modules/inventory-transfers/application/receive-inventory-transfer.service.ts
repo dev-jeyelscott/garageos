@@ -65,9 +65,13 @@ export class ReceiveInventoryTransferService {
     private readonly inventoryTransferStore: InventoryTransferStore,
     @Inject(ProductStore)
     private readonly productStore: ProductStore,
+    @Inject(InventoryReservationService)
     private readonly inventoryReservationService: InventoryReservationService,
+    @Inject(InventoryStockBalancesService)
     private readonly inventoryStockBalancesService: InventoryStockBalancesService,
+    @Inject(FifoLayerService)
     private readonly fifoLayerService: FifoLayerService,
+    @Inject(InventoryLedgerService)
     private readonly inventoryLedgerService: InventoryLedgerService,
     @Inject(API_TRANSACTION_RUNNER)
     private readonly transactionRunner: DatabaseTransactionRunner,

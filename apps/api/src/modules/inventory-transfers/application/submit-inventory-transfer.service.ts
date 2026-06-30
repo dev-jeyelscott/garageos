@@ -42,6 +42,7 @@ export class SubmitInventoryTransferService {
     private readonly productStore: ProductStore,
     @Inject(BranchStore)
     private readonly branchStore: BranchStore,
+    @Inject(InventoryReservationService)
     private readonly inventoryReservationService: InventoryReservationService,
     @Inject(API_TRANSACTION_RUNNER)
     private readonly transactionRunner: DatabaseTransactionRunner,

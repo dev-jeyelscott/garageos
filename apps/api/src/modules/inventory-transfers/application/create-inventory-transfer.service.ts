@@ -45,6 +45,7 @@ export class CreateInventoryTransferService {
     private readonly productStore: ProductStore,
     @Inject(BranchStore)
     private readonly branchStore: BranchStore,
+    @Inject(InventoryTransferNumberService)
     private readonly numberService: InventoryTransferNumberService,
     @Inject(API_TRANSACTION_RUNNER)
     private readonly transactionRunner: DatabaseTransactionRunner,

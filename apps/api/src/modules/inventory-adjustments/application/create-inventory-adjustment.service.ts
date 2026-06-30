@@ -25,7 +25,7 @@ import {
   INVENTORY_ADJUSTMENT_TYPES,
   type InventoryAdjustmentType,
 } from './inventory-adjustment.records';
-import type { InventoryAdjustmentApprovalPolicy } from './inventory-adjustment-approval-policy';
+import { InventoryAdjustmentApprovalPolicy } from './inventory-adjustment-approval-policy';
 import { InventoryAdjustmentNumberService } from './inventory-adjustment-number.service';
 import { InventoryAdjustmentValueImpactService } from './inventory-adjustment-value-impact.service';
 import {
@@ -71,9 +71,13 @@ export class CreateInventoryAdjustmentService {
     private readonly inventoryAdjustmentStore: InventoryAdjustmentStore,
     @Inject(ProductStore)
     private readonly productStore: ProductStore,
+    @Inject(InventoryStockBalancesService)
     private readonly stockBalancesService: InventoryStockBalancesService,
+    @Inject(InventoryAdjustmentValueImpactService)
     private readonly valueImpactService: InventoryAdjustmentValueImpactService,
+    @Inject(InventoryAdjustmentApprovalPolicy)
     private readonly approvalPolicy: InventoryAdjustmentApprovalPolicy,
+    @Inject(InventoryAdjustmentNumberService)
     private readonly numberService: InventoryAdjustmentNumberService,
     @Inject(API_TRANSACTION_RUNNER)
     private readonly transactionRunner: DatabaseTransactionRunner,

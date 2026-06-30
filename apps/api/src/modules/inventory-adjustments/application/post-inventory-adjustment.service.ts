@@ -85,9 +85,13 @@ export class PostInventoryAdjustmentService {
     private readonly inventoryAdjustmentStore: InventoryAdjustmentStore,
     @Inject(ProductStore)
     private readonly productStore: ProductStore,
+    @Inject(InventoryStockBalancesService)
     private readonly stockBalancesService: InventoryStockBalancesService,
+    @Inject(FifoLayerService)
     private readonly fifoLayerService: FifoLayerService,
+    @Inject(FifoConsumptionService)
     private readonly fifoConsumptionService: FifoConsumptionService,
+    @Inject(InventoryLedgerService)
     private readonly inventoryLedgerService: InventoryLedgerService,
     @Inject(AuditService)
     private readonly auditService: AuditService,
