@@ -209,9 +209,10 @@ export function RecentPlatformActivityCard({
       <CardHeader>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <CardTitle>Recent platform activity</CardTitle>
+            <CardTitle>Planned activity feed</CardTitle>
             <CardDescription>
-              Audit-log-backed activity belongs in the platform audit log slice.
+              This placeholder stays inactive until a dashboard activity feed is backed by
+              documented APIs.
             </CardDescription>
           </div>
           {canReadAuditLogs ? (
@@ -228,8 +229,8 @@ export function RecentPlatformActivityCard({
       <CardContent>
         {canReadAuditLogs ? (
           <EmptyState
-            title="Activity feed planned"
-            description="Wire this card to the platform audit log API when the dashboard-specific activity feed is implemented."
+            title="Activity feed planned placeholder"
+            description="Do not render synthetic activity. Wire this card only when a documented platform activity or audit-backed dashboard API is available."
           />
         ) : (
           <ForbiddenState
@@ -349,9 +350,9 @@ export function SupportAccessPolicyCard() {
         </Alert>
 
         <ul className="grid gap-3 text-sm text-muted-foreground">
-          <ChecklistItem label="Request approval before connecting to tenant data." />
-          <ChecklistItem label="Limit access to the approved support scope." />
-          <ChecklistItem label="Keep all actions logged and reviewable." />
+          <ChecklistItem label="Record a clear support reason before opening tenant data." />
+          <ChecklistItem label="Use read-only mode unless write access is explicitly selected and permitted." />
+          <ChecklistItem label="Keep support access visible, time-bound, and audited." />
         </ul>
       </CardContent>
     </Card>

@@ -195,8 +195,8 @@ export function PlatformOverviewContent({
                 />
                 <SummaryCard
                   title="Active support sessions"
-                  value="Planned"
-                  description="Aggregate support-session counts need a dedicated support access list API."
+                  value="Planned placeholder"
+                  description="Aggregate support-session counts stay inactive until a dedicated support-access list API exists."
                 />
               </div>
 
