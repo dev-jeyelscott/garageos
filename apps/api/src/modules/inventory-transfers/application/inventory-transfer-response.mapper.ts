@@ -40,6 +40,20 @@ export interface InventoryTransferSendResponse {
   readonly ledger_entry_ids: readonly string[];
 }
 
+export interface InventoryTransferReceiveResponse {
+  readonly transfer: {
+    readonly id: string;
+    readonly status: 'received';
+    readonly received_at: string;
+  };
+  readonly inventory_effects: {
+    readonly source_branch_id: string;
+    readonly destination_branch_id: string;
+    readonly ledger_entry_ids: readonly string[];
+    readonly variance_loss_amount: string;
+  };
+}
+
 export interface InventoryTransferReservationResponse {
   readonly line_id: string;
   readonly product_id: string;
@@ -127,6 +141,30 @@ export function toSendInventoryTransferResponse(
     lines,
     released_reservations: releasedReservations,
     ledger_entry_ids: releasedReservations.map((release) => release.ledger_entry_id),
+  };
+}
+
+export function toReceiveInventoryTransferResponse(
+  transfer: InventoryTransferRecord,
+  ledgerEntryIds: readonly string[],
+  varianceLossAmount: string,
+): InventoryTransferReceiveResponse {
+  if (transfer.receivedAt === null) {
+    throw new Error('Received transfer response requires received_at.');
+  }
+
+  return {
+    transfer: {
+      id: transfer.id,
+      status: 'received',
+      received_at: transfer.receivedAt.toISOString(),
+    },
+    inventory_effects: {
+      source_branch_id: transfer.sourceBranchId,
+      destination_branch_id: transfer.destinationBranchId,
+      ledger_entry_ids: ledgerEntryIds,
+      variance_loss_amount: varianceLossAmount,
+    },
   };
 }
 

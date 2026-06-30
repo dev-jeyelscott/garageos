@@ -23,6 +23,24 @@ const positiveQuantitySchema = z.preprocess(
     }),
 );
 
+const nonNegativeQuantitySchema = z.preprocess(
+  (value) => {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return String(value);
+    }
+
+    return value;
+  },
+  z
+    .string()
+    .trim()
+    .regex(/^\d+(\.\d{1,3})?$/, 'Quantity must be a non-negative decimal with up to 3 decimals.')
+    .transform((value) => normalizeDecimalString(value, 3))
+    .refine((value) => Number(value) <= MAX_QUANTITY, {
+      message: 'Quantity is too large.',
+    }),
+);
+
 const createInventoryTransferLineSchema = z
   .object({
     product_id: z.string().uuid(),
@@ -34,6 +52,14 @@ const sendInventoryTransferLineSchema = z
   .object({
     line_id: z.string().uuid(),
     sent_quantity: positiveQuantitySchema,
+  })
+  .strict();
+
+const receiveInventoryTransferLineSchema = z
+  .object({
+    line_id: z.string().uuid(),
+    received_quantity: nonNegativeQuantitySchema,
+    variance_reason: z.string().trim().min(1).max(1000).optional(),
   })
   .strict();
 
@@ -93,6 +119,29 @@ export const sendInventoryTransferRequestSchema = z
   });
 
 export type SendInventoryTransferRequest = z.infer<typeof sendInventoryTransferRequestSchema>;
+
+export const receiveInventoryTransferRequestSchema = z
+  .object({
+    lines: z.array(receiveInventoryTransferLineSchema).min(1).max(100),
+  })
+  .strict()
+  .superRefine((request, context) => {
+    const lineIds = new Set<string>();
+
+    request.lines.forEach((line, index) => {
+      if (lineIds.has(line.line_id)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['lines', index, 'line_id'],
+          message: 'Duplicate transfer lines are not allowed.',
+        });
+      }
+
+      lineIds.add(line.line_id);
+    });
+  });
+
+export type ReceiveInventoryTransferRequest = z.infer<typeof receiveInventoryTransferRequestSchema>;
 
 export const inventoryTransferIdParamsSchema = z
   .object({

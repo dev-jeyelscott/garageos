@@ -69,6 +69,22 @@ export interface UpdateTransferStatusToInTransitInput {
   readonly sentAt: Date;
 }
 
+export interface UpdateTransferLineReceivedQuantityInput {
+  readonly tenantId: string;
+  readonly lineId: string;
+  readonly receivedQuantity: string;
+  readonly varianceQuantity: string;
+  readonly varianceReason: string | null;
+}
+
+export interface UpdateTransferStatusToReceivedInput {
+  readonly tenantId: string;
+  readonly transferId: string;
+  readonly expectedStatus: InventoryTransferStatus;
+  readonly receivedByUserId: string;
+  readonly receivedAt: Date;
+}
+
 export interface FindLatestTransferNumberForDateInput {
   readonly tenantId: string;
   readonly datePrefix: string;
@@ -124,6 +140,22 @@ export abstract class InventoryTransferStore {
     _client?: DatabaseQueryClient,
   ): Promise<InventoryTransferRecord | null> {
     throw new Error('InventoryTransferStore.updateTransferStatusToInTransit is not implemented.');
+  }
+
+  updateTransferLineReceivedQuantity(
+    _input: UpdateTransferLineReceivedQuantityInput,
+    _client?: DatabaseQueryClient,
+  ): Promise<InventoryTransferLineRecord> {
+    throw new Error(
+      'InventoryTransferStore.updateTransferLineReceivedQuantity is not implemented.',
+    );
+  }
+
+  updateTransferStatusToReceived(
+    _input: UpdateTransferStatusToReceivedInput,
+    _client?: DatabaseQueryClient,
+  ): Promise<InventoryTransferRecord | null> {
+    throw new Error('InventoryTransferStore.updateTransferStatusToReceived is not implemented.');
   }
 
   abstract findLatestTransferNumberForDate(

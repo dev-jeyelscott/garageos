@@ -4,6 +4,7 @@ import { IdempotencyService } from '../../../shared/idempotency/idempotency.serv
 import type { TenantContextAuthenticatedSession } from '../../../shared/tenant-context/tenant-context';
 import { AuthService } from '../../auth/application/auth.service';
 import { CreateInventoryTransferService } from '../application/create-inventory-transfer.service';
+import { ReceiveInventoryTransferService } from '../application/receive-inventory-transfer.service';
 import { SendInventoryTransferService } from '../application/send-inventory-transfer.service';
 import { SubmitInventoryTransferService } from '../application/submit-inventory-transfer.service';
 import { InventoryTransfersController } from './inventory-transfers.controller';
@@ -123,6 +124,40 @@ describe('InventoryTransfersController', () => {
       }),
     );
   });
+
+  it('receives transfers through idempotency and records 200 success', async () => {
+    const fixture = createFixture();
+    const params = { transfer_id: '22222222-2222-4222-8222-222222222222' };
+    const request = createReceiveRequest();
+
+    await fixture.controller.receiveInventoryTransfer(
+      'Bearer token',
+      'receive-key',
+      params,
+      request,
+    );
+
+    expect(fixture.idempotencyService.begin).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId,
+        userId,
+        endpoint: 'POST /api/v1/inventory-transfers/{transfer_id}/receive',
+        idempotencyKey: 'receive-key',
+        requestIntent: { params, body: request },
+      }),
+    );
+    expect(fixture.receiveService.receiveInTransit).toHaveBeenCalledWith(
+      params.transfer_id,
+      request,
+      fixture.session,
+    );
+    expect(fixture.idempotencyService.completeSucceeded).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'idempotency-record-id',
+        responseStatusCode: 200,
+      }),
+    );
+  });
 });
 
 function createFixture(
@@ -164,18 +199,28 @@ function createFixture(
   } as unknown as SendInventoryTransferService & {
     sendPending: ReturnType<typeof vi.fn>;
   };
+  const receiveService = {
+    getIdempotencyExpiresAt: vi.fn((now: Date) => new Date(now.getTime() + 60_000)),
+    receiveInTransit: vi
+      .fn()
+      .mockResolvedValue({ transfer: { id: 'transfer-id' }, inventory_effects: {} }),
+  } as unknown as ReceiveInventoryTransferService & {
+    receiveInTransit: ReturnType<typeof vi.fn>;
+  };
 
   return {
     session,
     createService,
     submitService,
     sendService,
+    receiveService,
     idempotencyService,
     controller: new InventoryTransfersController(
       authService,
       createService,
       submitService,
       sendService,
+      receiveService,
       idempotencyService,
     ),
   };
@@ -201,6 +246,17 @@ function createSendRequest() {
       {
         line_id: '66666666-6666-4666-8666-666666666666',
         sent_quantity: '5.000',
+      },
+    ],
+  };
+}
+
+function createReceiveRequest() {
+  return {
+    lines: [
+      {
+        line_id: '66666666-6666-4666-8666-666666666666',
+        received_quantity: '5.000',
       },
     ],
   };

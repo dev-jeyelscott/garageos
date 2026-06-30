@@ -13,9 +13,11 @@ import {
   type InsertStatusEventInput,
   InventoryTransferStore,
   type UpdateTransferLineReservationInput,
+  type UpdateTransferLineReceivedQuantityInput,
   type UpdateTransferLineSentQuantityInput,
   type UpdateTransferStatusInput,
   type UpdateTransferStatusToInTransitInput,
+  type UpdateTransferStatusToReceivedInput,
 } from '../application/inventory-transfer.store';
 import {
   type InventoryTransferLineRecord,
@@ -344,6 +346,65 @@ export class PostgresInventoryTransferStore extends InventoryTransferStore {
         returning ${INVENTORY_TRANSFER_COLUMNS}
       `,
       [input.tenantId, input.transferId, input.expectedStatus, input.sentByUserId, input.sentAt],
+    );
+
+    return result.rows[0] === undefined ? null : mapInventoryTransferRow(result.rows[0]);
+  }
+
+  async updateTransferLineReceivedQuantity(
+    input: UpdateTransferLineReceivedQuantityInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<InventoryTransferLineRecord> {
+    const result = await client.query<InventoryTransferLineRow>(
+      `
+        update inventory_transfer_lines
+        set
+          received_quantity = $3::numeric(14,3),
+          variance_quantity = $4::numeric(14,3),
+          variance_reason = $5
+        where tenant_id = $1::uuid
+          and id = $2::uuid
+        returning ${INVENTORY_TRANSFER_LINE_COLUMNS}
+      `,
+      [
+        input.tenantId,
+        input.lineId,
+        input.receivedQuantity,
+        input.varianceQuantity,
+        input.varianceReason,
+      ],
+    );
+
+    return mapInventoryTransferLineRow(
+      getRequiredRow(result, 'update transfer line received quantity'),
+    );
+  }
+
+  async updateTransferStatusToReceived(
+    input: UpdateTransferStatusToReceivedInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<InventoryTransferRecord | null> {
+    const result = await client.query<InventoryTransferRow>(
+      `
+        update inventory_transfers
+        set
+          status = 'received',
+          received_by_user_id = $4::uuid,
+          received_at = $5::timestamptz,
+          updated_at = $5::timestamptz,
+          lock_version = lock_version + 1
+        where tenant_id = $1::uuid
+          and id = $2::uuid
+          and status = $3
+        returning ${INVENTORY_TRANSFER_COLUMNS}
+      `,
+      [
+        input.tenantId,
+        input.transferId,
+        input.expectedStatus,
+        input.receivedByUserId,
+        input.receivedAt,
+      ],
     );
 
     return result.rows[0] === undefined ? null : mapInventoryTransferRow(result.rows[0]);
