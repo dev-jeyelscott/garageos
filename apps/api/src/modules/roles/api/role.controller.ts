@@ -14,7 +14,7 @@ import { ZodValidationPipe } from '../../../shared/api/zod-validation.pipe';
 import { IdempotencyService } from '../../../shared/idempotency/idempotency.service';
 import { AccessTokenAuthGuard } from '../../auth/api/access-token-auth.guard';
 import { AuthService } from '../../auth/application/auth.service';
-import type { RoleService } from '../application/role.service';
+import { RoleService } from '../application/role.service';
 import {
   createRoleRequestSchema,
   type CreateRoleRequest,

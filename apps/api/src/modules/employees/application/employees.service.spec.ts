@@ -14,8 +14,8 @@ import type {
   TenantStatus,
 } from '../../../shared/tenant-context/tenant-context';
 import { PasswordHashingService } from '../../auth/application/password-hashing.service';
-import type { SecureTokenService } from '../../auth/application/secure-token.service';
-import type { TokenHashingService } from '../../auth/application/token-hashing.service';
+import { SecureTokenService } from '../../auth/application/secure-token.service';
+import { TokenHashingService } from '../../auth/application/token-hashing.service';
 import {
   type ActiveRoleRecord,
   type ChangeEmployeeStatusInput,

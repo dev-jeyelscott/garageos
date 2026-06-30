@@ -15,7 +15,7 @@ import { ZodValidationPipe } from '../../../shared/api/zod-validation.pipe';
 import { IdempotencyService } from '../../../shared/idempotency/idempotency.service';
 import { AccessTokenAuthGuard } from '../../auth/api/access-token-auth.guard';
 import { AuthService } from '../../auth/application/auth.service';
-import type { ProductsService } from '../application/products.service';
+import { ProductsService } from '../application/products.service';
 import {
   createProductRequestSchema,
   type CreateProductRequest,
