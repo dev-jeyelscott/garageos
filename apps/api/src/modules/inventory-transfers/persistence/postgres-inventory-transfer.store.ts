@@ -12,6 +12,8 @@ import {
   type FindLatestTransferNumberForDateInput,
   type InsertStatusEventInput,
   InventoryTransferStore,
+  type UpdateTransferLineReservationInput,
+  type UpdateTransferStatusInput,
 } from '../application/inventory-transfer.store';
 import {
   type InventoryTransferLineRecord,
@@ -216,6 +218,89 @@ export class PostgresInventoryTransferStore extends InventoryTransferStore {
     );
 
     return mapInventoryTransferStatusEventRow(getRequiredRow(result, 'insert status event'));
+  }
+
+  async lockTransferForUpdate(
+    tenantId: string,
+    transferId: string,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<InventoryTransferRecord | null> {
+    const result = await client.query<InventoryTransferRow>(
+      `
+        select ${INVENTORY_TRANSFER_COLUMNS}
+        from inventory_transfers
+        where tenant_id = $1::uuid
+          and id = $2::uuid
+        for update
+      `,
+      [tenantId, transferId],
+    );
+
+    return result.rows[0] === undefined ? null : mapInventoryTransferRow(result.rows[0]);
+  }
+
+  async listTransferLinesForUpdate(
+    tenantId: string,
+    transferId: string,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<readonly InventoryTransferLineRecord[]> {
+    const result = await client.query<InventoryTransferLineRow>(
+      `
+        select ${INVENTORY_TRANSFER_LINE_COLUMNS}
+        from inventory_transfer_lines
+        where tenant_id = $1::uuid
+          and transfer_id = $2::uuid
+        order by id
+        for update
+      `,
+      [tenantId, transferId],
+    );
+
+    return result.rows.map(mapInventoryTransferLineRow);
+  }
+
+  async updateTransferLineReservation(
+    input: UpdateTransferLineReservationInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<InventoryTransferLineRecord> {
+    const result = await client.query<InventoryTransferLineRow>(
+      `
+        update inventory_transfer_lines
+        set
+          reserved_quantity = $3::numeric(14,3),
+          reservation_id = $4::uuid
+        where tenant_id = $1::uuid
+          and id = $2::uuid
+          and reserved_quantity is null
+          and reservation_id is null
+        returning ${INVENTORY_TRANSFER_LINE_COLUMNS}
+      `,
+      [input.tenantId, input.lineId, input.reservedQuantity, input.reservationId],
+    );
+
+    return mapInventoryTransferLineRow(getRequiredRow(result, 'update transfer line reservation'));
+  }
+
+  async updateTransferStatus(
+    input: UpdateTransferStatusInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<InventoryTransferRecord | null> {
+    const result = await client.query<InventoryTransferRow>(
+      `
+        update inventory_transfers
+        set
+          status = $4,
+          updated_at = $5::timestamptz,
+          lock_version = lock_version + 1
+        where tenant_id = $1::uuid
+          and id = $2::uuid
+          and status = $3
+        returning ${INVENTORY_TRANSFER_COLUMNS}
+      `,
+      [input.tenantId, input.transferId, input.expectedStatus, input.nextStatus, input.updatedAt],
+    );
+
+    return result.rows[0] === undefined ? null : mapInventoryTransferRow(result.rows[0]);
   }
 
   async findLatestTransferNumberForDate(

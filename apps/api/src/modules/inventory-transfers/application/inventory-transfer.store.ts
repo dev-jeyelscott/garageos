@@ -40,6 +40,21 @@ export interface InsertStatusEventInput {
   readonly createdAt: Date;
 }
 
+export interface UpdateTransferLineReservationInput {
+  readonly tenantId: string;
+  readonly lineId: string;
+  readonly reservedQuantity: string;
+  readonly reservationId: string;
+}
+
+export interface UpdateTransferStatusInput {
+  readonly tenantId: string;
+  readonly transferId: string;
+  readonly expectedStatus: InventoryTransferStatus;
+  readonly nextStatus: InventoryTransferStatus;
+  readonly updatedAt: Date;
+}
+
 export interface FindLatestTransferNumberForDateInput {
   readonly tenantId: string;
   readonly datePrefix: string;
@@ -60,6 +75,28 @@ export abstract class InventoryTransferStore {
     input: InsertStatusEventInput,
     client?: DatabaseQueryClient,
   ): Promise<InventoryTransferStatusEventRecord>;
+
+  abstract lockTransferForUpdate(
+    tenantId: string,
+    transferId: string,
+    client?: DatabaseQueryClient,
+  ): Promise<InventoryTransferRecord | null>;
+
+  abstract listTransferLinesForUpdate(
+    tenantId: string,
+    transferId: string,
+    client?: DatabaseQueryClient,
+  ): Promise<readonly InventoryTransferLineRecord[]>;
+
+  abstract updateTransferLineReservation(
+    input: UpdateTransferLineReservationInput,
+    client?: DatabaseQueryClient,
+  ): Promise<InventoryTransferLineRecord>;
+
+  abstract updateTransferStatus(
+    input: UpdateTransferStatusInput,
+    client?: DatabaseQueryClient,
+  ): Promise<InventoryTransferRecord | null>;
 
   abstract findLatestTransferNumberForDate(
     input: FindLatestTransferNumberForDateInput,

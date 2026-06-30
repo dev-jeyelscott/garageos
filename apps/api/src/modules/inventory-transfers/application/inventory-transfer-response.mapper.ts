@@ -17,6 +17,24 @@ export interface InventoryTransferCreateResponse {
   readonly lines: readonly InventoryTransferLineResponse[];
 }
 
+export interface InventoryTransferSubmitResponse {
+  readonly transfer: {
+    readonly id: string;
+    readonly transfer_number: string;
+    readonly status: 'pending';
+    readonly lock_version: number;
+  };
+  readonly reservations: readonly InventoryTransferReservationResponse[];
+}
+
+export interface InventoryTransferReservationResponse {
+  readonly line_id: string;
+  readonly product_id: string;
+  readonly reservation_id: string;
+  readonly reserved_quantity: string;
+  readonly ledger_entry_id: string;
+}
+
 export interface InventoryTransferLineResponse {
   readonly id: string;
   readonly product_id: string;
@@ -26,6 +44,21 @@ export interface InventoryTransferLineResponse {
   readonly received_quantity: string | null;
   readonly variance_quantity: string | null;
   readonly reservation_id: string | null;
+}
+
+export function toSubmitInventoryTransferResponse(
+  transfer: InventoryTransferRecord,
+  reservations: readonly InventoryTransferReservationResponse[],
+): InventoryTransferSubmitResponse {
+  return {
+    transfer: {
+      id: transfer.id,
+      transfer_number: transfer.transferNumber,
+      status: 'pending',
+      lock_version: transfer.lockVersion,
+    },
+    reservations,
+  };
 }
 
 export function toCreateInventoryTransferResponse(

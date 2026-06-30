@@ -249,6 +249,22 @@ class FakeInventoryTransferStore extends InventoryTransferStore {
   async findLatestTransferNumberForDate() {
     return 'TR-20260630-000001';
   }
+
+  async lockTransferForUpdate() {
+    return null;
+  }
+
+  async listTransferLinesForUpdate() {
+    return [];
+  }
+
+  async updateTransferLineReservation(): Promise<never> {
+    throw new Error('not implemented');
+  }
+
+  async updateTransferStatus() {
+    return null;
+  }
 }
 
 class FakeBranchStore extends BranchStore {

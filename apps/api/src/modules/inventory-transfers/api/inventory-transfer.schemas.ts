@@ -64,6 +64,14 @@ export const createInventoryTransferRequestSchema = z
 
 export type CreateInventoryTransferRequest = z.infer<typeof createInventoryTransferRequestSchema>;
 
+export const inventoryTransferIdParamsSchema = z
+  .object({
+    transfer_id: z.string().uuid(),
+  })
+  .strict();
+
+export type InventoryTransferIdParams = z.infer<typeof inventoryTransferIdParamsSchema>;
+
 function normalizeDecimalString(value: string, scale: number): string {
   const [wholePart = '0', decimalPart = ''] = value.split('.');
   const normalizedWholePart = wholePart.replace(/^0+(?=\d)/, '') || '0';

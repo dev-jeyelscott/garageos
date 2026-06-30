@@ -4,6 +4,7 @@ import { IdempotencyService } from '../../../shared/idempotency/idempotency.serv
 import type { TenantContextAuthenticatedSession } from '../../../shared/tenant-context/tenant-context';
 import { AuthService } from '../../auth/application/auth.service';
 import { CreateInventoryTransferService } from '../application/create-inventory-transfer.service';
+import { SubmitInventoryTransferService } from '../application/submit-inventory-transfer.service';
 import { InventoryTransfersController } from './inventory-transfers.controller';
 
 const tenantId = '11111111-1111-4111-8111-111111111111';
@@ -65,6 +66,33 @@ describe('InventoryTransfersController', () => {
       expect.objectContaining({ id: 'idempotency-record-id' }),
     );
   });
+
+  it('submits transfers through idempotency and records 200 success', async () => {
+    const fixture = createFixture();
+    const params = { transfer_id: '22222222-2222-4222-8222-222222222222' };
+
+    await fixture.controller.submitInventoryTransfer('Bearer token', 'submit-key', params);
+
+    expect(fixture.idempotencyService.begin).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId,
+        userId,
+        endpoint: 'POST /api/v1/inventory-transfers/{transfer_id}/submit',
+        idempotencyKey: 'submit-key',
+        requestIntent: params,
+      }),
+    );
+    expect(fixture.submitService.submitDraft).toHaveBeenCalledWith(
+      params.transfer_id,
+      fixture.session,
+    );
+    expect(fixture.idempotencyService.completeSucceeded).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'idempotency-record-id',
+        responseStatusCode: 200,
+      }),
+    );
+  });
 });
 
 function createFixture(
@@ -94,12 +122,24 @@ function createFixture(
     completeSucceeded: vi.fn().mockResolvedValue(undefined),
     completeFailed: vi.fn().mockResolvedValue(undefined),
   } as unknown as IdempotencyService;
+  const submitService = {
+    getIdempotencyExpiresAt: vi.fn((now: Date) => new Date(now.getTime() + 60_000)),
+    submitDraft: vi.fn().mockResolvedValue({ transfer: { id: 'transfer-id' }, reservations: [] }),
+  } as unknown as SubmitInventoryTransferService & {
+    submitDraft: ReturnType<typeof vi.fn>;
+  };
 
   return {
     session,
     createService,
+    submitService,
     idempotencyService,
-    controller: new InventoryTransfersController(authService, createService, idempotencyService),
+    controller: new InventoryTransfersController(
+      authService,
+      createService,
+      submitService,
+      idempotencyService,
+    ),
   };
 }
 
