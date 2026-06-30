@@ -24,6 +24,7 @@ import type {
   UpdateBranchRequest,
 } from '../api/branch.schemas';
 import { BranchStore, type BranchSummaryRecord } from './branch.store';
+import { assertBranchAccessAllowed } from '../../../shared/authorization/branch-access';
 
 export interface BranchCreateResponse {
   readonly id: string;
@@ -348,6 +349,11 @@ export class BranchService {
           },
         ]);
       }
+
+      assertBranchAccessAllowed({
+        context,
+        branchId: existing.id,
+      });
 
       if (options.toStatus === 'inactive') {
         const activeBranches = await this.branchStore.countActiveBranches(

@@ -267,6 +267,28 @@ describe('BranchService', () => {
     });
   });
 
+  it('blocks branch deactivation when the user lacks access to the target branch', async () => {
+    const { service, store } = createService();
+    store.activeBranchCount = 2;
+    store.branchById = createBranchRecord();
+
+    await expect(
+      service.deactivateBranch(
+        BRANCH_ID,
+        { lock_version: 0 },
+        createTenantSession(['branches.deactivate'], {
+          branchIds: ['55555555-5555-4555-8555-555555555555'],
+          tenantWideBranchAccess: false,
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.BRANCH_ACCESS_DENIED,
+    });
+
+    expect(store.changedInputs).toEqual([]);
+    expect(store.statusEvents).toEqual([]);
+  });
+
   it('reactivates an inactive branch only within the active-branch plan limit', async () => {
     const { service, store, auditService } = createService();
     store.activeBranchCount = 3;
@@ -340,6 +362,8 @@ function createTenantSession(
   overrides: {
     readonly tenantId?: string;
     readonly tenantStatus?: TenantStatus;
+    readonly branchIds?: readonly string[];
+    readonly tenantWideBranchAccess?: boolean;
   } = {},
 ): TenantContextAuthenticatedSession {
   const tenantId = overrides.tenantId ?? TENANT_ID;
@@ -358,8 +382,8 @@ function createTenantSession(
       status: overrides.tenantStatus ?? 'active',
     },
     effective_permissions: permissions,
-    branches: [],
-    tenant_wide_branch_access: true,
+    branches: (overrides.branchIds ?? []).map((id) => ({ id })),
+    tenant_wide_branch_access: overrides.tenantWideBranchAccess ?? true,
     subscription_status_source: 'system_computed',
   };
 }
