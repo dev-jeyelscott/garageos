@@ -1,0 +1,63 @@
+import type {
+  InventoryTransferLineRecord,
+  InventoryTransferRecord,
+} from './inventory-transfer.records';
+
+export interface InventoryTransferCreateResponse {
+  readonly transfer: {
+    readonly id: string;
+    readonly transfer_number: string;
+    readonly source_branch_id: string;
+    readonly destination_branch_id: string;
+    readonly status: 'draft';
+    readonly remarks: string | null;
+    readonly created_at: string;
+    readonly lock_version: number;
+  };
+  readonly lines: readonly InventoryTransferLineResponse[];
+}
+
+export interface InventoryTransferLineResponse {
+  readonly id: string;
+  readonly product_id: string;
+  readonly requested_quantity: string;
+  readonly reserved_quantity: string | null;
+  readonly sent_quantity: string | null;
+  readonly received_quantity: string | null;
+  readonly variance_quantity: string | null;
+  readonly reservation_id: string | null;
+}
+
+export function toCreateInventoryTransferResponse(
+  transfer: InventoryTransferRecord,
+  lines: readonly InventoryTransferLineRecord[],
+): InventoryTransferCreateResponse {
+  return {
+    transfer: {
+      id: transfer.id,
+      transfer_number: transfer.transferNumber,
+      source_branch_id: transfer.sourceBranchId,
+      destination_branch_id: transfer.destinationBranchId,
+      status: 'draft',
+      remarks: transfer.remarks,
+      created_at: transfer.createdAt.toISOString(),
+      lock_version: transfer.lockVersion,
+    },
+    lines: lines.map(toInventoryTransferLineResponse),
+  };
+}
+
+function toInventoryTransferLineResponse(
+  line: InventoryTransferLineRecord,
+): InventoryTransferLineResponse {
+  return {
+    id: line.id,
+    product_id: line.productId,
+    requested_quantity: line.requestedQuantity,
+    reserved_quantity: line.reservedQuantity,
+    sent_quantity: line.sentQuantity,
+    received_quantity: line.receivedQuantity,
+    variance_quantity: line.varianceQuantity,
+    reservation_id: line.reservationId,
+  };
+}

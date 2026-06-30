@@ -18,6 +18,7 @@ import { ShopModule } from './modules/shop/shop.module';
 import { AuditModule } from './shared/audit/audit.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { InventoryAdjustmentsModule } from './modules/inventory-adjustments/inventory-adjustments.module';
+import { InventoryTransfersModule } from './modules/inventory-transfers/inventory-transfers.module';
 import { BackgroundJobsModule } from './shared/background-jobs/background-jobs.module';
 import { IdempotencyModule } from './shared/idempotency/idempotency.module';
 import { RequestContextMiddleware } from './shared/observability/request-context.middleware';
@@ -46,6 +47,7 @@ export class HealthController {
     ProductsModule,
     InventoryModule,
     InventoryAdjustmentsModule,
+    InventoryTransfersModule,
     MechanicSessionsModule,
     CustomersModule,
     MotorcyclesModule,
