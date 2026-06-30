@@ -532,12 +532,7 @@ export class PostgresInventoryAdjustmentStore extends InventoryAdjustmentStore {
     client: DatabaseQueryClient,
     lockMode: false | 'posting' | 'update',
   ): Promise<InventoryAdjustmentRecord | null> {
-    const statusClause =
-      lockMode === 'posting'
-        ? "and status in ('draft', 'approved')"
-        : lockMode === 'update'
-          ? "and status in ('draft', 'pending_approval', 'approved')"
-          : '';
+    const statusClause = lockMode === 'posting' ? "and status in ('draft', 'approved')" : '';
     const result = await client.query<InventoryAdjustmentRow>(
       `
         select ${INVENTORY_ADJUSTMENT_COLUMNS}

@@ -1,4 +1,4 @@
-import { Body, Controller, Headers, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Headers, HttpCode, Param, Post, UseGuards } from '@nestjs/common';
 
 import { ZodValidationPipe } from '../../../shared/api/zod-validation.pipe';
 import { IdempotencyService } from '../../../shared/idempotency/idempotency.service';
@@ -84,6 +84,7 @@ export class InventoryAdjustmentsController {
   }
 
   @Post(':adjustment_id/submit')
+  @HttpCode(200)
   async submitInventoryAdjustment(
     @Headers('authorization') authorizationHeader: string | undefined,
     @Headers('idempotency-key') idempotencyKey: string | undefined,
@@ -118,7 +119,7 @@ export class InventoryAdjustmentsController {
 
       await this.idempotencyService.completeSucceeded({
         id: idempotency.record.id,
-        responseStatusCode: 201,
+        responseStatusCode: 200,
         responseBodyJson: response,
         now: new Date(),
       });
@@ -135,6 +136,7 @@ export class InventoryAdjustmentsController {
   }
 
   @Post(':adjustment_id/approve')
+  @HttpCode(200)
   async approveInventoryAdjustment(
     @Headers('authorization') authorizationHeader: string | undefined,
     @Headers('idempotency-key') idempotencyKey: string | undefined,
@@ -170,7 +172,7 @@ export class InventoryAdjustmentsController {
 
       await this.idempotencyService.completeSucceeded({
         id: idempotency.record.id,
-        responseStatusCode: 201,
+        responseStatusCode: 200,
         responseBodyJson: response,
         now: new Date(),
       });
@@ -187,6 +189,7 @@ export class InventoryAdjustmentsController {
   }
 
   @Post(':adjustment_id/reject')
+  @HttpCode(200)
   async rejectInventoryAdjustment(
     @Headers('authorization') authorizationHeader: string | undefined,
     @Headers('idempotency-key') idempotencyKey: string | undefined,
@@ -222,7 +225,7 @@ export class InventoryAdjustmentsController {
 
       await this.idempotencyService.completeSucceeded({
         id: idempotency.record.id,
-        responseStatusCode: 201,
+        responseStatusCode: 200,
         responseBodyJson: response,
         now: new Date(),
       });

@@ -247,6 +247,33 @@ describe('PostgresInventoryAdjustmentStore', () => {
     expect(result?.lines).toHaveLength(1);
   });
 
+  it('keeps posting locks status-limited to postable adjustments', async () => {
+    const client = new RecordingDatabaseClient([[createAdjustmentRow()], [createLineRow()]]);
+    const store = new PostgresInventoryAdjustmentStore(client);
+
+    await store.lockAdjustmentWithLinesForPosting({ tenantId, adjustmentId }, client);
+
+    const sql = normalizeSql(client.queries[0]?.sql ?? '');
+    expect(sql).toContain("and status in ('draft', 'approved')");
+  });
+
+  it('locks update candidates across all tenant-visible statuses', async () => {
+    const client = new RecordingDatabaseClient([
+      [createAdjustmentRow({ status: 'rejected' })],
+      [createLineRow()],
+    ]);
+    const store = new PostgresInventoryAdjustmentStore(client);
+
+    const result = await store.lockAdjustmentWithLinesForUpdate({ tenantId, adjustmentId }, client);
+
+    const sql = normalizeSql(client.queries[0]?.sql ?? '');
+    expect(sql).toContain('where tenant_id = $1::uuid');
+    expect(sql).toContain('and id = $2::uuid');
+    expect(sql).toContain('for update');
+    expect(sql).not.toContain('and status in');
+    expect(result?.adjustment.status).toBe('rejected');
+  });
+
   it('inserts an initial draft status event with null from status and required actor', async () => {
     const client = new RecordingDatabaseClient([[createStatusEventRow()]]);
     const store = new PostgresInventoryAdjustmentStore(client);

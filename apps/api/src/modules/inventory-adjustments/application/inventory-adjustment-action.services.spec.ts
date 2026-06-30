@@ -128,6 +128,29 @@ describe('Inventory adjustment action services', () => {
     ).rejects.toMatchObject({ code: 'workflow_transition_blocked' });
   });
 
+  it.each([
+    INVENTORY_ADJUSTMENT_STATUSES.POSTED,
+    INVENTORY_ADJUSTMENT_STATUSES.REJECTED,
+    INVENTORY_ADJUSTMENT_STATUSES.CANCELLED,
+  ])('surfaces terminal %s adjustments as workflow errors', async (status) => {
+    const fixture = createFixture(createAdjustment({ status }));
+    const session = createTenantSession(['inventory.adjust', 'inventory.adjust.approve']);
+
+    await expect(fixture.submitService.submit(adjustmentId, session)).rejects.toMatchObject({
+      code: 'workflow_transition_blocked',
+    });
+
+    await expect(fixture.approveService.approve(adjustmentId, {}, session)).rejects.toMatchObject({
+      code: 'workflow_transition_blocked',
+    });
+
+    await expect(
+      fixture.rejectService.reject(adjustmentId, { reason: 'Not valid for approval.' }, session),
+    ).rejects.toMatchObject({
+      code: 'workflow_transition_blocked',
+    });
+  });
+
   it('returns resource_not_found when the adjustment is missing', async () => {
     const fixture = createFixture(null);
 
