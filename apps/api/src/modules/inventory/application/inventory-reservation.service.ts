@@ -121,6 +121,10 @@ export interface ConsumeInventoryTransferReservationCommand {
   readonly tenantId: string;
   readonly reservationId: string;
   readonly receivedQuantity: string;
+  readonly expectedBranchId: string;
+  readonly expectedProductId: string;
+  readonly expectedSourceType: string;
+  readonly expectedSourceId: string;
   readonly consumedAt?: Date;
   readonly consumedByUserId?: string | null;
 }
@@ -171,6 +175,10 @@ interface NormalizedConsumeInventoryTransferReservationCommand {
   readonly tenantId: string;
   readonly reservationId: string;
   readonly receivedQuantity: string;
+  readonly expectedBranchId: string;
+  readonly expectedProductId: string;
+  readonly expectedSourceType: string;
+  readonly expectedSourceId: string;
   readonly consumedAt: Date;
   readonly consumedByUserId: string | null;
 }
@@ -867,6 +875,8 @@ export class InventoryReservationService {
       );
     }
 
+    assertTransferReservationMatchesExpectedContext(activeReservation, input);
+
     const sentQuantity = normalizePositiveQuantity(activeReservation.reservedQuantity, 'sent_qty');
 
     if (compareQuantities(input.receivedQuantity, sentQuantity) > 0) {
@@ -1135,12 +1145,43 @@ function normalizeConsumeInventoryTransferReservationCommand(
     tenantId: normalizeUuid(command.tenantId, 'tenant_id'),
     reservationId: normalizeUuid(command.reservationId, 'reservation_id'),
     receivedQuantity: normalizeNonNegativeQuantity(command.receivedQuantity, 'received_quantity'),
+    expectedBranchId: normalizeUuid(command.expectedBranchId, 'expected_branch_id'),
+    expectedProductId: normalizeUuid(command.expectedProductId, 'expected_product_id'),
+    expectedSourceType: normalizeSourceType(command.expectedSourceType),
+    expectedSourceId: normalizeUuid(command.expectedSourceId, 'expected_source_id'),
     consumedAt: normalizeDate(command.consumedAt, 'consumed_at'),
     consumedByUserId:
       command.consumedByUserId === null || command.consumedByUserId === undefined
         ? null
         : normalizeUuid(command.consumedByUserId, 'consumed_by_user_id'),
   };
+}
+
+function assertTransferReservationMatchesExpectedContext(
+  reservation: InventoryReservationRecord,
+  command: NormalizedConsumeInventoryTransferReservationCommand,
+): void {
+  if (
+    reservation.tenantId === command.tenantId &&
+    reservation.branchId === command.expectedBranchId &&
+    reservation.productId === command.expectedProductId &&
+    reservation.sourceType === command.expectedSourceType &&
+    reservation.sourceId === command.expectedSourceId &&
+    reservation.status === INVENTORY_RESERVATION_STATUSES.ACTIVE
+  ) {
+    return;
+  }
+
+  throw GarageOsApiException.workflowTransitionBlocked(
+    'Inventory transfer reservation does not match the transfer line context.',
+    [
+      {
+        field: 'reservation_id',
+        code: 'transfer_reservation_mismatch',
+        message: 'Reservation does not match the expected transfer branch, product, or source.',
+      },
+    ],
+  );
 }
 
 function buildFifoReservationAllocations(

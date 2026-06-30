@@ -64,6 +64,9 @@ const USER_ID = '33333333-3333-4333-8333-333333333333';
 const PRODUCT_ID = '55555555-5555-4555-8555-555555555555';
 const SOURCE_ID = '66666666-6666-4666-8666-666666666666';
 const RESERVATION_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const OTHER_BRANCH_ID = '22222222-2222-4222-8222-222222222223';
+const OTHER_PRODUCT_ID = '55555555-5555-4555-8555-555555555556';
+const OTHER_SOURCE_ID = '66666666-6666-4666-8666-666666666667';
 const RELEASED_AT = new Date('2026-06-28T13:00:00.000Z');
 const CONSUMED_AT = new Date('2026-06-28T14:00:00.000Z');
 const FIFO_LAYER_ID_1 = '77777777-7777-4777-8777-777777777777';
@@ -1119,6 +1122,419 @@ describe('InventoryReservationService', () => {
     });
   });
 
+  it('fully receives an inventory transfer reservation and creates source transfer-out effects', async () => {
+    const {
+      service,
+      stockStore,
+      reservationStore,
+      fifoLayerStore,
+      fifoReservationAllocationStore,
+      fifoConsumptionStore,
+      ledgerStore,
+    } = createService();
+
+    setupTransferReservationForConsumption({
+      stockStore,
+      reservationStore,
+      fifoLayerStore,
+      fifoReservationAllocationStore,
+    });
+
+    const result = await service.consumeInventoryTransferReservationInTransaction(
+      createTransferConsumptionCommand({ receivedQuantity: '5.000' }),
+      {} as DatabaseQueryClient,
+    );
+
+    expect(reservationStore.lockActiveReservationInputs).toEqual([
+      {
+        tenantId: TENANT_ID,
+        reservationId: RESERVATION_ID,
+      },
+    ]);
+    expect(
+      fifoReservationAllocationStore.lockActiveAllocationsByReservationForUpdateInputs,
+    ).toEqual([
+      {
+        tenantId: TENANT_ID,
+        reservationId: RESERVATION_ID,
+      },
+    ]);
+    expect(stockStore.decrementOnHandAndReservedQuantityInputs).toEqual([
+      {
+        tenantId: TENANT_ID,
+        branchId: BRANCH_ID,
+        productId: PRODUCT_ID,
+        quantityConsumed: '5.000',
+      },
+    ]);
+    expect(fifoLayerStore.decrementRemainingQuantityInputs).toEqual([
+      {
+        tenantId: TENANT_ID,
+        fifoLayerId: FIFO_LAYER_ID_1,
+        quantityConsumed: '2.000',
+      },
+      {
+        tenantId: TENANT_ID,
+        fifoLayerId: FIFO_LAYER_ID_2,
+        quantityConsumed: '3.000',
+      },
+    ]);
+    expect(fifoConsumptionStore.createConsumptionInputs).toMatchObject([
+      {
+        fifoLayerId: FIFO_LAYER_ID_1,
+        quantityConsumed: '2.000',
+        unitCost: '10.00',
+        totalCost: '20.00',
+        sourceType: 'inventory_transfer_line',
+        sourceId: SOURCE_ID,
+      },
+      {
+        fifoLayerId: FIFO_LAYER_ID_2,
+        quantityConsumed: '3.000',
+        unitCost: '12.00',
+        totalCost: '36.00',
+        sourceType: 'inventory_transfer_line',
+        sourceId: SOURCE_ID,
+      },
+    ]);
+    expect(fifoReservationAllocationStore.markActiveAllocationsConsumedByReservationInputs).toEqual(
+      [
+        {
+          tenantId: TENANT_ID,
+          reservationId: RESERVATION_ID,
+          allocationIds: [
+            'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+            'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+          ],
+          consumedAt: CONSUMED_AT,
+        },
+      ],
+    );
+    expect(reservationStore.markReservationConsumedInputs).toEqual([
+      {
+        tenantId: TENANT_ID,
+        reservationId: RESERVATION_ID,
+        consumedAt: CONSUMED_AT,
+      },
+    ]);
+    expect(ledgerStore.createLedgerEntryInputs).toMatchObject([
+      {
+        tenantId: TENANT_ID,
+        branchId: BRANCH_ID,
+        productId: PRODUCT_ID,
+        transactionType: INVENTORY_TRANSACTION_TYPES.INVENTORY_TRANSFER_OUT,
+        quantityDeltaOnHand: '-5.000',
+        quantityDeltaReserved: '-5.000',
+        totalCost: '56.00',
+        sourceType: 'inventory_transfer_line',
+        sourceId: SOURCE_ID,
+      },
+    ]);
+    expect(result.reservation).toMatchObject({ status: 'consumed', reservedQuantity: '0.000' });
+    expect(result.fifoAllocations).toMatchObject([
+      { fifoLayerId: FIFO_LAYER_ID_1, status: 'consumed' },
+      { fifoLayerId: FIFO_LAYER_ID_2, status: 'consumed' },
+    ]);
+    expect(result.sentQuantity).toBe('5.000');
+    expect(result.receivedQuantity).toBe('5.000');
+    expect(result.varianceQuantity).toBe('0.000');
+    expect(result.transferOutCost).toBe('56.00');
+    expect(result.varianceLossCost).toBe('0.00');
+  });
+
+  it('under-receives an inventory transfer and splits transfer-out and variance-loss cost', async () => {
+    const {
+      service,
+      stockStore,
+      reservationStore,
+      fifoLayerStore,
+      fifoReservationAllocationStore,
+      ledgerStore,
+    } = createService();
+
+    setupTransferReservationForConsumption({
+      stockStore,
+      reservationStore,
+      fifoLayerStore,
+      fifoReservationAllocationStore,
+    });
+
+    const result = await service.consumeInventoryTransferReservationInTransaction(
+      createTransferConsumptionCommand({ receivedQuantity: '3.000' }),
+      {} as DatabaseQueryClient,
+    );
+
+    expect(stockStore.decrementOnHandAndReservedQuantityInputs).toEqual([
+      expect.objectContaining({ quantityConsumed: '5.000' }),
+    ]);
+    expect(ledgerStore.createLedgerEntryInputs).toMatchObject([
+      {
+        transactionType: INVENTORY_TRANSACTION_TYPES.INVENTORY_TRANSFER_OUT,
+        quantityDeltaOnHand: '-3.000',
+        quantityDeltaReserved: '-3.000',
+        totalCost: '32.00',
+      },
+      {
+        transactionType: INVENTORY_TRANSACTION_TYPES.INVENTORY_TRANSFER_VARIANCE_LOSS,
+        quantityDeltaOnHand: '-2.000',
+        quantityDeltaReserved: '-2.000',
+        totalCost: '24.00',
+      },
+    ]);
+    expect(result.varianceQuantity).toBe('2.000');
+    expect(result.transferOutCost).toBe('32.00');
+    expect(result.varianceLossCost).toBe('24.00');
+  });
+
+  it('treats zero received inventory transfer quantity as full variance loss', async () => {
+    const {
+      service,
+      stockStore,
+      reservationStore,
+      fifoLayerStore,
+      fifoReservationAllocationStore,
+      ledgerStore,
+    } = createService();
+
+    setupTransferReservationForConsumption({
+      stockStore,
+      reservationStore,
+      fifoLayerStore,
+      fifoReservationAllocationStore,
+    });
+
+    const result = await service.consumeInventoryTransferReservationInTransaction(
+      createTransferConsumptionCommand({ receivedQuantity: '0' }),
+      {} as DatabaseQueryClient,
+    );
+
+    expect(stockStore.decrementOnHandAndReservedQuantityInputs).toEqual([
+      expect.objectContaining({ quantityConsumed: '5.000' }),
+    ]);
+    expect(ledgerStore.createLedgerEntryInputs).toMatchObject([
+      {
+        transactionType: INVENTORY_TRANSACTION_TYPES.INVENTORY_TRANSFER_VARIANCE_LOSS,
+        quantityDeltaOnHand: '-5.000',
+        quantityDeltaReserved: '-5.000',
+        totalCost: '56.00',
+      },
+    ]);
+    expect(ledgerStore.createLedgerEntryInputs).toHaveLength(1);
+    expect(result.receivedQuantity).toBe('0.000');
+    expect(result.varianceQuantity).toBe('5.000');
+    expect(result.transferOutCost).toBe('0.00');
+    expect(result.varianceLossCost).toBe('56.00');
+  });
+
+  it('uses deterministic FIFO order for multi-layer transfer received and missing cost split', async () => {
+    const {
+      service,
+      stockStore,
+      reservationStore,
+      fifoLayerStore,
+      fifoReservationAllocationStore,
+    } = createService();
+
+    setupTransferReservationForConsumption({
+      stockStore,
+      reservationStore,
+      fifoLayerStore,
+      fifoReservationAllocationStore,
+    });
+
+    const result = await service.consumeInventoryTransferReservationInTransaction(
+      createTransferConsumptionCommand({ receivedQuantity: '2.500' }),
+      {} as DatabaseQueryClient,
+    );
+
+    expect(result.fifoConsumptions).toMatchObject([
+      {
+        fifoLayerId: FIFO_LAYER_ID_1,
+        quantityConsumed: '2.000',
+        unitCost: '10.00',
+        totalCost: '20.00',
+      },
+      {
+        fifoLayerId: FIFO_LAYER_ID_2,
+        quantityConsumed: '3.000',
+        unitCost: '12.00',
+        totalCost: '36.00',
+      },
+    ]);
+    expect(result.transferOutCost).toBe('26.00');
+    expect(result.varianceLossCost).toBe('30.00');
+    expect(result.varianceQuantity).toBe('2.500');
+  });
+
+  it.each([
+    ['wrong expectedBranchId', { expectedBranchId: OTHER_BRANCH_ID }],
+    ['wrong expectedProductId', { expectedProductId: OTHER_PRODUCT_ID }],
+    ['wrong expectedSourceType', { expectedSourceType: 'job_order_line' }],
+    ['wrong expectedSourceId', { expectedSourceId: OTHER_SOURCE_ID }],
+  ])('blocks transfer reservation mismatch before mutation: %s', async (_caseName, overrides) => {
+    const {
+      service,
+      stockStore,
+      reservationStore,
+      fifoLayerStore,
+      fifoReservationAllocationStore,
+      fifoConsumptionStore,
+      ledgerStore,
+    } = createService();
+
+    setupTransferReservationForConsumption({
+      stockStore,
+      reservationStore,
+      fifoLayerStore,
+      fifoReservationAllocationStore,
+    });
+
+    await expect(
+      service.consumeInventoryTransferReservationInTransaction(
+        createTransferConsumptionCommand(overrides),
+        {} as DatabaseQueryClient,
+      ),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.WORKFLOW_TRANSITION_BLOCKED,
+      details: [expect.objectContaining({ code: 'transfer_reservation_mismatch' })],
+    });
+
+    expectNoTransferConsumptionMutation({
+      stockStore,
+      reservationStore,
+      fifoLayerStore,
+      fifoReservationAllocationStore,
+      fifoConsumptionStore,
+      ledgerStore,
+    });
+  });
+
+  it('blocks unsupported transfer reservation source before mutation', async () => {
+    const {
+      service,
+      stockStore,
+      reservationStore,
+      fifoLayerStore,
+      fifoReservationAllocationStore,
+      fifoConsumptionStore,
+      ledgerStore,
+    } = createService();
+
+    setupTransferReservationForConsumption({
+      stockStore,
+      reservationStore,
+      fifoLayerStore,
+      fifoReservationAllocationStore,
+      reservationOverrides: { sourceType: 'job_order_line' },
+    });
+
+    await expect(
+      service.consumeInventoryTransferReservationInTransaction(
+        createTransferConsumptionCommand(),
+        {} as DatabaseQueryClient,
+      ),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.WORKFLOW_TRANSITION_BLOCKED,
+      details: [expect.objectContaining({ code: 'transfer_reservation_mismatch' })],
+    });
+
+    expectNoTransferConsumptionMutation({
+      stockStore,
+      reservationStore,
+      fifoLayerStore,
+      fifoReservationAllocationStore,
+      fifoConsumptionStore,
+      ledgerStore,
+    });
+  });
+
+  it('blocks transfer consumption when active FIFO allocations do not match sent quantity', async () => {
+    const {
+      service,
+      stockStore,
+      reservationStore,
+      fifoLayerStore,
+      fifoReservationAllocationStore,
+      fifoConsumptionStore,
+      ledgerStore,
+    } = createService();
+
+    setupTransferReservationForConsumption({
+      stockStore,
+      reservationStore,
+      fifoLayerStore,
+      fifoReservationAllocationStore,
+    });
+    fifoReservationAllocationStore.activeAllocations = [
+      createFifoReservationAllocationRecord({
+        id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        reservationId: RESERVATION_ID,
+        fifoLayerId: FIFO_LAYER_ID_1,
+        reservedQuantity: '4.000',
+        unitCostSnapshot: '10.00',
+      }),
+    ];
+
+    await expect(
+      service.consumeInventoryTransferReservationInTransaction(
+        createTransferConsumptionCommand(),
+        {} as DatabaseQueryClient,
+      ),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.FIFO_ALLOCATION_CONFLICT,
+      details: [expect.objectContaining({ code: 'fifo_allocation_quantity_mismatch' })],
+    });
+
+    expect(stockStore.decrementOnHandAndReservedQuantityInputs).toEqual([]);
+    expect(fifoLayerStore.decrementRemainingQuantityInputs).toEqual([]);
+    expect(fifoConsumptionStore.createConsumptionInputs).toEqual([]);
+    expect(reservationStore.markReservationConsumedInputs).toEqual([]);
+    expect(ledgerStore.createLedgerEntryInputs).toEqual([]);
+  });
+
+  it('rolls back transfer consumption effects when source stock cannot be decremented', async () => {
+    const {
+      service,
+      stockStore,
+      reservationStore,
+      fifoLayerStore,
+      fifoReservationAllocationStore,
+      fifoConsumptionStore,
+      ledgerStore,
+    } = createService();
+
+    setupTransferReservationForConsumption({
+      stockStore,
+      reservationStore,
+      fifoLayerStore,
+      fifoReservationAllocationStore,
+      decrementedStockAvailability: null,
+    });
+
+    await expect(
+      service.consumeInventoryTransferReservationInTransaction(
+        createTransferConsumptionCommand(),
+        {} as DatabaseQueryClient,
+      ),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.WORKFLOW_TRANSITION_BLOCKED,
+      details: [expect.objectContaining({ code: 'reservation_consumption_stock_conflict' })],
+    });
+
+    expect(reservationStore.activeReservation).toMatchObject({
+      status: 'active',
+      reservedQuantity: '5.000',
+    });
+    expect(fifoReservationAllocationStore.activeAllocations).toMatchObject([
+      { fifoLayerId: FIFO_LAYER_ID_1, status: 'active' },
+      { fifoLayerId: FIFO_LAYER_ID_2, status: 'active' },
+    ]);
+    expect(fifoLayerStore.decrementRemainingQuantityInputs).toEqual([]);
+    expect(fifoConsumptionStore.createConsumptionInputs).toEqual([]);
+    expect(reservationStore.markReservationConsumedInputs).toEqual([]);
+    expect(ledgerStore.createLedgerEntryInputs).toEqual([]);
+  });
+
   it('blocks consumption when reservation is missing or not active', async () => {
     const {
       service,
@@ -1365,6 +1781,104 @@ function createFifoReservationAllocationRecord(
     consumedAt: null,
     ...overrides,
   };
+}
+
+function createTransferConsumptionCommand(
+  overrides: Partial<
+    Parameters<InventoryReservationService['consumeInventoryTransferReservationInTransaction']>[0]
+  > = {},
+): Parameters<InventoryReservationService['consumeInventoryTransferReservationInTransaction']>[0] {
+  return {
+    tenantId: TENANT_ID,
+    reservationId: RESERVATION_ID,
+    receivedQuantity: '5.000',
+    expectedBranchId: BRANCH_ID,
+    expectedProductId: PRODUCT_ID,
+    expectedSourceType: 'inventory_transfer_line',
+    expectedSourceId: SOURCE_ID,
+    consumedAt: CONSUMED_AT,
+    consumedByUserId: USER_ID,
+    ...overrides,
+  };
+}
+
+function setupTransferReservationForConsumption(input: {
+  readonly stockStore: FakeStockBalanceStore;
+  readonly reservationStore: FakeInventoryReservationStore;
+  readonly fifoLayerStore: FakeFifoLayerStore;
+  readonly fifoReservationAllocationStore: FakeFifoReservationAllocationStore;
+  readonly reservationOverrides?: Partial<InventoryReservationRecord>;
+  readonly decrementedStockAvailability?: StockAvailabilityRecord | null;
+}): void {
+  input.reservationStore.activeReservation = createInventoryReservationRecord({
+    id: RESERVATION_ID,
+    branchId: BRANCH_ID,
+    productId: PRODUCT_ID,
+    sourceType: 'inventory_transfer_line',
+    sourceId: SOURCE_ID,
+    requestedQuantity: '5.000',
+    reservedQuantity: '5.000',
+    status: 'active',
+    ...input.reservationOverrides,
+  });
+  input.stockStore.decrementedConsumedStockAvailability =
+    input.decrementedStockAvailability === undefined
+      ? createStockAvailabilityRecord({
+          onHandQty: '5.000',
+          reservedQty: '0.000',
+          availableQty: '5.000',
+          lockVersion: 3,
+        })
+      : input.decrementedStockAvailability;
+  input.fifoLayerStore.allocationCandidates = [
+    createFifoLayerAllocationCandidateRecord({
+      id: FIFO_LAYER_ID_1,
+      remainingQuantity: '2.000',
+      unitCost: '10.00',
+    }),
+    createFifoLayerAllocationCandidateRecord({
+      id: FIFO_LAYER_ID_2,
+      remainingQuantity: '3.000',
+      unitCost: '12.00',
+    }),
+  ];
+  input.fifoReservationAllocationStore.activeAllocations = [
+    createFifoReservationAllocationRecord({
+      id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      reservationId: RESERVATION_ID,
+      fifoLayerId: FIFO_LAYER_ID_1,
+      reservedQuantity: '2.000',
+      unitCostSnapshot: '10.00',
+    }),
+    createFifoReservationAllocationRecord({
+      id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      reservationId: RESERVATION_ID,
+      fifoLayerId: FIFO_LAYER_ID_2,
+      reservedQuantity: '3.000',
+      unitCostSnapshot: '12.00',
+    }),
+  ];
+}
+
+function expectNoTransferConsumptionMutation(input: {
+  readonly stockStore: FakeStockBalanceStore;
+  readonly reservationStore: FakeInventoryReservationStore;
+  readonly fifoLayerStore: FakeFifoLayerStore;
+  readonly fifoReservationAllocationStore: FakeFifoReservationAllocationStore;
+  readonly fifoConsumptionStore: FakeFifoConsumptionStore;
+  readonly ledgerStore: FakeInventoryLedgerStore;
+}): void {
+  expect(input.stockStore.decrementOnHandAndReservedQuantityInputs).toEqual([]);
+  expect(
+    input.fifoReservationAllocationStore.lockActiveAllocationsByReservationForUpdateInputs,
+  ).toEqual([]);
+  expect(input.fifoLayerStore.decrementRemainingQuantityInputs).toEqual([]);
+  expect(
+    input.fifoReservationAllocationStore.markActiveAllocationsConsumedByReservationInputs,
+  ).toEqual([]);
+  expect(input.reservationStore.markReservationConsumedInputs).toEqual([]);
+  expect(input.fifoConsumptionStore.createConsumptionInputs).toEqual([]);
+  expect(input.ledgerStore.createLedgerEntryInputs).toEqual([]);
 }
 
 class FakeTransactionRunner implements DatabaseTransactionRunner {
