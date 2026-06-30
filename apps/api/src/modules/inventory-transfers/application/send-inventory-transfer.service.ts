@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 
 import { GarageOsApiException } from '../../../shared/api/api-exception';
+import { AUDIT_ACTOR_TYPES, AuditService } from '../../../shared/audit/audit.service';
 import { assertBranchAccessAllowed } from '../../../shared/authorization/branch-access';
 import {
   assertTenantLifecycleAccess,
@@ -44,6 +45,7 @@ export class SendInventoryTransferService {
     private readonly inventoryReservationService: InventoryReservationService,
     @Inject(API_TRANSACTION_RUNNER)
     private readonly transactionRunner: DatabaseTransactionRunner,
+    private readonly auditService: AuditService,
   ) {}
 
   getIdempotencyExpiresAt(now: Date): Date {
@@ -209,6 +211,40 @@ export class SendInventoryTransferService {
         },
         transaction,
       );
+
+      await this.auditService.record({
+        tenantId: context.tenantId,
+        branchId: transfer.sourceBranchId,
+        actorUserId: context.actorUserId,
+        actorType: AUDIT_ACTOR_TYPES.TENANT_USER,
+        supportAccessSessionId: context.platformSupportAccessSessionId,
+        action: 'inventory_transfers.sent',
+        entityType: 'inventory_transfer',
+        entityId: transfer.id,
+        beforeJson: {
+          status: INVENTORY_TRANSFER_STATUSES.PENDING,
+          source_branch_id: transfer.sourceBranchId,
+          destination_branch_id: transfer.destinationBranchId,
+        },
+        afterJson: {
+          status: INVENTORY_TRANSFER_STATUSES.IN_TRANSIT,
+          source_branch_id: transfer.sourceBranchId,
+          destination_branch_id: transfer.destinationBranchId,
+          sent_line_quantities: sentLines.map((line) => ({
+            line_id: line.line_id,
+            product_id: line.product_id,
+            sent_quantity: line.sent_quantity,
+          })),
+          released_reservation_quantities: releasedReservations.map((release) => ({
+            line_id: release.line_id,
+            product_id: release.product_id,
+            reservation_id: release.reservation_id,
+            released_quantity: release.released_quantity,
+          })),
+        },
+        createdAt: now,
+        client: transaction,
+      });
 
       return toSendInventoryTransferResponse(sentTransfer, sentLines, releasedReservations);
     });

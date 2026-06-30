@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 
+import { AuditModule } from '../../shared/audit/audit.module';
 import { DatabaseModule } from '../../shared/database/database.module';
 import { IdempotencyModule } from '../../shared/idempotency/idempotency.module';
 import { AuthModule } from '../auth/auth.module';
@@ -15,6 +16,7 @@ import { INVENTORY_TRANSFER_PROVIDERS } from './inventory-transfer.providers';
 
 @Module({
   imports: [
+    AuditModule,
     AuthModule,
     BranchModule,
     DatabaseModule,

@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import type { RecordAuditLogInput } from '../../../shared/audit/audit.service';
+import { AuditService } from '../../../shared/audit/audit.service';
 import type { DatabaseQueryClient } from '../../../shared/database/database-client';
 import type { DatabaseTransactionRunner } from '../../../shared/database/database-transaction';
 import type {
@@ -160,17 +162,162 @@ describe('SendInventoryTransferService', () => {
     ]);
     expect(response.ledger_entry_ids).toEqual(['99999999-9999-4999-8999-999999999999']);
   });
+
+  it('writes an audit log in the send transaction with safe status, line, and release values', async () => {
+    const fixture = createFixture();
+
+    await fixture.service.sendPending(
+      transferId,
+      createRequest({ sent_quantity: '3.000' }),
+      createTenantSession(['inventory.transfer.send']),
+    );
+
+    expect(fixture.auditService.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId,
+        branchId: sourceBranchId,
+        actorUserId: userId,
+        actorType: 'tenant_user',
+        supportAccessSessionId: null,
+        action: 'inventory_transfers.sent',
+        entityType: 'inventory_transfer',
+        entityId: transferId,
+        beforeJson: {
+          status: 'pending',
+          source_branch_id: sourceBranchId,
+          destination_branch_id: destinationBranchId,
+        },
+        afterJson: {
+          status: 'in_transit',
+          source_branch_id: sourceBranchId,
+          destination_branch_id: destinationBranchId,
+          sent_line_quantities: [
+            {
+              line_id: lineId,
+              product_id: productId,
+              sent_quantity: '3.000',
+            },
+          ],
+          released_reservation_quantities: [
+            {
+              line_id: lineId,
+              product_id: productId,
+              reservation_id: reservationId,
+              released_quantity: '2.000',
+            },
+          ],
+        },
+        client: fixture.transactionRunner.transactionClient,
+      }),
+    );
+  });
+
+  it('blocks read-only tenants before opening a transaction', async () => {
+    const fixture = createFixture();
+
+    await expect(
+      fixture.service.sendPending(
+        transferId,
+        createRequest(),
+        createTenantSession(['inventory.transfer.send'], { tenantStatus: 'read_only' }),
+      ),
+    ).rejects.toMatchObject({
+      code: 'subscription_access_blocked',
+    });
+
+    expect(fixture.transactionRunner.runCount).toBe(0);
+    expect(fixture.store.sentQuantityInputs).toEqual([]);
+  });
+
+  it('blocks missing source branch access before mutation', async () => {
+    const fixture = createFixture();
+
+    await expect(
+      fixture.service.sendPending(
+        transferId,
+        createRequest(),
+        createTenantSession(['inventory.transfer.send'], {
+          branches: [{ id: destinationBranchId }],
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: 'branch_access_denied',
+    });
+
+    expect(fixture.reservationService.releaseInventoryInTransaction).not.toHaveBeenCalled();
+    expect(fixture.store.sentQuantityInputs).toEqual([]);
+  });
+
+  it('blocks missing destination branch access before mutation', async () => {
+    const fixture = createFixture();
+
+    await expect(
+      fixture.service.sendPending(
+        transferId,
+        createRequest(),
+        createTenantSession(['inventory.transfer.send'], {
+          branches: [{ id: sourceBranchId }],
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: 'branch_access_denied',
+    });
+
+    expect(fixture.reservationService.releaseInventoryInTransaction).not.toHaveBeenCalled();
+    expect(fixture.store.sentQuantityInputs).toEqual([]);
+  });
+
+  it('blocks non-active reservations before line status update', async () => {
+    const fixture = createFixture();
+    fixture.reservationService.assertActiveReservationInTransaction.mockRejectedValueOnce({
+      code: 'workflow_transition_blocked',
+      details: [{ code: 'reservation_not_active' }],
+    });
+
+    await expect(
+      fixture.service.sendPending(
+        transferId,
+        createRequest(),
+        createTenantSession(['inventory.transfer.send']),
+      ),
+    ).rejects.toMatchObject({
+      code: 'workflow_transition_blocked',
+      details: [expect.objectContaining({ code: 'reservation_not_active' })],
+    });
+
+    expect(fixture.store.sentQuantityInputs).toEqual([]);
+  });
+
+  it('surfaces status conflicts from updateTransferStatusToInTransit', async () => {
+    const fixture = createFixture({ inTransitResult: null });
+
+    await expect(
+      fixture.service.sendPending(
+        transferId,
+        createRequest(),
+        createTenantSession(['inventory.transfer.send']),
+      ),
+    ).rejects.toMatchObject({
+      code: 'workflow_transition_blocked',
+      details: [expect.objectContaining({ code: 'transfer_status_conflict' })],
+    });
+
+    expect(fixture.store.insertStatusEventInput).toBeNull();
+    expect(fixture.auditService.record).not.toHaveBeenCalled();
+  });
 });
 
 function createFixture(
   options: {
     transferStatus?: InventoryTransferRecord['status'];
     lines?: readonly InventoryTransferLineRecord[];
+    inTransitResult?: InventoryTransferRecord | null;
   } = {},
 ) {
   const store = new FakeInventoryTransferStore(
     options.transferStatus ?? 'pending',
     options.lines ?? [createLine()],
+    options.inTransitResult,
   );
   const productStore = new FakeProductStore();
   const reservationService = {
@@ -182,18 +329,52 @@ function createFixture(
     assertActiveReservationInTransaction: ReturnType<typeof vi.fn>;
     releaseInventoryInTransaction: ReturnType<typeof vi.fn>;
   };
-  const transactionRunner: DatabaseTransactionRunner = {
-    runInTransaction: async (work) => work({} as DatabaseQueryClient),
+  const transactionClient = {} as DatabaseQueryClient;
+  const trackedTransactionRunner = {
+    runCount: 0,
+    transactionClient,
+    runInTransaction: async (work) => {
+      trackedTransactionRunner.runCount += 1;
+
+      return work(transactionClient);
+    },
+  } satisfies DatabaseTransactionRunner & {
+    runCount: number;
+    transactionClient: DatabaseQueryClient;
   };
+  const auditService = {
+    record: vi.fn(async (input: RecordAuditLogInput) => ({
+      id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      tenantId: input.tenantId ?? null,
+      actorUserId: input.actorUserId ?? null,
+      actorType: input.actorType,
+      supportAccessSessionId: input.supportAccessSessionId ?? null,
+      action: input.action,
+      entityType: input.entityType,
+      entityId: input.entityId ?? null,
+      branchId: input.branchId ?? null,
+      beforeJson: input.beforeJson ?? null,
+      afterJson: input.afterJson ?? null,
+      metadataJson: input.metadataJson ?? null,
+      reason: input.reason ?? null,
+      ipAddress: input.ipAddress ?? null,
+      userAgent: input.userAgent ?? null,
+      retentionClass: input.retentionClass ?? 'standard_3_year',
+      createdAt: input.createdAt ?? new Date(),
+    })),
+  } as unknown as AuditService & { record: ReturnType<typeof vi.fn> };
 
   return {
     store,
     reservationService,
+    transactionRunner: trackedTransactionRunner,
+    auditService,
     service: new SendInventoryTransferService(
       store,
       productStore,
       reservationService,
-      transactionRunner,
+      trackedTransactionRunner,
+      auditService,
     ),
   };
 }
@@ -206,6 +387,7 @@ class FakeInventoryTransferStore extends InventoryTransferStore {
   constructor(
     private readonly transferStatus: InventoryTransferRecord['status'],
     private readonly lines: readonly InventoryTransferLineRecord[],
+    private readonly inTransitResult: InventoryTransferRecord | null | undefined,
   ) {
     super();
   }
@@ -229,6 +411,10 @@ class FakeInventoryTransferStore extends InventoryTransferStore {
 
   async updateTransferStatusToInTransit(input: UpdateTransferStatusToInTransitInput) {
     this.inTransitInput = input;
+
+    if (this.inTransitResult !== undefined) {
+      return this.inTransitResult;
+    }
 
     return {
       ...createTransfer('in_transit'),
@@ -395,6 +581,7 @@ function createTenantSession(
   permissions: readonly string[],
   options: {
     tenantStatus?: TenantStatus;
+    branches?: readonly { readonly id: string }[];
   } = {},
 ): TenantContextAuthenticatedSession {
   return {
@@ -411,7 +598,7 @@ function createTenantSession(
       status: options.tenantStatus ?? 'active',
     },
     effective_permissions: permissions,
-    branches: [{ id: sourceBranchId }, { id: destinationBranchId }],
+    branches: options.branches ?? [{ id: sourceBranchId }, { id: destinationBranchId }],
     tenant_wide_branch_access: false,
     subscription_status_source: 'system_computed',
   };
