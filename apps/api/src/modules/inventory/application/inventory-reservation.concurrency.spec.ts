@@ -27,7 +27,9 @@ import {
   type CreateFifoReservationAllocationInput,
   type FifoReservationAllocationRecord,
   type LockFifoReservationAllocationsInput,
+  type ReleaseFifoReservationAllocationInput,
   type ReleaseFifoReservationAllocationsInput,
+  type UpdateFifoReservationAllocationQuantityInput,
 } from './fifo-reservation-allocation.store';
 import { InventoryLedgerService } from './inventory-ledger.service';
 import {
@@ -44,6 +46,7 @@ import {
   type CreateInventoryReservationInput,
   type InventoryReservationRecord,
   type LockInventoryReservationInput,
+  type PartiallyReleaseInventoryReservationInput,
   type ReleaseInventoryReservationInput,
 } from './inventory-reservation.store';
 import { InventoryStockBalancesService } from './inventory-stock-balances.service';
@@ -61,6 +64,7 @@ import {
   FIFO_FIXTURE_EXPECTED,
   FIFO_FIXTURE_IDS,
   createDeterministicActiveFifoReservationAllocations,
+  createDeterministicFifoReservationAllocationRecord,
   createDeterministicFifoLayerAllocationCandidateRecord,
   createDeterministicFifoLayerAllocationCandidates,
   createDeterministicInventoryReservationRecord,
@@ -288,6 +292,143 @@ describe('InventoryReservationService concurrency', () => {
     });
     expect(fifoLayerStore.getRemainingQuantity(FIFO_FIXTURE_IDS.FIFO_LAYER_OLDEST)).toBe('0.000');
     expect(fifoLayerStore.getRemainingQuantity(FIFO_FIXTURE_IDS.FIFO_LAYER_MIDDLE)).toBe('4.500');
+  });
+
+  it('partially releases transfer reservations from newest FIFO allocations and writes one release ledger entry', async () => {
+    const newestAllocationId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb3';
+    const { service, stockStore, allocationStore, ledgerStore } = createStatefulService({
+      stockAvailability: createDeterministicStockAvailabilityRecord({
+        onHandQty: '8.000',
+        reservedQty: '5.000',
+        availableQty: '3.000',
+      }),
+      activeReservation: createDeterministicInventoryReservationRecord({
+        sourceType: 'inventory_transfer_line',
+        reservedQuantity: '5.000',
+      }),
+      activeAllocations: [
+        createDeterministicFifoReservationAllocationRecord({
+          reservedQuantity: '1.500',
+        }),
+        createDeterministicFifoReservationAllocationRecord({
+          id: FIFO_FIXTURE_IDS.FIFO_ALLOCATION_MIDDLE,
+          fifoLayerId: FIFO_FIXTURE_IDS.FIFO_LAYER_MIDDLE,
+          reservedQuantity: '1.500',
+          unitCostSnapshot: FIFO_FIXTURE_EXPECTED.MIDDLE_UNIT_COST,
+        }),
+        createDeterministicFifoReservationAllocationRecord({
+          id: newestAllocationId,
+          fifoLayerId: FIFO_FIXTURE_IDS.FIFO_LAYER_NEWEST,
+          reservedQuantity: '2.000',
+          unitCostSnapshot: FIFO_FIXTURE_EXPECTED.NEWEST_UNIT_COST,
+        }),
+      ],
+    });
+
+    const result = await service.releaseInventory({
+      tenantId: FIFO_FIXTURE_IDS.TENANT,
+      reservationId: FIFO_FIXTURE_IDS.RESERVATION,
+      releaseQuantity: '2.000',
+      transactionType: INVENTORY_TRANSACTION_TYPES.INVENTORY_TRANSFER_RESERVATION_RELEASE,
+      releasedAt: FIFO_FIXTURE_DATES.RELEASED_AT,
+      releasedByUserId: FIFO_FIXTURE_IDS.USER,
+    });
+
+    expect(result.reservation).toMatchObject({
+      status: INVENTORY_RESERVATION_STATUSES.ACTIVE,
+      reservedQuantity: '3.000',
+      releasedAt: null,
+    });
+    expect(stockStore.getAvailability()).toMatchObject({
+      onHandQty: '8.000',
+      reservedQty: '3.000',
+      availableQty: '5.000',
+    });
+    expect(ledgerStore.createLedgerEntryInputs).toHaveLength(1);
+    expect(ledgerStore.createLedgerEntryInputs[0]).toMatchObject({
+      transactionType: INVENTORY_TRANSACTION_TYPES.INVENTORY_TRANSFER_RESERVATION_RELEASE,
+      quantityDeltaOnHand: '0.000',
+      quantityDeltaReserved: '-2.000',
+      sourceType: 'inventory_transfer_line',
+      sourceId: FIFO_FIXTURE_IDS.JOB_ORDER_PART_LINE_SOURCE,
+    });
+    expect(result.fifoAllocations).toMatchObject([
+      {
+        id: newestAllocationId,
+        fifoLayerId: FIFO_FIXTURE_IDS.FIFO_LAYER_NEWEST,
+        reservedQuantity: '2.000',
+        status: FIFO_ALLOCATION_STATUSES.RELEASED,
+        releasedAt: FIFO_FIXTURE_DATES.RELEASED_AT,
+      },
+    ]);
+    expect(allocationStore.listAllocations()).toMatchObject([
+      {
+        id: FIFO_FIXTURE_IDS.FIFO_ALLOCATION_OLDEST,
+        reservedQuantity: '1.500',
+        status: FIFO_ALLOCATION_STATUSES.ACTIVE,
+      },
+      {
+        id: FIFO_FIXTURE_IDS.FIFO_ALLOCATION_MIDDLE,
+        reservedQuantity: '1.500',
+        status: FIFO_ALLOCATION_STATUSES.ACTIVE,
+      },
+      {
+        id: newestAllocationId,
+        status: FIFO_ALLOCATION_STATUSES.RELEASED,
+      },
+    ]);
+  });
+
+  it('rolls back stock, reservation, FIFO allocation, and ledger changes when partial release conflicts', async () => {
+    const { service, stockStore, reservationStore, allocationStore, ledgerStore } =
+      createStatefulService({
+        stockAvailability: createDeterministicStockAvailabilityRecord({
+          onHandQty: '5.000',
+          reservedQty: '5.000',
+          availableQty: '0.000',
+        }),
+        activeReservation: createDeterministicInventoryReservationRecord({
+          reservedQuantity: '5.000',
+        }),
+        activeAllocations: [
+          createDeterministicFifoReservationAllocationRecord({
+            reservedQuantity: '1.000',
+          }),
+        ],
+      });
+
+    await expect(
+      service.releaseInventory({
+        tenantId: FIFO_FIXTURE_IDS.TENANT,
+        reservationId: FIFO_FIXTURE_IDS.RESERVATION,
+        releaseQuantity: '2.000',
+        transactionType: INVENTORY_TRANSACTION_TYPES.INVENTORY_TRANSFER_RESERVATION_RELEASE,
+        releasedAt: FIFO_FIXTURE_DATES.RELEASED_AT,
+        releasedByUserId: FIFO_FIXTURE_IDS.USER,
+      }),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.FIFO_ALLOCATION_CONFLICT,
+      details: [expect.objectContaining({ code: 'insufficient_fifo_allocation_quantity' })],
+    });
+
+    expect(stockStore.getAvailability()).toMatchObject({
+      onHandQty: '5.000',
+      reservedQty: '5.000',
+      availableQty: '0.000',
+    });
+    expect(reservationStore.getReservation(FIFO_FIXTURE_IDS.RESERVATION)).toMatchObject({
+      reservedQuantity: '5.000',
+      status: INVENTORY_RESERVATION_STATUSES.ACTIVE,
+    });
+    expect(allocationStore.listAllocations()).toMatchObject([
+      {
+        id: FIFO_FIXTURE_IDS.FIFO_ALLOCATION_OLDEST,
+        reservedQuantity: '1.000',
+        status: FIFO_ALLOCATION_STATUSES.ACTIVE,
+        releasedAt: null,
+      },
+    ]);
+    expect(ledgerStore.createLedgerEntryInputs).toEqual([]);
   });
 });
 
@@ -702,6 +843,36 @@ class StatefulInventoryReservationStore
     return releasedReservation;
   }
 
+  async decrementActiveReservationQuantity(
+    input: PartiallyReleaseInventoryReservationInput,
+  ): Promise<InventoryReservationRecord | null> {
+    const reservation = this.reservationsById.get(input.reservationId);
+
+    if (
+      reservation === undefined ||
+      reservation.tenantId !== input.tenantId ||
+      reservation.status !== INVENTORY_RESERVATION_STATUSES.ACTIVE
+    ) {
+      return null;
+    }
+
+    const releaseUnits = parseQuantityUnits(input.releaseQuantity);
+    const reservedUnits = parseQuantityUnits(reservation.reservedQuantity);
+
+    if (reservedUnits <= releaseUnits) {
+      return null;
+    }
+
+    const updatedReservation: InventoryReservationRecord = {
+      ...reservation,
+      reservedQuantity: formatQuantityUnits(reservedUnits - releaseUnits),
+    };
+
+    this.reservationsById.set(input.reservationId, updatedReservation);
+
+    return updatedReservation;
+  }
+
   async markReservationConsumed(
     input: ConsumeInventoryReservationInput,
   ): Promise<InventoryReservationRecord | null> {
@@ -803,6 +974,53 @@ class StatefulFifoReservationAllocationStore
         allocation.reservationId === input.reservationId &&
         allocation.status === FIFO_ALLOCATION_STATUSES.ACTIVE,
     );
+  }
+
+  async updateActiveAllocationQuantity(
+    input: UpdateFifoReservationAllocationQuantityInput,
+  ): Promise<FifoReservationAllocationRecord | null> {
+    const allocation = this.allocationsById.get(input.allocationId);
+
+    if (
+      allocation === undefined ||
+      allocation.tenantId !== input.tenantId ||
+      allocation.status !== FIFO_ALLOCATION_STATUSES.ACTIVE
+    ) {
+      return null;
+    }
+
+    const updatedAllocation = {
+      ...allocation,
+      reservedQuantity: input.reservedQuantity,
+    };
+
+    this.allocationsById.set(input.allocationId, updatedAllocation);
+
+    return updatedAllocation;
+  }
+
+  async releaseActiveAllocation(
+    input: ReleaseFifoReservationAllocationInput,
+  ): Promise<FifoReservationAllocationRecord | null> {
+    const allocation = this.allocationsById.get(input.allocationId);
+
+    if (
+      allocation === undefined ||
+      allocation.tenantId !== input.tenantId ||
+      allocation.status !== FIFO_ALLOCATION_STATUSES.ACTIVE
+    ) {
+      return null;
+    }
+
+    const releasedAllocation = {
+      ...allocation,
+      status: FIFO_ALLOCATION_STATUSES.RELEASED,
+      releasedAt: input.releasedAt,
+    };
+
+    this.allocationsById.set(input.allocationId, releasedAllocation);
+
+    return releasedAllocation;
   }
 
   async markActiveAllocationsConsumedByReservation(

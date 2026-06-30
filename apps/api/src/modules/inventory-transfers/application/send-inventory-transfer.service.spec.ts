@@ -65,7 +65,7 @@ describe('SendInventoryTransferService', () => {
       code: 'workflow_transition_blocked',
       details: [expect.objectContaining({ code: 'transfer_not_pending' })],
     });
-    expect(fixture.reservationService.releaseInventoryInTransaction).not.toHaveBeenCalled();
+    expectNoSendMutation(fixture);
   });
 
   it('rejects missing transfer lines', async () => {
@@ -226,7 +226,24 @@ describe('SendInventoryTransferService', () => {
     });
 
     expect(fixture.transactionRunner.runCount).toBe(0);
-    expect(fixture.store.sentQuantityInputs).toEqual([]);
+    expectNoSendMutation(fixture);
+  });
+
+  it('blocks suspended tenants for non-owners before opening a transaction', async () => {
+    const fixture = createFixture();
+
+    await expect(
+      fixture.service.sendPending(
+        transferId,
+        createRequest(),
+        createTenantSession(['inventory.transfer.send'], { tenantStatus: 'suspended' }),
+      ),
+    ).rejects.toMatchObject({
+      code: 'subscription_access_blocked',
+    });
+
+    expect(fixture.transactionRunner.runCount).toBe(0);
+    expectNoSendMutation(fixture);
   });
 
   it('blocks missing source branch access before mutation', async () => {
@@ -244,8 +261,7 @@ describe('SendInventoryTransferService', () => {
       code: 'branch_access_denied',
     });
 
-    expect(fixture.reservationService.releaseInventoryInTransaction).not.toHaveBeenCalled();
-    expect(fixture.store.sentQuantityInputs).toEqual([]);
+    expectNoSendMutation(fixture);
   });
 
   it('blocks missing destination branch access before mutation', async () => {
@@ -263,8 +279,7 @@ describe('SendInventoryTransferService', () => {
       code: 'branch_access_denied',
     });
 
-    expect(fixture.reservationService.releaseInventoryInTransaction).not.toHaveBeenCalled();
-    expect(fixture.store.sentQuantityInputs).toEqual([]);
+    expectNoSendMutation(fixture);
   });
 
   it('blocks non-active reservations before line status update', async () => {
@@ -285,7 +300,7 @@ describe('SendInventoryTransferService', () => {
       details: [expect.objectContaining({ code: 'reservation_not_active' })],
     });
 
-    expect(fixture.store.sentQuantityInputs).toEqual([]);
+    expectNoSendMutation(fixture);
   });
 
   it('surfaces status conflicts from updateTransferStatusToInTransit', async () => {
@@ -377,6 +392,14 @@ function createFixture(
       auditService,
     ),
   };
+}
+
+function expectNoSendMutation(fixture: ReturnType<typeof createFixture>): void {
+  expect(fixture.reservationService.releaseInventoryInTransaction).not.toHaveBeenCalled();
+  expect(fixture.store.sentQuantityInputs).toEqual([]);
+  expect(fixture.store.inTransitInput).toBeNull();
+  expect(fixture.store.insertStatusEventInput).toBeNull();
+  expect(fixture.auditService.record).not.toHaveBeenCalled();
 }
 
 class FakeInventoryTransferStore extends InventoryTransferStore {
