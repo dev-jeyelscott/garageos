@@ -21,6 +21,24 @@ export type PurchasePaymentTerms =
 export type PurchaseOrderBranchStatus = 'active' | 'inactive';
 export type PurchaseOrderSupplierStatus = 'active' | 'inactive';
 
+export interface PurchaseOrderRecord {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly branchId: string;
+  readonly branchName: string | null;
+  readonly supplierId: string;
+  readonly supplierName: string | null;
+  readonly purchaseOrderNumber: string;
+  readonly status: PurchaseOrderStatus;
+  readonly paymentTerms: PurchasePaymentTerms;
+  readonly orderDate: string;
+  readonly expectedReceiveDate: string | null;
+  readonly lockVersion: number;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+  readonly lines: readonly PurchaseOrderLineRecord[];
+}
+
 export interface PurchaseOrderForReceivingRecord {
   readonly id: string;
   readonly tenantId: string;
@@ -38,9 +56,12 @@ export interface PurchaseOrderLineRecord {
   readonly tenantId: string;
   readonly purchaseOrderId: string;
   readonly productId: string;
+  readonly productName?: string | null;
   readonly orderedQuantity: string;
   readonly receivedQuantity: string;
   readonly unitCost: string;
+  readonly lineTotal?: string;
+  readonly notes?: string | null;
 }
 
 export interface PurchaseReceivingRecord {

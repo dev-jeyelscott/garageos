@@ -224,7 +224,7 @@
 - [x] Harden purchase receiving validation coverage
 - [x] Add database-backed purchase receiving integration/concurrency tests
 - [x] Verify supplier lifecycle backend/API coverage
-- [ ] Implement purchase order draft/create/update workflow
+- [x] Implement purchase order draft/create/update workflow
 - [ ] Implement purchase order order/cancel/close workflow actions
 - [ ] Implement purchase receiving UI workflow
 - [ ] Implement supplier payment workflow

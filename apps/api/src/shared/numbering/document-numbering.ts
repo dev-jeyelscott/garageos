@@ -20,6 +20,14 @@ export function buildNextJobOrderNumber(
   return `JO-${datePart}-${String(nextSequence).padStart(6, '0')}`;
 }
 
+export function buildPurchaseOrderNumber(datePart: string, sequence: number): string {
+  if (!Number.isSafeInteger(sequence) || sequence < 1) {
+    throw new Error('Purchase order sequence must be a positive safe integer.');
+  }
+
+  return `PO-${datePart}-${String(sequence).padStart(6, '0')}`;
+}
+
 export function formatTenantBusinessDate(value: Date, timezone: string): string {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: timezone || DEFAULT_DOCUMENT_NUMBER_TIMEZONE,

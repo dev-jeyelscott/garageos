@@ -2,11 +2,54 @@ import type { DatabaseQueryClient } from '../../../shared/database/database-clie
 import type {
   PurchaseOrderForReceivingRecord,
   PurchaseOrderLineRecord,
+  PurchaseOrderRecord,
   PurchaseOrderStatus,
   PurchaseReceivingLineRecord,
   PurchaseReceivingRecord,
   SupplierPayableRecord,
 } from './purchase-order.records';
+
+export interface AllocatePurchaseOrderNumberInput {
+  readonly tenantId: string;
+  readonly datePart: string;
+}
+
+export interface CreateDraftPurchaseOrderLineInput {
+  readonly id: string;
+  readonly productId: string;
+  readonly orderedQuantity: string;
+  readonly unitCost: string;
+  readonly lineTotal: string;
+  readonly notes: string | null;
+}
+
+export interface CreateDraftPurchaseOrderInput {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly branchId: string;
+  readonly supplierId: string;
+  readonly purchaseOrderNumber: string;
+  readonly paymentTerms: string;
+  readonly orderDate: string;
+  readonly expectedReceiveDate: string | null;
+  readonly createdByUserId: string;
+  readonly createdAt: Date;
+  readonly lines: readonly CreateDraftPurchaseOrderLineInput[];
+}
+
+export interface UpdateDraftPurchaseOrderInput {
+  readonly tenantId: string;
+  readonly purchaseOrderId: string;
+  readonly branchId: string;
+  readonly supplierId: string;
+  readonly paymentTerms: string;
+  readonly orderDate: string;
+  readonly expectedReceiveDate: string | null;
+  readonly expectedLockVersion: number;
+  readonly updatedByUserId: string;
+  readonly updatedAt: Date;
+  readonly lines: readonly CreateDraftPurchaseOrderLineInput[];
+}
 
 export interface CreatePurchaseReceivingInput {
   readonly id: string;
@@ -64,6 +107,47 @@ export interface CreateSupplierPayableInput {
 }
 
 export abstract class PurchaseOrderStore {
+  getTenantTimezone(_tenantId: string, _client?: DatabaseQueryClient): Promise<string | null> {
+    throw new Error('PurchaseOrderStore.getTenantTimezone is not implemented.');
+  }
+
+  allocatePurchaseOrderNumber(
+    _input: AllocatePurchaseOrderNumberInput,
+    _client?: DatabaseQueryClient,
+  ): Promise<string | null> {
+    throw new Error('PurchaseOrderStore.allocatePurchaseOrderNumber is not implemented.');
+  }
+
+  findPurchaseOrderById(
+    _tenantId: string,
+    _purchaseOrderId: string,
+    _client?: DatabaseQueryClient,
+  ): Promise<PurchaseOrderRecord | null> {
+    throw new Error('PurchaseOrderStore.findPurchaseOrderById is not implemented.');
+  }
+
+  findPurchaseOrderByIdForUpdate(
+    _tenantId: string,
+    _purchaseOrderId: string,
+    _client?: DatabaseQueryClient,
+  ): Promise<PurchaseOrderRecord | null> {
+    throw new Error('PurchaseOrderStore.findPurchaseOrderByIdForUpdate is not implemented.');
+  }
+
+  createDraftPurchaseOrder(
+    _input: CreateDraftPurchaseOrderInput,
+    _client: DatabaseQueryClient,
+  ): Promise<PurchaseOrderRecord> {
+    throw new Error('PurchaseOrderStore.createDraftPurchaseOrder is not implemented.');
+  }
+
+  updateDraftPurchaseOrder(
+    _input: UpdateDraftPurchaseOrderInput,
+    _client: DatabaseQueryClient,
+  ): Promise<PurchaseOrderRecord | null> {
+    throw new Error('PurchaseOrderStore.updateDraftPurchaseOrder is not implemented.');
+  }
+
   abstract lockPurchaseOrderForReceiving(
     tenantId: string,
     purchaseOrderId: string,
