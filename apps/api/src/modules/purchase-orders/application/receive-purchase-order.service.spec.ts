@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import type { DatabaseQueryClient } from '../../../shared/database/database-client';
 import type { DatabaseTransactionRunner } from '../../../shared/database/database-transaction';
-import type { TenantContextAuthenticatedSession } from '../../../shared/tenant-context/tenant-context';
+import type {
+  TenantContextAuthenticatedSession,
+  TenantStatus,
+} from '../../../shared/tenant-context/tenant-context';
 import type { FifoLayerService } from '../../inventory/application/fifo-layer.service';
 import type { InventoryLedgerService } from '../../inventory/application/inventory-ledger.service';
 import type { InventoryStockBalancesService } from '../../inventory/application/inventory-stock-balances.service';
@@ -273,7 +276,14 @@ function buildService(store: FakePurchaseOrderStore): {
   };
 }
 
-function buildSession(): TenantContextAuthenticatedSession {
+interface BuildSessionOptions {
+  readonly tenantStatus?: TenantStatus;
+  readonly effectivePermissions?: TenantContextAuthenticatedSession['effective_permissions'];
+  readonly branches?: TenantContextAuthenticatedSession['branches'];
+  readonly tenantWideBranchAccess?: boolean;
+}
+
+function buildSession(options: BuildSessionOptions = {}): TenantContextAuthenticatedSession {
   return {
     actor: {
       user_id: USER_ID,
@@ -285,11 +295,11 @@ function buildSession(): TenantContextAuthenticatedSession {
     },
     tenant: {
       id: TENANT_ID,
-      status: 'active',
+      status: options.tenantStatus ?? 'active',
     },
-    effective_permissions: ['purchases.receive'],
-    branches: [{ id: BRANCH_ID }],
-    tenant_wide_branch_access: false,
+    effective_permissions: options.effectivePermissions ?? ['purchases.receive'],
+    branches: options.branches ?? [{ id: BRANCH_ID }],
+    tenant_wide_branch_access: options.tenantWideBranchAccess ?? false,
     subscription_status_source: 'system_computed',
   };
 }
@@ -319,6 +329,17 @@ describe('ReceivePurchaseOrderService', () => {
     expect(response.ap_effect.created).toBe(true);
     expect(response.ap_effect.amount_delta).toBe('500.00');
     expect(store.supplierPayables).toHaveLength(1);
+
+    const payable = store.supplierPayables[0];
+
+    expect(payable).toMatchObject({
+      tenantId: TENANT_ID,
+      supplierId: SUPPLIER_ID,
+      branchId: BRANCH_ID,
+      sourceType: 'purchase_receiving',
+      amountDelta: '500.00',
+    });
+    expect(payable?.sourceId).toBe(store.receiving?.id);
     expect(stockIncrements).toHaveLength(1);
     expect(fifoLayers).toHaveLength(1);
     expect(ledgerEntries).toHaveLength(1);
@@ -384,6 +405,100 @@ describe('ReceivePurchaseOrderService', () => {
     ).rejects.toMatchObject({
       code: 'validation_failed',
     });
+  });
+
+  it('blocks receiving when tenant is read-only', async () => {
+    const store = new FakePurchaseOrderStore();
+    const { service, stockIncrements, fifoLayers, ledgerEntries, auditRecords } =
+      buildService(store);
+
+    await expect(
+      service.receive(
+        PURCHASE_ORDER_ID,
+        {
+          lines: [
+            {
+              purchase_order_line_id: LINE_ID,
+              received_quantity: '1.000',
+              received_unit_cost: '100.00',
+            },
+          ],
+        },
+        buildSession({ tenantStatus: 'read_only' }),
+      ),
+    ).rejects.toMatchObject({
+      code: 'subscription_access_blocked',
+    });
+
+    expect(store.receiving).toBeNull();
+    expect(stockIncrements).toHaveLength(0);
+    expect(fifoLayers).toHaveLength(0);
+    expect(ledgerEntries).toHaveLength(0);
+    expect(auditRecords).toHaveLength(0);
+  });
+
+  it('blocks receiving without purchases.receive permission', async () => {
+    const store = new FakePurchaseOrderStore();
+    const { service, stockIncrements, fifoLayers, ledgerEntries, auditRecords } =
+      buildService(store);
+
+    await expect(
+      service.receive(
+        PURCHASE_ORDER_ID,
+        {
+          lines: [
+            {
+              purchase_order_line_id: LINE_ID,
+              received_quantity: '1.000',
+              received_unit_cost: '100.00',
+            },
+          ],
+        },
+        buildSession({ effectivePermissions: [] }),
+      ),
+    ).rejects.toMatchObject({
+      code: 'forbidden',
+      details: [{ required_permission: 'purchases.receive' }],
+    });
+
+    expect(store.receiving).toBeNull();
+    expect(stockIncrements).toHaveLength(0);
+    expect(fifoLayers).toHaveLength(0);
+    expect(ledgerEntries).toHaveLength(0);
+    expect(auditRecords).toHaveLength(0);
+  });
+
+  it('blocks receiving when branch access is denied', async () => {
+    const store = new FakePurchaseOrderStore();
+    const { service, stockIncrements, fifoLayers, ledgerEntries, auditRecords } =
+      buildService(store);
+
+    await expect(
+      service.receive(
+        PURCHASE_ORDER_ID,
+        {
+          lines: [
+            {
+              purchase_order_line_id: LINE_ID,
+              received_quantity: '1.000',
+              received_unit_cost: '100.00',
+            },
+          ],
+        },
+        buildSession({
+          branches: [],
+          tenantWideBranchAccess: false,
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: 'branch_access_denied',
+    });
+
+    expect(store.receiving).toBeNull();
+    expect(stockIncrements).toHaveLength(0);
+    expect(fifoLayers).toHaveLength(0);
+    expect(ledgerEntries).toHaveLength(0);
+    expect(auditRecords).toHaveLength(0);
   });
 
   it('blocks over-receiving', async () => {

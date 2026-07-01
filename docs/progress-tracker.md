@@ -221,6 +221,8 @@
 - [x] Implement purchase order list/search UI
 - [x] Implement purchase order detail UI
 - [x] Implement purchase receiving backend/API and FIFO/AP effects
+- [x] Harden purchase receiving validation coverage
+- [ ] Add database-backed purchase receiving integration/concurrency tests
 - [ ] Verify supplier lifecycle backend/API coverage
 - [ ] Implement purchase order draft/create/update workflow
 - [ ] Implement purchase order order/cancel/close workflow actions
@@ -338,13 +340,3 @@
 - [ ] Validate file/export/offline workflows
 - [ ] Validate dashboard/report workflows
 - [ ] Validate tenant lifecycle workflows
-- [ ] Burn down release-blocking defects
-- [ ] Collect product signoff
-- [ ] Collect QA signoff
-- [ ] Collect security signoff
-- [ ] Collect DevOps signoff
-- [ ] Collect engineering signoff
-- [ ] Provision production
-- [ ] Bootstrap first platform admin
-- [ ] Execute production smoke test
-- [ ] Execute pilot launch

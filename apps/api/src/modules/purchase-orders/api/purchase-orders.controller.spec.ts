@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { GarageOsApiException } from '../../../shared/api/api-exception';
 import type { IdempotencyService } from '../../../shared/idempotency/idempotency.service';
 import type { AuthService } from '../../auth/application/auth.service';
 import type {
@@ -153,5 +154,55 @@ describe('PurchaseOrdersController', () => {
         },
       ),
     ).resolves.toEqual(response);
+  });
+
+  it('propagates idempotency conflicts without running the receiving service', async () => {
+    const calls: string[] = [];
+
+    const authService = {
+      getAuthenticatedRouteSession: async () => buildSession(),
+    } as unknown as AuthService;
+
+    const receivePurchaseOrderService = {
+      getIdempotencyExpiresAt: (now: Date) => new Date(now.getTime() + 24 * 60 * 60 * 1000),
+      receive: async () => {
+        calls.push('receive');
+
+        return response;
+      },
+    } as unknown as ReceivePurchaseOrderService;
+
+    const idempotencyService = {
+      begin: async () => {
+        throw GarageOsApiException.idempotencyConflict();
+      },
+    } as unknown as IdempotencyService;
+
+    const controller = new PurchaseOrdersController(
+      authService,
+      receivePurchaseOrderService,
+      idempotencyService,
+    );
+
+    await expect(
+      controller.receivePurchaseOrder(
+        'Bearer token',
+        'po-receive-idempotency-key',
+        { purchase_order_id: PURCHASE_ORDER_ID },
+        {
+          lines: [
+            {
+              purchase_order_line_id: LINE_ID,
+              received_quantity: '5.000',
+              received_unit_cost: '100.00',
+            },
+          ],
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: 'idempotency_conflict',
+    });
+
+    expect(calls).toEqual([]);
   });
 });
