@@ -17,6 +17,11 @@ export const tenantNavigationItems: readonly NavigationItem[] = [
     requiredPermissions: ['suppliers.read'],
   },
   {
+    label: 'Purchases',
+    href: '/purchase-orders',
+    requiredPermissions: ['purchases.read'],
+  },
+  {
     label: 'Branches',
     href: '/branches',
     requiredPermissions: ['branches.read'],

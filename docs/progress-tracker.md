@@ -425,6 +425,12 @@ pnpm dev:api
 - [x] Updated supplier list actions from planned placeholders to edit/deactivate/reactivate controls.
 - [x] Added permission-aware, tenant read-only, and offline write blocking in the supplier UI.
 - [x] Preserved supplier list/search behavior from Step 8.1.
+- [x] Added purchase order list route scaffold at `/purchase-orders`.
+- [x] Added source-aligned purchase order list/search screen wired to documented `GET /api/v1/purchase-orders` endpoint.
+- [x] Purchase order search supports `q`, `branch_id`, `status`, `from_date`, `to_date`, cursor pagination, loading, empty, forbidden, offline, read-only, and error states.
+- [x] Purchase order status filter uses only documented purchase order statuses: `draft`, `ordered`, `partially_received`, `received`, `closed`, `cancelled`.
+- [x] Tenant navigation includes Purchases behind `purchases.read`.
+- [x] Purchase create/edit/detail/receiving/cancel/close actions remain planned or disabled for later Milestone 8 slices.
 
 **Pending Checklist**
 
