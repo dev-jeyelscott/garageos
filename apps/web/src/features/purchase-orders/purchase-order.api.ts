@@ -3,10 +3,13 @@ import { type ApiClientError, type ApiPaginationMeta } from '../../lib/api-envel
 
 import { purchaseOrderListPageSize } from './purchase-order.defaults';
 import type {
+  PurchaseOrderDetail,
+  PurchaseOrderLineItem,
   PurchaseOrderListFilters,
   PurchaseOrderListItem,
   PurchaseOrderListResult,
   PurchaseOrderStatus,
+  PurchaseOrderSummaryField,
   PurchasePaymentTerms,
 } from './purchase-order.types';
 
@@ -59,6 +62,21 @@ export async function getPurchaseOrders({
   });
 }
 
+export async function getPurchaseOrder(purchaseOrderId: string): Promise<PurchaseOrderDetail> {
+  const accessToken = await getAccessTokenOrRefresh();
+  const envelope = await getAuthJsonEnvelope<unknown>(
+    `/purchase-orders/${encodeURIComponent(purchaseOrderId)}`,
+    {
+      accessToken,
+    },
+  );
+
+  return normalizePurchaseOrderDetailPayload(envelope.data, {
+    requestId: readMetaString(envelope.meta.request_id),
+    correlationId: readMetaString(envelope.meta.correlation_id),
+  });
+}
+
 export function normalizePurchaseOrderListPayload(
   data: unknown,
   meta: {
@@ -90,6 +108,34 @@ export function normalizePurchaseOrderListPayload(
   }
 
   throw toInvalidPurchaseOrderListResponseError(meta);
+}
+
+export function normalizePurchaseOrderDetailPayload(
+  data: unknown,
+  meta: {
+    readonly requestId: string | null;
+    readonly correlationId: string | null;
+  },
+): PurchaseOrderDetail {
+  const detail = normalizePurchaseOrderDetail(data);
+
+  if (detail !== null) {
+    return detail;
+  }
+
+  if (isObjectRecord(data)) {
+    const candidates = [data.purchase_order, data.purchaseOrder, data.item, data.result];
+
+    for (const candidate of candidates) {
+      const nestedDetail = normalizePurchaseOrderDetail(candidate);
+
+      if (nestedDetail !== null) {
+        return nestedDetail;
+      }
+    }
+  }
+
+  throw toInvalidPurchaseOrderDetailResponseError(meta);
 }
 
 function readPurchaseOrderArray(
@@ -126,6 +172,23 @@ function normalizePurchaseOrderArray(
   }
 
   return purchaseOrders;
+}
+
+function normalizePurchaseOrderDetail(value: unknown): PurchaseOrderDetail | null {
+  const purchaseOrder = normalizePurchaseOrderListItem(value);
+
+  if (purchaseOrder === null || !isObjectRecord(value)) {
+    return null;
+  }
+
+  return {
+    ...purchaseOrder,
+    lock_version: readLockVersion(value.lock_version),
+    line_items: normalizePurchaseOrderLineItems(readPurchaseOrderLineItems(value)),
+    receiving_status_summary: normalizeReceivingStatusSummary(
+      value.receiving_status_summary ?? value.receivingStatusSummary ?? value.receiving_summary,
+    ),
+  };
 }
 
 function normalizePurchaseOrderListItem(value: unknown): PurchaseOrderListItem | null {
@@ -184,6 +247,70 @@ function normalizePurchaseOrderListItem(value: unknown): PurchaseOrderListItem |
   };
 }
 
+function readPurchaseOrderLineItems(value: Record<string, unknown>): unknown {
+  return value.line_items ?? value.purchase_order_lines ?? value.purchaseOrderLines ?? value.lines;
+}
+
+function normalizePurchaseOrderLineItems(value: unknown): readonly PurchaseOrderLineItem[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((lineItem, index) => normalizePurchaseOrderLineItem(lineItem, index))
+    .filter((lineItem): lineItem is PurchaseOrderLineItem => lineItem !== null);
+}
+
+function normalizePurchaseOrderLineItem(
+  value: unknown,
+  index: number,
+): PurchaseOrderLineItem | null {
+  if (!isObjectRecord(value)) {
+    return null;
+  }
+
+  const productSummary = readNestedSummary({
+    value,
+    nestedKey: 'product',
+    idKey: 'product_id',
+    nameKey: 'product_name',
+    fallbackNameKey: 'name',
+  });
+  const id = readNullableString(value.id) ?? readNullableString(value.purchase_order_line_id);
+
+  return {
+    id: id ?? `line-${index}`,
+    product_id: productSummary.id,
+    product_name: productSummary.name,
+    ordered_quantity: readNullableQuantityString(value.ordered_quantity),
+    received_quantity: readNullableQuantityString(value.received_quantity),
+    unit_cost: readNullableMoneyString(value.unit_cost),
+    line_total: readNullableMoneyString(value.line_total),
+    notes: readNullableString(value.notes),
+  };
+}
+
+function normalizeReceivingStatusSummary(value: unknown): readonly PurchaseOrderSummaryField[] {
+  if (value === null || value === undefined) {
+    return [];
+  }
+
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return [{ label: 'Receiving status', value: readScalarDisplayString(value) }];
+  }
+
+  if (!isObjectRecord(value)) {
+    return [];
+  }
+
+  return Object.entries(value)
+    .map(([key, rawValue]) => ({
+      label: formatFieldLabel(key),
+      value: readScalarDisplayString(rawValue),
+    }))
+    .filter((field) => field.value !== null);
+}
+
 function normalizePurchaseOrderPagination(pagination: unknown): ApiPaginationMeta | null {
   if (!isObjectRecord(pagination)) {
     return null;
@@ -222,6 +349,23 @@ function toInvalidPurchaseOrderListResponseError({
   };
 }
 
+function toInvalidPurchaseOrderDetailResponseError({
+  requestId,
+  correlationId,
+}: {
+  readonly requestId: string | null;
+  readonly correlationId: string | null;
+}): ApiClientError {
+  return {
+    code: 'invalid_api_response',
+    message: 'The purchase order response did not contain a valid purchase order payload.',
+    status: 500,
+    details: [],
+    requestId,
+    correlationId,
+  };
+}
+
 function readNestedSummary({
   value,
   nestedKey,
@@ -253,6 +397,22 @@ function readNestedSummary({
   };
 }
 
+function readLockVersion(value: unknown): number {
+  if (typeof value === 'number' && Number.isInteger(value) && value >= 0) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+
+    if (Number.isInteger(parsed) && parsed >= 0) {
+      return parsed;
+    }
+  }
+
+  return 0;
+}
+
 function readNullableInteger(value: unknown): number | null {
   if (typeof value === 'number' && Number.isInteger(value) && value >= 0) {
     return value;
@@ -281,8 +441,49 @@ function readNullableMoneyString(value: unknown): string | null {
   return null;
 }
 
+function readNullableQuantityString(value: unknown): string | null {
+  if (typeof value === 'string' && value.length > 0) {
+    return value;
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value.toFixed(3);
+  }
+
+  return null;
+}
+
 function readNullableString(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+function readScalarDisplayString(value: unknown): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value === 'string') {
+    return value.length > 0 ? value : null;
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value);
+  }
+
+  if (typeof value === 'boolean') {
+    return value ? 'Yes' : 'No';
+  }
+
+  return null;
+}
+
+function formatFieldLabel(value: string): string {
+  return value
+    .replaceAll('-', '_')
+    .split('_')
+    .filter((part) => part.length > 0)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
 }
 
 function isPurchaseOrderStatus(value: unknown): value is PurchaseOrderStatus {

@@ -41,6 +41,28 @@ export interface PurchaseOrderListItem {
   readonly updated_at: string | null;
 }
 
+export interface PurchaseOrderLineItem {
+  readonly id: string;
+  readonly product_id: string | null;
+  readonly product_name: string | null;
+  readonly ordered_quantity: string | null;
+  readonly received_quantity: string | null;
+  readonly unit_cost: string | null;
+  readonly line_total: string | null;
+  readonly notes: string | null;
+}
+
+export interface PurchaseOrderSummaryField {
+  readonly label: string;
+  readonly value: string | null;
+}
+
+export interface PurchaseOrderDetail extends PurchaseOrderListItem {
+  readonly lock_version: number;
+  readonly line_items: readonly PurchaseOrderLineItem[];
+  readonly receiving_status_summary: readonly PurchaseOrderSummaryField[];
+}
+
 export interface PurchaseOrderListResult {
   readonly purchaseOrders: readonly PurchaseOrderListItem[];
   readonly pagination: ApiPaginationMeta | null;
@@ -61,6 +83,16 @@ export type PurchaseOrderListState =
       readonly status: 'error';
       readonly purchaseOrders: readonly PurchaseOrderListItem[];
       readonly pagination: ApiPaginationMeta | null;
+      readonly message: string;
+      readonly detail: string | null;
+      readonly code: string | null;
+    };
+
+export type PurchaseOrderDetailState =
+  | { readonly status: 'idle' | 'loading' }
+  | { readonly status: 'loaded'; readonly purchaseOrder: PurchaseOrderDetail }
+  | {
+      readonly status: 'error';
       readonly message: string;
       readonly detail: string | null;
       readonly code: string | null;

@@ -4,6 +4,7 @@ import {
   Alert,
   Badge,
   Button,
+  ButtonLink,
   Card,
   CardContent,
   CardDescription,
@@ -180,15 +181,13 @@ function PurchaseOrderCardList({
                 label="Updated"
                 value={formatDateTime(purchaseOrder.updated_at)}
               />
-              <Button
-                type="button"
+              <ButtonLink
+                href={`/purchase-orders/${encodeURIComponent(purchaseOrder.id)}`}
                 variant="secondary"
                 size="sm"
-                disabled
-                title="Purchase order detail is planned for a later Milestone 8 slice."
               >
-                Detail planned
-              </Button>
+                View detail
+              </ButtonLink>
             </CardContent>
           </Card>
         </li>
@@ -247,15 +246,13 @@ function PurchaseOrderTable({
                 {formatReceivedLineCount(purchaseOrder)}
               </TableCell>
               <TableCell className="text-right">
-                <Button
-                  type="button"
+                <ButtonLink
+                  href={`/purchase-orders/${encodeURIComponent(purchaseOrder.id)}`}
                   variant="secondary"
                   size="sm"
-                  disabled
-                  title="Purchase order detail is planned for a later Milestone 8 slice."
                 >
-                  Detail planned
-                </Button>
+                  View detail
+                </ButtonLink>
               </TableCell>
             </TableRow>
           ))}
