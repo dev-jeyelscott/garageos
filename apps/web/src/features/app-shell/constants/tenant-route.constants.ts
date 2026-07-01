@@ -195,17 +195,17 @@ export const tenantMoreMenuItems: readonly TenantMoreMenuItem[] = [
     ],
   },
   {
-    title: 'Purchases, Suppliers, and AP',
+    title: 'Purchase Orders',
     group: 'Inventory and purchasing',
     description:
-      'Documented purchasing group for suppliers, purchase orders, receiving, supplier returns, supplier payments, credits, and accounts payable.',
+      'Source-aligned purchase order list/search route for branch-scoped purchase records. Purchase receiving, supplier returns, supplier payments, credits, AP reports, and workflow actions remain planned for later Milestone 8 slices.',
     routePath: '/purchase-orders',
-    routeExists: false,
-    requiredPermissions: ['purchases.read', 'suppliers.read', 'supplier_returns.read'],
+    routeExists: true,
+    requiredPermissions: ['purchases.read'],
     plannedScope: [
-      'Supplier records',
-      'Purchase orders and receiving',
-      'Supplier returns and AP views',
+      'Purchase order list and search',
+      'Branch, supplier, status, and date filters',
+      'Purchase order detail, receiving, supplier returns, supplier payments, credits, and AP views remain planned',
     ],
   },
   {
