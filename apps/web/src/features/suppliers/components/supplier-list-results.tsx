@@ -1,7 +1,12 @@
+'use client';
+
+import { useState } from 'react';
+
 import {
   Alert,
   Badge,
   Button,
+  ButtonLink,
   Card,
   CardContent,
   CardDescription,
@@ -16,7 +21,9 @@ import {
   TableRow,
 } from '../../../components/ui';
 
+import { deactivateSupplier, reactivateSupplier } from '../supplier.api';
 import type { SupplierListItem, SupplierListState } from '../supplier.types';
+import { toSafeErrorDetail, toSafeErrorMessage } from '../supplier.ui';
 
 interface SupplierListResultsProps {
   readonly supplierListState: SupplierListState;
@@ -24,7 +31,11 @@ interface SupplierListResultsProps {
   readonly isLoadingMore: boolean;
   readonly hasActiveFilters: boolean;
   readonly hasMore: boolean;
+  readonly canEditSuppliers: boolean;
+  readonly canDeactivateSuppliers: boolean;
+  readonly canUseWriteActions: boolean;
   readonly onLoadMore: () => void;
+  readonly onSupplierChanged: () => void;
 }
 
 export function SupplierListResults({
@@ -33,8 +44,56 @@ export function SupplierListResults({
   isLoadingMore,
   hasActiveFilters,
   hasMore,
+  canEditSuppliers,
+  canDeactivateSuppliers,
+  canUseWriteActions,
   onLoadMore,
+  onSupplierChanged,
 }: SupplierListResultsProps) {
+  const [actionState, setActionState] = useState<
+    | { readonly status: 'idle' }
+    | {
+        readonly status: 'submitting';
+        readonly supplierId: string;
+        readonly action: SupplierStatusAction;
+      }
+    | { readonly status: 'success'; readonly message: string }
+    | { readonly status: 'error'; readonly message: string; readonly detail: string | null }
+  >({ status: 'idle' });
+
+  async function handleStatusAction(supplier: SupplierListItem, action: SupplierStatusAction) {
+    const actionLabel = action === 'deactivate' ? 'deactivate' : 'reactivate';
+    const confirmed = window.confirm(
+      `Confirm ${actionLabel} for ${supplier.name}? Backend validation remains authoritative.`,
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setActionState({ status: 'submitting', supplierId: supplier.id, action });
+
+    try {
+      if (action === 'deactivate') {
+        await deactivateSupplier(supplier.id);
+      } else {
+        await reactivateSupplier(supplier.id);
+      }
+
+      setActionState({
+        status: 'success',
+        message: `${supplier.name} was ${action === 'deactivate' ? 'deactivated' : 'reactivated'}.`,
+      });
+      onSupplierChanged();
+    } catch (error) {
+      setActionState({
+        status: 'error',
+        message: toSafeErrorMessage(error, `Unable to ${actionLabel} supplier.`),
+        detail: toSafeErrorDetail(error),
+      });
+    }
+  }
+
   if (isInitialLoading) {
     return <SupplierListLoadingState />;
   }
@@ -55,6 +114,21 @@ export function SupplierListResults({
 
   return (
     <div className="grid gap-4">
+      {actionState.status === 'success' ? (
+        <Alert variant="success">
+          <p className="text-sm font-bold">{actionState.message}</p>
+        </Alert>
+      ) : null}
+
+      {actionState.status === 'error' ? (
+        <Alert variant="destructive">
+          <p className="text-sm font-bold">{actionState.message}</p>
+          {actionState.detail === null ? null : (
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">{actionState.detail}</p>
+          )}
+        </Alert>
+      ) : null}
+
       {supplierListState.status === 'error' ? (
         <SupplierListErrorState
           message={supplierListState.message}
@@ -63,8 +137,22 @@ export function SupplierListResults({
         />
       ) : null}
 
-      <SupplierCardList suppliers={supplierListState.suppliers} />
-      <SupplierTable suppliers={supplierListState.suppliers} />
+      <SupplierCardList
+        suppliers={supplierListState.suppliers}
+        canEditSuppliers={canEditSuppliers}
+        canDeactivateSuppliers={canDeactivateSuppliers}
+        canUseWriteActions={canUseWriteActions}
+        submittingAction={actionState.status === 'submitting' ? actionState : null}
+        onStatusAction={(supplier, action) => void handleStatusAction(supplier, action)}
+      />
+      <SupplierTable
+        suppliers={supplierListState.suppliers}
+        canEditSuppliers={canEditSuppliers}
+        canDeactivateSuppliers={canDeactivateSuppliers}
+        canUseWriteActions={canUseWriteActions}
+        submittingAction={actionState.status === 'submitting' ? actionState : null}
+        onStatusAction={(supplier, action) => void handleStatusAction(supplier, action)}
+      />
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-muted-foreground">
@@ -130,7 +218,14 @@ function SupplierListEmptyState({ hasActiveFilters }: { readonly hasActiveFilter
   );
 }
 
-function SupplierCardList({ suppliers }: { readonly suppliers: readonly SupplierListItem[] }) {
+function SupplierCardList({
+  suppliers,
+  canEditSuppliers,
+  canDeactivateSuppliers,
+  canUseWriteActions,
+  submittingAction,
+  onStatusAction,
+}: SupplierActionListProps) {
   return (
     <ul className="grid gap-3 md:hidden">
       {suppliers.map((supplier) => (
@@ -150,17 +245,14 @@ function SupplierCardList({ suppliers }: { readonly suppliers: readonly Supplier
               <SupplierField label="Mobile number" value={supplier.mobile_number} />
               <SupplierField label="Email" value={supplier.email} />
               <SupplierField label="Updated" value={formatDateTime(supplier.updated_at)} />
-              <div className="flex justify-end border-t border-border pt-3">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  disabled
-                  title="Supplier detail route is planned for the next supplier UI slice."
-                >
-                  Detail planned
-                </Button>
-              </div>
+              <SupplierRowActions
+                supplier={supplier}
+                canEditSuppliers={canEditSuppliers}
+                canDeactivateSuppliers={canDeactivateSuppliers}
+                canUseWriteActions={canUseWriteActions}
+                submittingAction={submittingAction}
+                onStatusAction={onStatusAction}
+              />
             </CardContent>
           </Card>
         </li>
@@ -169,7 +261,14 @@ function SupplierCardList({ suppliers }: { readonly suppliers: readonly Supplier
   );
 }
 
-function SupplierTable({ suppliers }: { readonly suppliers: readonly SupplierListItem[] }) {
+function SupplierTable({
+  suppliers,
+  canEditSuppliers,
+  canDeactivateSuppliers,
+  canUseWriteActions,
+  submittingAction,
+  onStatusAction,
+}: SupplierActionListProps) {
   return (
     <div className="hidden overflow-hidden rounded-2xl border border-border md:block">
       <Table>
@@ -181,7 +280,7 @@ function SupplierTable({ suppliers }: { readonly suppliers: readonly SupplierLis
             <TableHead>Mobile</TableHead>
             <TableHead>Email</TableHead>
             <TableHead>Updated</TableHead>
-            <TableHead className="text-right">Action</TableHead>
+            <TableHead className="text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -203,20 +302,67 @@ function SupplierTable({ suppliers }: { readonly suppliers: readonly SupplierLis
               <TableCell>{supplier.email ?? '—'}</TableCell>
               <TableCell>{formatDateTime(supplier.updated_at)}</TableCell>
               <TableCell className="text-right">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  disabled
-                  title="Supplier detail route is planned for the next supplier UI slice."
-                >
-                  Detail planned
-                </Button>
+                <SupplierRowActions
+                  supplier={supplier}
+                  canEditSuppliers={canEditSuppliers}
+                  canDeactivateSuppliers={canDeactivateSuppliers}
+                  canUseWriteActions={canUseWriteActions}
+                  submittingAction={submittingAction}
+                  onStatusAction={onStatusAction}
+                />
               </TableCell>
             </TableRow>
           ))}
         </TableBody>
       </Table>
+    </div>
+  );
+}
+
+function SupplierRowActions({
+  supplier,
+  canEditSuppliers,
+  canDeactivateSuppliers,
+  canUseWriteActions,
+  submittingAction,
+  onStatusAction,
+}: SupplierRowActionsProps) {
+  const statusAction: SupplierStatusAction =
+    supplier.status === 'active' ? 'deactivate' : 'reactivate';
+  const canRunStatusAction =
+    canUseWriteActions &&
+    (statusAction === 'deactivate' ? canDeactivateSuppliers : canEditSuppliers);
+  const isSubmitting =
+    submittingAction?.supplierId === supplier.id && submittingAction.action === statusAction;
+
+  return (
+    <div className="flex flex-col justify-end gap-2 border-t border-border pt-3 sm:flex-row md:border-t-0 md:pt-0">
+      {canEditSuppliers && canUseWriteActions ? (
+        <ButtonLink href={`/suppliers/${supplier.id}/edit`} variant="secondary" size="sm">
+          Edit
+        </ButtonLink>
+      ) : (
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          disabled
+          title="Edit is blocked by permission, read-only tenant state, or offline mode."
+        >
+          Edit
+        </Button>
+      )}
+
+      <Button
+        type="button"
+        variant={statusAction === 'deactivate' ? 'destructive' : 'secondary'}
+        size="sm"
+        disabled={!canRunStatusAction || isSubmitting}
+        title={getStatusActionTitle({ supplier, statusAction, canRunStatusAction })}
+        onClick={() => onStatusAction(supplier, statusAction)}
+      >
+        {isSubmitting ? 'Saving…' : statusAction === 'deactivate' ? 'Deactivate' : 'Reactivate'}
+      </Button>
     </div>
   );
 }
@@ -244,6 +390,26 @@ function SupplierField({
       <span className="break-words text-foreground">{value ?? '—'}</span>
     </div>
   );
+}
+
+function getStatusActionTitle({
+  supplier,
+  statusAction,
+  canRunStatusAction,
+}: {
+  readonly supplier: SupplierListItem;
+  readonly statusAction: SupplierStatusAction;
+  readonly canRunStatusAction: boolean;
+}): string {
+  if (canRunStatusAction) {
+    return statusAction === 'deactivate'
+      ? `Deactivate ${supplier.name} when backend blockers allow it.`
+      : `Reactivate ${supplier.name} after backend uniqueness checks pass.`;
+  }
+
+  return statusAction === 'deactivate'
+    ? 'Deactivate is blocked by permission, read-only tenant state, offline mode, or backend blockers.'
+    : 'Reactivate is blocked by suppliers.update permission, read-only tenant state, offline mode, or backend uniqueness checks.';
 }
 
 function formatSupplierContactSummary(supplier: SupplierListItem): string {
@@ -284,4 +450,25 @@ function formatStatusLabel(status: string): string {
     .split('_')
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ');
+}
+
+type SupplierStatusAction = 'deactivate' | 'reactivate';
+
+type SubmittingAction = {
+  readonly status: 'submitting';
+  readonly supplierId: string;
+  readonly action: SupplierStatusAction;
+};
+
+interface SupplierActionListProps {
+  readonly suppliers: readonly SupplierListItem[];
+  readonly canEditSuppliers: boolean;
+  readonly canDeactivateSuppliers: boolean;
+  readonly canUseWriteActions: boolean;
+  readonly submittingAction: SubmittingAction | null;
+  readonly onStatusAction: (supplier: SupplierListItem, action: SupplierStatusAction) => void;
+}
+
+interface SupplierRowActionsProps extends Omit<SupplierActionListProps, 'suppliers'> {
+  readonly supplier: SupplierListItem;
 }

@@ -1,12 +1,23 @@
-import { getAccessTokenOrRefresh, getAuthJsonEnvelope } from '../auth/actions/login.action';
-import type { ApiClientError, ApiPaginationMeta } from '../../lib/api-envelope';
+import {
+  getAccessTokenOrRefresh,
+  getAuthJsonEnvelope,
+  postAuthJson,
+} from '../auth/actions/login.action';
+import {
+  readApiResponse,
+  type ApiClientError,
+  type ApiPaginationMeta,
+} from '../../lib/api-envelope';
 
 import { supplierListPageSize } from './supplier.defaults';
 import type {
+  SupplierDetail,
   SupplierListFilters,
   SupplierListItem,
   SupplierListResult,
+  SupplierMutationInput,
   SupplierStatus,
+  SupplierUpdateInput,
 } from './supplier.types';
 
 export async function getSuppliers({
@@ -46,6 +57,81 @@ export async function getSuppliers({
   });
 }
 
+export async function getSupplier(supplierId: string): Promise<SupplierDetail> {
+  const accessToken = await getAccessTokenOrRefresh();
+  const envelope = await getAuthJsonEnvelope<unknown>(
+    `/suppliers/${encodeURIComponent(supplierId)}`,
+    {
+      accessToken,
+    },
+  );
+
+  return normalizeSupplierDetailPayload(envelope.data, {
+    requestId: readMetaString(envelope.meta.request_id),
+    correlationId: readMetaString(envelope.meta.correlation_id),
+  });
+}
+
+export async function createSupplier(input: SupplierMutationInput): Promise<SupplierDetail> {
+  const data = await postAuthJson<unknown>('/suppliers', input, {
+    requiresAuth: true,
+    idempotencyKey: createIdempotencyKey('supplier-create'),
+  });
+
+  return normalizeSupplierDetailPayload(data, {
+    requestId: null,
+    correlationId: null,
+  });
+}
+
+export async function updateSupplier(
+  supplierId: string,
+  input: SupplierUpdateInput,
+): Promise<SupplierDetail> {
+  const data = await sendSupplierJson<unknown>({
+    method: 'PATCH',
+    path: `/suppliers/${encodeURIComponent(supplierId)}`,
+    body: input,
+  });
+
+  return normalizeSupplierDetailPayload(data, {
+    requestId: null,
+    correlationId: null,
+  });
+}
+
+export async function deactivateSupplier(supplierId: string): Promise<SupplierDetail> {
+  const data = await postAuthJson<unknown>(
+    `/suppliers/${encodeURIComponent(supplierId)}/deactivate`,
+    {},
+    {
+      requiresAuth: true,
+      idempotencyKey: createIdempotencyKey('supplier-deactivate'),
+    },
+  );
+
+  return normalizeSupplierDetailPayload(data, {
+    requestId: null,
+    correlationId: null,
+  });
+}
+
+export async function reactivateSupplier(supplierId: string): Promise<SupplierDetail> {
+  const data = await postAuthJson<unknown>(
+    `/suppliers/${encodeURIComponent(supplierId)}/reactivate`,
+    {},
+    {
+      requiresAuth: true,
+      idempotencyKey: createIdempotencyKey('supplier-reactivate'),
+    },
+  );
+
+  return normalizeSupplierDetailPayload(data, {
+    requestId: null,
+    correlationId: null,
+  });
+}
+
 export function normalizeSupplierListPayload(
   data: unknown,
   meta: {
@@ -77,6 +163,34 @@ export function normalizeSupplierListPayload(
   }
 
   throw toInvalidSupplierListResponseError(meta);
+}
+
+function normalizeSupplierDetailPayload(
+  data: unknown,
+  meta: {
+    readonly requestId: string | null;
+    readonly correlationId: string | null;
+  },
+): SupplierDetail {
+  const detail = normalizeSupplierDetail(data);
+
+  if (detail !== null) {
+    return detail;
+  }
+
+  if (isObjectRecord(data)) {
+    const candidates = [data.supplier, data.item, data.result];
+
+    for (const candidate of candidates) {
+      const nestedDetail = normalizeSupplierDetail(candidate);
+
+      if (nestedDetail !== null) {
+        return nestedDetail;
+      }
+    }
+  }
+
+  throw toInvalidSupplierDetailResponseError(meta);
 }
 
 function readSupplierArray(data: Record<string, unknown>): readonly SupplierListItem[] | null {
@@ -148,6 +262,36 @@ function toInvalidSupplierListResponseError({
   };
 }
 
+function toInvalidSupplierDetailResponseError({
+  requestId,
+  correlationId,
+}: {
+  readonly requestId: string | null;
+  readonly correlationId: string | null;
+}): ApiClientError {
+  return {
+    code: 'invalid_api_response',
+    message: 'The supplier response did not contain a valid supplier payload.',
+    status: 500,
+    details: [],
+    requestId,
+    correlationId,
+  };
+}
+
+function normalizeSupplierDetail(value: unknown): SupplierDetail | null {
+  const supplier = normalizeSupplierListItem(value);
+
+  if (supplier === null || !isObjectRecord(value)) {
+    return null;
+  }
+
+  return {
+    ...supplier,
+    lock_version: readLockVersion(value.lock_version),
+  };
+}
+
 function normalizeSupplierListItem(value: unknown): SupplierListItem | null {
   if (!isObjectRecord(value)) {
     return null;
@@ -177,6 +321,22 @@ function normalizeSupplierListItem(value: unknown): SupplierListItem | null {
   };
 }
 
+function readLockVersion(value: unknown): number {
+  if (typeof value === 'number' && Number.isInteger(value) && value >= 0) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+
+    if (Number.isInteger(parsed) && parsed >= 0) {
+      return parsed;
+    }
+  }
+
+  return 0;
+}
+
 function readNullableString(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
 }
@@ -191,4 +351,43 @@ function isObjectRecord(value: unknown): value is Record<string, unknown> {
 
 function readMetaString(value: string | undefined): string | null {
   return value === undefined || value.length === 0 ? null : value;
+}
+
+async function sendSupplierJson<TData>({
+  method,
+  path,
+  body,
+}: {
+  readonly method: 'PATCH';
+  readonly path: string;
+  readonly body: unknown;
+}): Promise<TData> {
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    Authorization: `Bearer ${await getAccessTokenOrRefresh()}`,
+    'Content-Type': 'application/json',
+  };
+
+  const response = await fetch(buildApiUrl(path), {
+    method,
+    headers,
+    credentials: 'include',
+    body: JSON.stringify(body),
+  });
+
+  return readApiResponse<TData>(response);
+}
+
+function buildApiUrl(path: string): string {
+  const baseUrl = process.env.NEXT_PUBLIC_GARAGEOS_API_BASE_URL ?? '/api/v1';
+  const normalizedBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+
+  return `${normalizedBaseUrl}${normalizedPath}`;
+}
+
+function createIdempotencyKey(prefix: string): string {
+  const randomValue = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
+
+  return `${prefix}-${randomValue}`;
 }

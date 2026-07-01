@@ -21,6 +21,32 @@ export interface SupplierListItem {
   readonly updated_at: string | null;
 }
 
+export interface SupplierDetail extends SupplierListItem {
+  readonly lock_version: number;
+}
+
+export interface SupplierFormValues {
+  readonly name: string;
+  readonly contact_person: string;
+  readonly mobile_number: string;
+  readonly email: string;
+  readonly address: string;
+  readonly notes: string;
+}
+
+export interface SupplierMutationInput {
+  readonly name: string;
+  readonly contact_person: string | null;
+  readonly mobile_number: string | null;
+  readonly email: string | null;
+  readonly address: string | null;
+  readonly notes: string | null;
+}
+
+export interface SupplierUpdateInput extends SupplierMutationInput {
+  readonly lock_version: number;
+}
+
 export interface SupplierListResult {
   readonly suppliers: readonly SupplierListItem[];
   readonly pagination: ApiPaginationMeta | null;

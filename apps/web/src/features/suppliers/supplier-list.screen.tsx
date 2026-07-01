@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import {
   Alert,
   Button,
+  ButtonLink,
   Card,
   CardContent,
   CardDescription,
@@ -12,7 +13,6 @@ import {
   CardTitle,
   Input,
 } from '../../components/ui';
-import { isApiClientError } from '../../lib/api-envelope';
 import { getCurrentSession } from '../auth/queries/get-current-session.query';
 import type { AuthSessionResponseData } from '../auth/types/auth-session';
 
@@ -28,6 +28,14 @@ import type {
   SupplierListState,
   SupplierStatusFilter,
 } from './supplier.types';
+import {
+  canUseSupplierWriteActions,
+  getApiErrorCode,
+  hasPermission,
+  toSafeErrorDetail,
+  toSafeErrorMessage,
+  useNetworkStatus,
+} from './supplier.ui';
 
 export function SupplierListScreen() {
   const [sessionState, setSessionState] = useState<
@@ -45,6 +53,7 @@ export function SupplierListScreen() {
     suppliers: [],
     pagination: null,
   });
+  const [refreshIndex, setRefreshIndex] = useState(0);
   const networkStatus = useNetworkStatus();
 
   useEffect(() => {
@@ -82,10 +91,13 @@ export function SupplierListScreen() {
   }, []);
 
   const session = sessionState.status === 'ready' ? sessionState.session : null;
-  const canReadSuppliers = session?.effective_permissions.includes('suppliers.read') === true;
-  const canCreateSuppliers = session?.effective_permissions.includes('suppliers.create') === true;
-  const canUseWriteActions =
-    canCreateSuppliers && session?.access.read_only !== true && networkStatus === 'online';
+  const canReadSuppliers = hasPermission(session, 'suppliers.read');
+  const canCreateSuppliers = hasPermission(session, 'suppliers.create');
+  const canEditSuppliers = hasPermission(session, 'suppliers.update');
+  const canDeactivateSuppliers = hasPermission(session, 'suppliers.deactivate');
+  const writeActionsAllowed = canUseSupplierWriteActions({ session, networkStatus });
+  const canCreateSupplier = canCreateSuppliers && writeActionsAllowed;
+  const canUseWriteActions = writeActionsAllowed;
 
   useEffect(() => {
     if (!canReadSuppliers) {
@@ -137,7 +149,7 @@ export function SupplierListScreen() {
     return () => {
       active = false;
     };
-  }, [appliedFilters, canReadSuppliers]);
+  }, [appliedFilters, canReadSuppliers, refreshIndex]);
 
   const handleLoadMore = useCallback(async () => {
     const nextCursor = supplierListState.pagination?.next_cursor ?? null;
@@ -190,6 +202,10 @@ export function SupplierListScreen() {
     setAppliedFilters(defaultSupplierListFilters);
   }
 
+  function handleSupplierChanged() {
+    setRefreshIndex((current) => current + 1);
+  }
+
   const isInitialLoading =
     sessionState.status === 'loading' ||
     supplierListState.status === 'idle' ||
@@ -235,31 +251,32 @@ export function SupplierListScreen() {
             </p>
             <CardTitle className="mt-2 text-2xl">Suppliers</CardTitle>
             <CardDescription className="mt-2">
-              Search and review tenant-wide supplier records through the documented supplier list
-              API.
+              Search, create, edit, deactivate, and reactivate tenant-wide supplier records through
+              documented supplier APIs.
             </CardDescription>
           </div>
-          <Button
-            type="button"
-            disabled
-            title={
-              canUseWriteActions
-                ? 'Create supplier is planned for the next supplier UI slice.'
-                : 'Create supplier is blocked by permission, read-only tenant state, or offline mode.'
-            }
-          >
-            New supplier planned
-          </Button>
+          {canCreateSupplier ? (
+            <ButtonLink href="/suppliers/new">New supplier</ButtonLink>
+          ) : (
+            <Button
+              type="button"
+              disabled
+              title="Create supplier is blocked by permission, read-only tenant state, or offline mode."
+            >
+              New supplier
+            </Button>
+          )}
         </CardHeader>
       </Card>
 
-      <Alert>
-        <p className="text-sm leading-6">
-          This slice wires supplier list/search only. Create, edit, deactivate, reactivate, payment,
-          credit, AP balance, and supplier-return workflows remain disabled until their documented
-          API slices are implemented and validated.
-        </p>
-      </Alert>
+      {!writeActionsAllowed && session !== null ? (
+        <Alert>
+          <p className="text-sm leading-6">
+            Supplier writes are currently blocked by tenant access state or offline mode. Supplier
+            search remains available when your session has <strong>suppliers.read</strong>.
+          </p>
+        </Alert>
+      ) : null}
 
       <Card>
         <CardHeader>
@@ -334,38 +351,16 @@ export function SupplierListScreen() {
             isLoadingMore={isLoadingMore}
             hasActiveFilters={hasActiveFilters}
             hasMore={hasMore}
+            canEditSuppliers={canEditSuppliers}
+            canDeactivateSuppliers={canDeactivateSuppliers}
+            canUseWriteActions={canUseWriteActions}
             onLoadMore={() => void handleLoadMore()}
+            onSupplierChanged={handleSupplierChanged}
           />
         </CardContent>
       </Card>
     </div>
   );
-}
-
-function useNetworkStatus(): 'online' | 'offline' {
-  const [isOnline, setIsOnline] = useState(() =>
-    typeof navigator === 'undefined' ? true : navigator.onLine,
-  );
-
-  useEffect(() => {
-    function handleOnline() {
-      setIsOnline(true);
-    }
-
-    function handleOffline() {
-      setIsOnline(false);
-    }
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
-
-  return isOnline ? 'online' : 'offline';
 }
 
 function formatStatusFilter(status: SupplierStatusFilter): string {
@@ -374,33 +369,4 @@ function formatStatusFilter(status: SupplierStatusFilter): string {
   }
 
   return `${status.charAt(0).toUpperCase()}${status.slice(1)} suppliers`;
-}
-
-function toSafeErrorMessage(error: unknown, fallback: string): string {
-  if (isApiClientError(error)) {
-    return error.message;
-  }
-
-  if (error instanceof Error && error.message.length > 0) {
-    return error.message;
-  }
-
-  return fallback;
-}
-
-function toSafeErrorDetail(error: unknown): string | null {
-  if (!isApiClientError(error)) {
-    return null;
-  }
-
-  const identifiers = [
-    error.requestId === null ? null : `request ${error.requestId}`,
-    error.correlationId === null ? null : `correlation ${error.correlationId}`,
-  ].filter((value): value is string => value !== null);
-
-  return identifiers.length > 0 ? `Reference: ${identifiers.join(' · ')}` : null;
-}
-
-function getApiErrorCode(error: unknown): string | null {
-  return isApiClientError(error) ? error.code : null;
 }

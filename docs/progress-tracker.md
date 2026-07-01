@@ -417,6 +417,14 @@ pnpm dev:api
 - [x] Supplier search supports `q`, `status`, cursor pagination, loading, empty, forbidden, and error states.
 - [x] Tenant navigation includes Suppliers behind `suppliers.read`.
 - [x] Supplier write/payment/credit/return actions remain disabled or planned in this slice.
+- [x] Added supplier create route: `/suppliers/new`.
+- [x] Added supplier edit route: `/suppliers/{supplier_id}/edit`.
+- [x] Added reusable supplier form UI using documented supplier fields only.
+- [x] Added supplier create/update API client helpers aligned to `/api/v1/suppliers`.
+- [x] Added supplier deactivate/reactivate API client helpers aligned to documented action endpoints.
+- [x] Updated supplier list actions from planned placeholders to edit/deactivate/reactivate controls.
+- [x] Added permission-aware, tenant read-only, and offline write blocking in the supplier UI.
+- [x] Preserved supplier list/search behavior from Step 8.1.
 
 **Pending Checklist**
 

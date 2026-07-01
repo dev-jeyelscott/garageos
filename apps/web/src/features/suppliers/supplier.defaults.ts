@@ -1,10 +1,23 @@
-import type { SupplierListFilters, SupplierStatusFilter } from './supplier.types';
+import type {
+  SupplierFormValues,
+  SupplierListFilters,
+  SupplierStatusFilter,
+} from './supplier.types';
 
 export const supplierListPageSize = 25;
 
 export const defaultSupplierListFilters: SupplierListFilters = {
   q: '',
   status: 'all',
+};
+
+export const defaultSupplierFormValues: SupplierFormValues = {
+  name: '',
+  contact_person: '',
+  mobile_number: '',
+  email: '',
+  address: '',
+  notes: '',
 };
 
 export const supplierStatusFilterOptions: readonly {
