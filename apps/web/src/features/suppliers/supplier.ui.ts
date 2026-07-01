@@ -47,7 +47,12 @@ export function canUseSupplierWriteActions({
   readonly session: AuthSessionResponseData | null;
   readonly networkStatus: NetworkStatus;
 }): boolean {
-  return session?.access.read_only !== true && networkStatus === 'online';
+  return (
+    session !== null &&
+    session.access.can_access_operational_modules === true &&
+    session.access.read_only !== true &&
+    networkStatus === 'online'
+  );
 }
 
 export function getSupplierWriteBlockReason({
@@ -63,16 +68,16 @@ export function getSupplierWriteBlockReason({
     return 'Supplier actions are unavailable while your session is loading.';
   }
 
-  if (!hasPermission(session, requiredPermission)) {
-    return `Required permission: ${requiredPermission}.`;
-  }
-
-  if (session.access.read_only) {
+  if (session.access.can_access_operational_modules !== true || session.access.read_only === true) {
     return 'Supplier writes are blocked while this tenant is read-only or otherwise write-restricted.';
   }
 
   if (networkStatus === 'offline') {
     return 'Offline mode is read-only. Reconnect before changing supplier records.';
+  }
+
+  if (!hasPermission(session, requiredPermission)) {
+    return `Required permission: ${requiredPermission}.`;
   }
 
   return 'Supplier action is available.';
