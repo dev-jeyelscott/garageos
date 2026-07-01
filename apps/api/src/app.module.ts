@@ -20,6 +20,7 @@ import { InventoryModule } from './modules/inventory/inventory.module';
 import { InventoryAdjustmentsModule } from './modules/inventory-adjustments/inventory-adjustments.module';
 import { InventoryTransfersModule } from './modules/inventory-transfers/inventory-transfers.module';
 import { PurchaseOrdersModule } from './modules/purchase-orders/purchase-orders.module';
+import { SuppliersModule } from './modules/suppliers/suppliers.module';
 import { BackgroundJobsModule } from './shared/background-jobs/background-jobs.module';
 import { IdempotencyModule } from './shared/idempotency/idempotency.module';
 import { RequestContextMiddleware } from './shared/observability/request-context.middleware';
@@ -50,6 +51,7 @@ export class HealthController {
     InventoryAdjustmentsModule,
     InventoryTransfersModule,
     PurchaseOrdersModule,
+    SuppliersModule,
     MechanicSessionsModule,
     CustomersModule,
     MotorcyclesModule,

@@ -223,7 +223,7 @@
 - [x] Implement purchase receiving backend/API and FIFO/AP effects
 - [x] Harden purchase receiving validation coverage
 - [x] Add database-backed purchase receiving integration/concurrency tests
-- [ ] Verify supplier lifecycle backend/API coverage
+- [x] Verify supplier lifecycle backend/API coverage
 - [ ] Implement purchase order draft/create/update workflow
 - [ ] Implement purchase order order/cancel/close workflow actions
 - [ ] Implement purchase receiving UI workflow
