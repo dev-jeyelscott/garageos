@@ -9,7 +9,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "bootstrap:platform-admin": "tsx src/scripts/bootstrap-platform-admin.ts"
+    "bootstrap:platform-admin": "tsx src/scripts/bootstrap-platform-admin.ts",
+    "activate:tenant-owner": "tsx src/scripts/activate-tenant-owner.ts"
   },
   "dependencies": {
     "@nestjs/common": "latest",
