@@ -23,47 +23,46 @@
 
 ## Overall Completion Snapshot
 
-| Area                                 | Status             | Evidence / Notes                                                                                                                                                                    |
-| ------------------------------------ | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Documentation baseline               | Done               | Approved source documents are available and define full build scope, roadmap, API, schema, UX, QA, permissions, stack, and ARDs.                                                    |
-| Repository verification in this chat | Needs Review       | No live repository inspection or validation commands were run while creating this tracker.                                                                                          |
-| Current implementation baseline      | Needs Review       | Prior handoff context indicates backend foundations through Milestone 7 Step 7.15 were completed and user reported validation passed, but this tracker does not re-verify the repo. |
-| Current active workstream            | In Progress        | User paused Milestone 8 backend work and shifted focus to implementing platform UIs first.                                                                                          |
-| Recommended next slice               | In Progress / Next | Platform Tenant Management UI: `/platform/tenants`, `/platform/tenants/{tenant_id}`, `/platform/tenants/new`.                                                                       |
-| Frontend UI coverage                 | Needs Review       | Platform Overview UI extraction/refactor has been discussed; most documented platform and tenant screens need inventory/verification.                                               |
-| Validation status                    | Needs Review       | Run web/API validation commands locally before marking any UI or backend slice done.                                                                                                |
+| Area                                 | Status                 | Evidence / Notes                                                                                                                                                                                            |
+| ------------------------------------ | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Documentation baseline               | Done                   | Approved source documents are available and define full build scope, roadmap, API, schema, UX, QA, permissions, stack, and ARDs.                                                                            |
+| Repository verification in this chat | Partial Review         | GitHub connector inspected current `main` files relevant to this cleanup: purchase order menu constants and `docs/progress-tracker.md`. Local clone and command validation were not available in this chat. |
+| Current implementation baseline      | Needs Local Validation | Latest reviewed commit `1d5a06d8` adds purchase order detail view after prior supplier and purchase order list/search UI slices.                                                                            |
+| Current active workstream            | In Progress            | Milestone 8 — Purchasing, Suppliers, and AP cleanup for purchase order detail menu/tracker alignment.                                                                                                       |
+| Recommended next slice               | Validation / Next      | Run web validation for the purchase order list/detail UI, then continue the next documented Milestone 8 purchasing/AP slice.                                                                                |
+| Frontend UI coverage                 | In Progress            | Supplier list/search, supplier create/edit/status actions, purchase order list/search, and purchase order detail UI are reflected in tracker context; remaining AP/receiving workflows stay planned.        |
+| Validation status                    | Not Run Here           | Web typecheck, lint, test, and build must run locally before marking this cleanup done.                                                                                                                     |
 
 ## Current Milestone / Workstream
 
-| Field                                           | Value                                                                                  |
-| ----------------------------------------------- | -------------------------------------------------------------------------------------- |
-| Roadmap milestone currently paused              | Milestone 8 — Purchasing, Suppliers, and AP                                            |
-| Active workstream                               | Platform UI implementation before continuing Milestone 8                               |
-| Current UI slice                                | Platform Tenant Management UI                                                          |
-| Last reported completed roadmap step            | Milestone 7 Step 7.15 — Audit and status history, with user-reported validation passed |
-| Next recommended roadmap step after UI catch-up | Resume Milestone 8 Step 8.1 — Supplier create/read/update/deactivate/reactivate        |
+| Field                              | Value                                                                                  |
+| ---------------------------------- | -------------------------------------------------------------------------------------- |
+| Roadmap milestone currently active | Milestone 8 — Purchasing, Suppliers, and AP                                            |
+| Active workstream                  | Purchase order detail menu/tracker alignment                                           |
+| Current UI slice                   | Purchase Order List/Search and Detail UI                                               |
+| Last reviewed commit               | `1d5a06d8` — `feat(web): add purchase order detail view`                               |
+| Next recommended roadmap step      | Run web validation, then continue the next documented Milestone 8 purchasing/AP slice. |
 
 ## Known Blockers
 
-| Blocker                                                                             | Impact                                                           | Resolution                                                                                           |
-| ----------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Current repo state not inspected in this chat                                       | Cannot safely mark implementation as fully verified              | Run local validation and inspect current files before changing code.                                 |
-| Platform UI module coverage not fully verified                                      | Need to identify missing/existing UI pages before implementation | Build or update a UI inventory against `ux-sreen-map.md`, `ui-registry.md`, and actual routes.       |
-| Platform tenant management pages are next but require exact existing shell patterns | Risk of duplicating shell or adding undocumented widgets         | Keep `/platform/*` inside authenticated platform shell and reuse existing source-aligned components. |
-| Some platform admin account APIs are not fully detailed                             | Risk of inventing undocumented platform admin workflows          | Treat `/platform/admin-users` as conditional and confirm API support before building.                |
+| Blocker                                                                | Impact                                                          | Resolution                                                                                             |
+| ---------------------------------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Local validation not run in this chat                                  | Cannot mark this cleanup fully verified                         | Run the web typecheck, lint, test, and build commands locally.                                         |
+| Purchase receiving/FIFO/AP workflows intentionally out of scope        | Risk of accidentally enabling undocumented workflow behavior    | Keep edit, order, receive, cancel, close, supplier returns, payments, credits, and AP reports planned. |
+| Progress tracker may still need broader milestone reconciliation later | Tracker may not reflect every backend/UI slice outside this fix | Keep this cleanup limited to the latest purchase order detail review findings.                         |
 
 ## Validation Status Summary
 
-| Validation Area               | Status       | Command / Evidence                       |
-| ----------------------------- | ------------ | ---------------------------------------- |
-| API typecheck                 | Needs Review | `pnpm --filter @garageos/api typecheck`  |
-| API tests                     | Needs Review | `pnpm --filter @garageos/api test`       |
-| Web typecheck                 | Needs Review | `pnpm --filter @garageos/web typecheck`  |
-| Web lint                      | Needs Review | `pnpm --filter @garageos/web lint`       |
-| Web tests                     | Needs Review | `pnpm --filter @garageos/web test`       |
-| Web build                     | Needs Review | `pnpm --filter @garageos/web build`      |
-| Database migration validation | Needs Review | `pnpm db:migrate && pnpm db:validate`    |
-| Full workspace validation     | Needs Review | `pnpm lint && pnpm test` where available |
+| Validation Area               | Status            | Command / Evidence                                                           |
+| ----------------------------- | ----------------- | ---------------------------------------------------------------------------- |
+| API typecheck                 | Not Required Here | Documentation/menu-only web cleanup; run separately for backend/API changes. |
+| API tests                     | Not Required Here | Documentation/menu-only web cleanup; run separately for backend/API changes. |
+| Web typecheck                 | Not Run Here      | `pnpm --filter @garageos/web typecheck`                                      |
+| Web lint                      | Not Run Here      | `pnpm --filter @garageos/web lint`                                           |
+| Web tests                     | Not Run Here      | `pnpm --filter @garageos/web test`                                           |
+| Web build                     | Not Run Here      | `pnpm --filter @garageos/web build`                                          |
+| Database migration validation | Not Required Here | No database/schema changes in this cleanup.                                  |
+| Full workspace validation     | Optional          | `pnpm lint && pnpm test` where available after the focused web validation.   |
 
 ---
 
@@ -81,23 +80,23 @@
 
 ## Milestone Overview
 
-| Milestone | Name                                               | Goal                                                                                                                      | Status       | Dependencies           | Notes                                                                                                       |
-| --------: | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------ | ---------------------- | ----------------------------------------------------------------------------------------------------------- |
-|         0 | Project Foundation and Engineering Decisions       | Establish repo, standards, ADRs, CI, local dev, UX/QA planning.                                                           | Needs Review | Approved documentation | Prior work appears to have advanced beyond this milestone; verify current repo.                             |
-|         1 | Database Foundation and Core Migrations            | Implement schema foundations, seed data, constraints, indexes, migration process, and fixtures.                           | Needs Review | M0                     | Backend work through inventory implies substantial completion; verify migrations and seed state.            |
-|         2 | API Foundation, Auth, Tenant Context, RBAC         | Build secure request pipeline, auth/session flows, permission architecture, branch guard, idempotency, and audit helpers. | Needs Review | M0-M1                  | Must remain authoritative for all future UI work.                                                           |
-|         3 | Tenant Lifecycle, Onboarding, Platform Admin       | Enable tenant creation, setup, subscription gates, plan enforcement, support access, export/deletion controls.            | In Progress  | M1-M2                  | Platform UI work is currently active. Backend/API likely partially present; UI coverage needs verification. |
-|         4 | Core Master Data                                   | Build branches, employees, roles, permissions, customers, motorcycles, services, and categories.                          | Needs Review | M2-M3                  | Previous handoff context indicates branch service work exists; verify UI/API coverage.                      |
-|         5 | Service Operations                                 | Build estimates, job orders, mechanic sessions, status transitions, notes/files, and assignment workflows.                | Needs Review | M4                     | Inventory workflows depended on service operations; verify current implementation.                          |
-|         6 | Inventory Foundation and FIFO                      | Build products, stock balances, ledger, reservations, FIFO layers, and allocation logic.                                  | Needs Review | M1-M5 partial          | Prior work indicates inventory foundation exists; verify ledger/FIFO tests.                                 |
-|         7 | Inventory Workflows                                | Build adjustments, approval/posting, transfers, variance handling, low-stock alerts, cancellation rules.                  | Needs Review | M6                     | User reported Step 7.15 passed. Mark final done only after repo validation.                                 |
-|         8 | Purchasing, Suppliers, and AP                      | Build suppliers, purchase orders, receiving, supplier payments/credits, supplier returns, and AP basis.                   | Not Started  | M6                     | Paused before start to focus platform UIs.                                                                  |
-|         9 | Invoicing, Payments, Receipts, Refunds, AR         | Build billing allocations, invoices, discounts/tax, payments, receipts, refunds, voids, and AR.                           | Not Started  | M5-M8                  | Depends on M8 and earlier service/inventory workflows.                                                      |
-|        10 | Expenses, Reminders, Notifications, Integrations   | Build expenses, reminder rules, notification preferences, delivery tracking, and plan-channel enforcement.                | Not Started  | M3-M9                  | Provider choices may remain ADR-backed.                                                                     |
-|        11 | Files, Exports, Offline PWA Cache                  | Build attachments, signed URLs, tenant exports, export jobs, and read-only offline cache.                                 | Not Started  | M2-M10                 | Must not introduce offline writes.                                                                          |
-|        12 | Dashboard, Reports, Search, Export Formats         | Build dashboard, reports, search/read models, export formats, and formula verification.                                   | Not Started  | M6-M11                 | Some dashboard/platform overview UI may exist but requires verification.                                    |
-|        13 | Security, Observability, Performance, DR Hardening | Harden security, logs, metrics, alerts, performance, backups, restore tests, runbooks.                                    | Not Started  | All previous           | Continuous review should happen, but milestone closure is later.                                            |
-|        14 | End-to-End UAT and Launch Readiness                | Execute full acceptance, defect burn-down, sign-offs, production smoke, controlled launch readiness.                      | Not Started  | All previous           | Launch readiness only after full validation evidence.                                                       |
+| Milestone | Name                                               | Goal                                                                                                                      | Status       | Dependencies           | Notes                                                                                                                      |
+| --------: | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------ | ---------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+|         0 | Project Foundation and Engineering Decisions       | Establish repo, standards, ADRs, CI, local dev, UX/QA planning.                                                           | Needs Review | Approved documentation | Prior work appears to have advanced beyond this milestone; verify current repo.                                            |
+|         1 | Database Foundation and Core Migrations            | Implement schema foundations, seed data, constraints, indexes, migration process, and fixtures.                           | Needs Review | M0                     | Backend work through inventory implies substantial completion; verify migrations and seed state.                           |
+|         2 | API Foundation, Auth, Tenant Context, RBAC         | Build secure request pipeline, auth/session flows, permission architecture, branch guard, idempotency, and audit helpers. | Needs Review | M0-M1                  | Must remain authoritative for all future UI work.                                                                          |
+|         3 | Tenant Lifecycle, Onboarding, Platform Admin       | Enable tenant creation, setup, subscription gates, plan enforcement, support access, export/deletion controls.            | In Progress  | M1-M2                  | Platform UI work is currently active. Backend/API likely partially present; UI coverage needs verification.                |
+|         4 | Core Master Data                                   | Build branches, employees, roles, permissions, customers, motorcycles, services, and categories.                          | Needs Review | M2-M3                  | Previous handoff context indicates branch service work exists; verify UI/API coverage.                                     |
+|         5 | Service Operations                                 | Build estimates, job orders, mechanic sessions, status transitions, notes/files, and assignment workflows.                | Needs Review | M4                     | Inventory workflows depended on service operations; verify current implementation.                                         |
+|         6 | Inventory Foundation and FIFO                      | Build products, stock balances, ledger, reservations, FIFO layers, and allocation logic.                                  | Needs Review | M1-M5 partial          | Prior work indicates inventory foundation exists; verify ledger/FIFO tests.                                                |
+|         7 | Inventory Workflows                                | Build adjustments, approval/posting, transfers, variance handling, low-stock alerts, cancellation rules.                  | Needs Review | M6                     | User reported Step 7.15 passed. Mark final done only after repo validation.                                                |
+|         8 | Purchasing, Suppliers, and AP                      | Build suppliers, purchase orders, receiving, supplier payments/credits, supplier returns, and AP basis.                   | In Progress  | M6                     | Supplier UI, purchase order list/search, and purchase order detail UI are in place; receiving/AP workflows remain planned. |
+|         9 | Invoicing, Payments, Receipts, Refunds, AR         | Build billing allocations, invoices, discounts/tax, payments, receipts, refunds, voids, and AR.                           | Not Started  | M5-M8                  | Depends on M8 and earlier service/inventory workflows.                                                                     |
+|        10 | Expenses, Reminders, Notifications, Integrations   | Build expenses, reminder rules, notification preferences, delivery tracking, and plan-channel enforcement.                | Not Started  | M3-M9                  | Provider choices may remain ADR-backed.                                                                                    |
+|        11 | Files, Exports, Offline PWA Cache                  | Build attachments, signed URLs, tenant exports, export jobs, and read-only offline cache.                                 | Not Started  | M2-M10                 | Must not introduce offline writes.                                                                                         |
+|        12 | Dashboard, Reports, Search, Export Formats         | Build dashboard, reports, search/read models, export formats, and formula verification.                                   | Not Started  | M6-M11                 | Some dashboard/platform overview UI may exist but requires verification.                                                   |
+|        13 | Security, Observability, Performance, DR Hardening | Harden security, logs, metrics, alerts, performance, backups, restore tests, runbooks.                                    | Not Started  | All previous           | Continuous review should happen, but milestone closure is later.                                                           |
+|        14 | End-to-End UAT and Launch Readiness                | Execute full acceptance, defect burn-down, sign-offs, production smoke, controlled launch readiness.                      | Not Started  | All previous           | Launch readiness only after full validation evidence.                                                                      |
 
 ## Milestone 0 — Project Foundation and Engineering Decisions
 
@@ -406,7 +405,7 @@ pnpm dev:api
 
 **Goal:** Build suppliers, purchase orders, receiving, supplier payments/credits, supplier returns, and AP basis.
 
-**Status:** `Not Started`
+**Status:** `In Progress`
 
 **Dependencies:** M6.
 
@@ -416,7 +415,7 @@ pnpm dev:api
 - [x] Supplier list/search screen wired to documented `GET /api/v1/suppliers` endpoint.
 - [x] Supplier search supports `q`, `status`, cursor pagination, loading, empty, forbidden, and error states.
 - [x] Tenant navigation includes Suppliers behind `suppliers.read`.
-- [x] Supplier write/payment/credit/return actions remain disabled or planned in this slice.
+- [x] Supplier write/payment/credit/return actions remained disabled or planned in the list/search slice.
 - [x] Added supplier create route: `/suppliers/new`.
 - [x] Added supplier edit route: `/suppliers/{supplier_id}/edit`.
 - [x] Added reusable supplier form UI using documented supplier fields only.
@@ -430,31 +429,36 @@ pnpm dev:api
 - [x] Purchase order search supports `q`, `branch_id`, `status`, `from_date`, `to_date`, cursor pagination, loading, empty, forbidden, offline, read-only, and error states.
 - [x] Purchase order status filter uses only documented purchase order statuses: `draft`, `ordered`, `partially_received`, `received`, `closed`, `cancelled`.
 - [x] Tenant navigation includes Purchases behind `purchases.read`.
-- [x] Purchase create/edit/detail/receiving/cancel/close actions remain planned or disabled for later Milestone 8 slices.
+- [x] Added purchase order detail route at `/purchase-orders/{purchase_order_id}`.
+- [x] Added read-only purchase order detail screen with summary, receiving summary display, and line item display.
+- [x] Purchase order detail uses `purchases.read`, tenant lifecycle, offline/read-only messaging, and API error states.
+- [x] Purchase order list now links to purchase order detail.
+- [x] Purchase order edit/order/receive/cancel/close actions remain disabled or planned for later Milestone 8 slices.
 
 **Pending Checklist**
 
-- [ ] Supplier create/read/update/deactivate/reactivate.
-- [ ] Purchase order draft/create/update/cancel.
+- [ ] Purchase order draft/create/update workflow.
+- [ ] Purchase order order/cancel/close workflow actions.
 - [ ] Purchase receiving with stock and FIFO layer creation.
 - [ ] Cash purchase behavior without AP liability.
 - [ ] Credit purchase AP behavior.
 - [ ] Supplier payment/credit workflows.
 - [ ] Supplier returns and valuation.
 - [ ] AP balances and reports.
-- [ ] Purchasing/AP mobile screens.
+- [ ] Purchasing/AP mobile screens beyond supplier and purchase order list/detail.
 
 **Blockers**
 
-- Paused by user to focus platform UI implementation first.
+- Local validation for the purchase order detail/menu/tracker cleanup has not been run in this chat.
+- Receiving, inventory/FIFO effects, supplier returns, supplier payments, supplier credits, and AP reporting must remain disabled until their documented slices are implemented.
 
 **Validation / QA Gates**
 
 ```bash
-pnpm --filter @garageos/api typecheck
-pnpm --filter @garageos/api test
 pnpm --filter @garageos/web typecheck
+pnpm --filter @garageos/web lint
 pnpm --filter @garageos/web test
+pnpm --filter @garageos/web build
 ```
 
 **Notes / Handoff Context**

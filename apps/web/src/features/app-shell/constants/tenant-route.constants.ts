@@ -198,14 +198,14 @@ export const tenantMoreMenuItems: readonly TenantMoreMenuItem[] = [
     title: 'Purchase Orders',
     group: 'Inventory and purchasing',
     description:
-      'Source-aligned purchase order list/search route for branch-scoped purchase records. Purchase receiving, supplier returns, supplier payments, credits, AP reports, and workflow actions remain planned for later Milestone 8 slices.',
+      'Source-aligned purchase order list/search and detail routes for branch-scoped purchase records. Purchase receiving, supplier returns, supplier payments, credits, AP reports, inventory/FIFO receiving effects, and workflow mutations remain planned for later Milestone 8 slices.',
     routePath: '/purchase-orders',
     routeExists: true,
     requiredPermissions: ['purchases.read'],
     plannedScope: [
-      'Purchase order list and search',
+      'Purchase order list, search, and detail viewing',
       'Branch, supplier, status, and date filters',
-      'Purchase order detail, receiving, supplier returns, supplier payments, credits, and AP views remain planned',
+      'Receiving, supplier returns, supplier payments, credits, AP views, inventory/FIFO receiving effects, and workflow mutations remain planned',
     ],
   },
   {
