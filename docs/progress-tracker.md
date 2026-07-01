@@ -340,3 +340,9 @@
 - [ ] Validate file/export/offline workflows
 - [ ] Validate dashboard/report workflows
 - [ ] Validate tenant lifecycle workflows
+- [ ] Burn down release-blocking defects
+- [ ] Collect product/QA/security/DevOps/engineering signoffs
+- [ ] Provision production
+- [ ] Bootstrap first platform admin
+- [ ] Execute production smoke test
+- [ ] Execute pilot launch
