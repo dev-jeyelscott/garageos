@@ -433,15 +433,19 @@ pnpm dev:api
 - [x] Added read-only purchase order detail screen with summary, receiving summary display, and line item display.
 - [x] Purchase order detail uses `purchases.read`, tenant lifecycle, offline/read-only messaging, and API error states.
 - [x] Purchase order list now links to purchase order detail.
+- [x] Added purchase receiving backend endpoint at `POST /api/v1/purchase-orders/{purchase_order_id}/receivings`.
+- [x] Purchase receiving requires `purchases.receive`, tenant lifecycle write access, branch access, receivable PO status, active branch, valid PO lines, positive received quantities, and idempotency.
+- [x] Purchase receiving blocks over-receiving by default.
+- [x] Purchase receiving creates posted receiving records, receiving lines, inventory ledger entries using `purchase_receive`, FIFO layers, and branch stock-on-hand increases transactionally.
+- [x] Credit purchase receiving creates supplier payable deltas.
+- [x] Cash purchase receiving requires payment method and does not create AP liability.
+- [x] Purchase receiving writes audit logs and includes focused backend tests for success, blocked paths, idempotency replay, and over-receiving protection.
 - [x] Purchase order edit/order/receive/cancel/close actions remain disabled or planned for later Milestone 8 slices.
 
 **Pending Checklist**
 
 - [ ] Purchase order draft/create/update workflow.
 - [ ] Purchase order order/cancel/close workflow actions.
-- [ ] Purchase receiving with stock and FIFO layer creation.
-- [ ] Cash purchase behavior without AP liability.
-- [ ] Credit purchase AP behavior.
 - [ ] Supplier payment/credit workflows.
 - [ ] Supplier returns and valuation.
 - [ ] AP balances and reports.
