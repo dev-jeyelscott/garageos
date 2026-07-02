@@ -95,6 +95,7 @@ export function SupplierListScreen() {
   const canCreateSuppliers = hasPermission(session, 'suppliers.create');
   const canEditSuppliers = hasPermission(session, 'suppliers.update');
   const canDeactivateSuppliers = hasPermission(session, 'suppliers.deactivate');
+  const canRecordSupplierPayments = hasPermission(session, 'supplier_payments.create');
   const writeActionsAllowed = canUseSupplierWriteActions({ session, networkStatus });
   const canCreateSupplier = canCreateSuppliers && writeActionsAllowed;
   const canUseWriteActions = writeActionsAllowed;
@@ -251,8 +252,8 @@ export function SupplierListScreen() {
             </p>
             <CardTitle className="mt-2 text-2xl">Suppliers</CardTitle>
             <CardDescription className="mt-2">
-              Search, create, edit, deactivate, and reactivate tenant-wide supplier records through
-              documented supplier APIs.
+              Search, create, edit, deactivate, reactivate, and record manual supplier payments
+              through documented supplier APIs.
             </CardDescription>
           </div>
           {canCreateSupplier ? (
@@ -353,6 +354,7 @@ export function SupplierListScreen() {
             hasMore={hasMore}
             canEditSuppliers={canEditSuppliers}
             canDeactivateSuppliers={canDeactivateSuppliers}
+            canRecordSupplierPayments={canRecordSupplierPayments}
             canUseWriteActions={canUseWriteActions}
             onLoadMore={() => void handleLoadMore()}
             onSupplierChanged={handleSupplierChanged}

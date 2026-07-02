@@ -33,6 +33,7 @@ interface SupplierListResultsProps {
   readonly hasMore: boolean;
   readonly canEditSuppliers: boolean;
   readonly canDeactivateSuppliers: boolean;
+  readonly canRecordSupplierPayments: boolean;
   readonly canUseWriteActions: boolean;
   readonly onLoadMore: () => void;
   readonly onSupplierChanged: () => void;
@@ -46,6 +47,7 @@ export function SupplierListResults({
   hasMore,
   canEditSuppliers,
   canDeactivateSuppliers,
+  canRecordSupplierPayments,
   canUseWriteActions,
   onLoadMore,
   onSupplierChanged,
@@ -141,6 +143,7 @@ export function SupplierListResults({
         suppliers={supplierListState.suppliers}
         canEditSuppliers={canEditSuppliers}
         canDeactivateSuppliers={canDeactivateSuppliers}
+        canRecordSupplierPayments={canRecordSupplierPayments}
         canUseWriteActions={canUseWriteActions}
         submittingAction={actionState.status === 'submitting' ? actionState : null}
         onStatusAction={(supplier, action) => void handleStatusAction(supplier, action)}
@@ -149,6 +152,7 @@ export function SupplierListResults({
         suppliers={supplierListState.suppliers}
         canEditSuppliers={canEditSuppliers}
         canDeactivateSuppliers={canDeactivateSuppliers}
+        canRecordSupplierPayments={canRecordSupplierPayments}
         canUseWriteActions={canUseWriteActions}
         submittingAction={actionState.status === 'submitting' ? actionState : null}
         onStatusAction={(supplier, action) => void handleStatusAction(supplier, action)}
@@ -222,6 +226,7 @@ function SupplierCardList({
   suppliers,
   canEditSuppliers,
   canDeactivateSuppliers,
+  canRecordSupplierPayments,
   canUseWriteActions,
   submittingAction,
   onStatusAction,
@@ -249,6 +254,7 @@ function SupplierCardList({
                 supplier={supplier}
                 canEditSuppliers={canEditSuppliers}
                 canDeactivateSuppliers={canDeactivateSuppliers}
+                canRecordSupplierPayments={canRecordSupplierPayments}
                 canUseWriteActions={canUseWriteActions}
                 submittingAction={submittingAction}
                 onStatusAction={onStatusAction}
@@ -265,6 +271,7 @@ function SupplierTable({
   suppliers,
   canEditSuppliers,
   canDeactivateSuppliers,
+  canRecordSupplierPayments,
   canUseWriteActions,
   submittingAction,
   onStatusAction,
@@ -306,6 +313,7 @@ function SupplierTable({
                   supplier={supplier}
                   canEditSuppliers={canEditSuppliers}
                   canDeactivateSuppliers={canDeactivateSuppliers}
+                  canRecordSupplierPayments={canRecordSupplierPayments}
                   canUseWriteActions={canUseWriteActions}
                   submittingAction={submittingAction}
                   onStatusAction={onStatusAction}
@@ -323,6 +331,7 @@ function SupplierRowActions({
   supplier,
   canEditSuppliers,
   canDeactivateSuppliers,
+  canRecordSupplierPayments,
   canUseWriteActions,
   submittingAction,
   onStatusAction,
@@ -332,11 +341,29 @@ function SupplierRowActions({
   const canRunStatusAction =
     canUseWriteActions &&
     (statusAction === 'deactivate' ? canDeactivateSuppliers : canEditSuppliers);
+  const canRecordPayment =
+    canUseWriteActions && canRecordSupplierPayments && supplier.status === 'active';
   const isSubmitting =
     submittingAction?.supplierId === supplier.id && submittingAction.action === statusAction;
 
   return (
     <div className="flex flex-col justify-end gap-2 border-t border-border pt-3 sm:flex-row md:border-t-0 md:pt-0">
+      {canRecordPayment ? (
+        <ButtonLink href={`/suppliers/${supplier.id}/payments`} variant="secondary" size="sm">
+          Record payment
+        </ButtonLink>
+      ) : (
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          disabled
+          title={getRecordPaymentTitle({ supplier, canRecordSupplierPayments, canUseWriteActions })}
+        >
+          Record payment
+        </Button>
+      )}
+
       {canEditSuppliers && canUseWriteActions ? (
         <ButtonLink href={`/suppliers/${supplier.id}/edit`} variant="secondary" size="sm">
           Edit
@@ -390,6 +417,30 @@ function SupplierField({
       <span className="break-words text-foreground">{value ?? '—'}</span>
     </div>
   );
+}
+
+function getRecordPaymentTitle({
+  supplier,
+  canRecordSupplierPayments,
+  canUseWriteActions,
+}: {
+  readonly supplier: SupplierListItem;
+  readonly canRecordSupplierPayments: boolean;
+  readonly canUseWriteActions: boolean;
+}): string {
+  if (!canRecordSupplierPayments) {
+    return 'Record payment is blocked by missing supplier_payments.create permission.';
+  }
+
+  if (!canUseWriteActions) {
+    return 'Record payment is blocked by read-only tenant state or offline mode.';
+  }
+
+  if (supplier.status !== 'active') {
+    return 'Supplier must be active before recording a supplier payment.';
+  }
+
+  return `Record a manual supplier payment for ${supplier.name}.`;
 }
 
 function getStatusActionTitle({
@@ -464,6 +515,7 @@ interface SupplierActionListProps {
   readonly suppliers: readonly SupplierListItem[];
   readonly canEditSuppliers: boolean;
   readonly canDeactivateSuppliers: boolean;
+  readonly canRecordSupplierPayments: boolean;
   readonly canUseWriteActions: boolean;
   readonly submittingAction: SubmittingAction | null;
   readonly onStatusAction: (supplier: SupplierListItem, action: SupplierStatusAction) => void;

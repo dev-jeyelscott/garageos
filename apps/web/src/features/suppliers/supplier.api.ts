@@ -16,6 +16,11 @@ import type {
   SupplierListItem,
   SupplierListResult,
   SupplierMutationInput,
+  SupplierPaymentBalanceSummary,
+  SupplierPaymentInput,
+  SupplierPaymentMethod,
+  SupplierPaymentMutationResult,
+  SupplierPaymentRecord,
   SupplierStatus,
   SupplierUpdateInput,
 } from './supplier.types';
@@ -132,6 +137,34 @@ export async function reactivateSupplier(supplierId: string): Promise<SupplierDe
   });
 }
 
+export async function recordSupplierPayment({
+  supplierId,
+  input,
+  idempotencyKey,
+}: {
+  readonly supplierId: string;
+  readonly input: SupplierPaymentInput;
+  readonly idempotencyKey: string;
+}): Promise<SupplierPaymentMutationResult> {
+  const data = await postAuthJson<unknown>(
+    `/suppliers/${encodeURIComponent(supplierId)}/payments`,
+    input,
+    {
+      requiresAuth: true,
+      idempotencyKey,
+    },
+  );
+
+  return normalizeSupplierPaymentMutationPayload(data, {
+    requestId: null,
+    correlationId: null,
+  });
+}
+
+export function createSupplierPaymentIdempotencyKey(): string {
+  return createIdempotencyKey('supplier-payment');
+}
+
 export function normalizeSupplierListPayload(
   data: unknown,
   meta: {
@@ -191,6 +224,34 @@ function normalizeSupplierDetailPayload(
   }
 
   throw toInvalidSupplierDetailResponseError(meta);
+}
+
+function normalizeSupplierPaymentMutationPayload(
+  data: unknown,
+  meta: {
+    readonly requestId: string | null;
+    readonly correlationId: string | null;
+  },
+): SupplierPaymentMutationResult {
+  const result = normalizeSupplierPaymentMutation(data);
+
+  if (result !== null) {
+    return result;
+  }
+
+  if (isObjectRecord(data)) {
+    const candidates = [data.supplier_payment, data.supplierPayment, data.result, data.item];
+
+    for (const candidate of candidates) {
+      const nestedResult = normalizeSupplierPaymentMutation(candidate);
+
+      if (nestedResult !== null) {
+        return nestedResult;
+      }
+    }
+  }
+
+  throw toInvalidSupplierPaymentResponseError(meta);
 }
 
 function readSupplierArray(data: Record<string, unknown>): readonly SupplierListItem[] | null {
@@ -279,6 +340,23 @@ function toInvalidSupplierDetailResponseError({
   };
 }
 
+function toInvalidSupplierPaymentResponseError({
+  requestId,
+  correlationId,
+}: {
+  readonly requestId: string | null;
+  readonly correlationId: string | null;
+}): ApiClientError {
+  return {
+    code: 'invalid_api_response',
+    message: 'The supplier payment response did not contain a valid payment payload.',
+    status: 500,
+    details: [],
+    requestId,
+    correlationId,
+  };
+}
+
 function normalizeSupplierDetail(value: unknown): SupplierDetail | null {
   const supplier = normalizeSupplierListItem(value);
 
@@ -321,6 +399,81 @@ function normalizeSupplierListItem(value: unknown): SupplierListItem | null {
   };
 }
 
+function normalizeSupplierPaymentMutation(value: unknown): SupplierPaymentMutationResult | null {
+  if (!isObjectRecord(value)) {
+    return null;
+  }
+
+  const payment = normalizeSupplierPaymentRecord(
+    value.payment ?? value.supplier_payment ?? value.supplierPayment,
+  );
+  const balance = normalizeSupplierPaymentBalance(value.balance ?? value.payable_balance);
+
+  if (payment === null || balance === null) {
+    return null;
+  }
+
+  return {
+    payment,
+    balance,
+  };
+}
+
+function normalizeSupplierPaymentRecord(value: unknown): SupplierPaymentRecord | null {
+  if (!isObjectRecord(value)) {
+    return null;
+  }
+
+  if (
+    !(
+      typeof value.id === 'string' &&
+      typeof value.supplier_id === 'string' &&
+      isSupplierPaymentMethod(value.payment_method)
+    )
+  ) {
+    return null;
+  }
+
+  const amount = readNullableMoneyString(value.amount);
+  const paymentDate = readNullableString(value.payment_date);
+
+  if (amount === null || paymentDate === null) {
+    return null;
+  }
+
+  return {
+    id: value.id,
+    supplier_id: value.supplier_id,
+    amount,
+    payment_date: paymentDate,
+    payment_method: value.payment_method,
+    reference_number: readNullableString(value.reference_number),
+    notes: readNullableString(value.notes),
+    created_by_user_id: readNullableString(value.created_by_user_id),
+    created_at: readNullableString(value.created_at),
+  };
+}
+
+function normalizeSupplierPaymentBalance(value: unknown): SupplierPaymentBalanceSummary | null {
+  if (!isObjectRecord(value)) {
+    return null;
+  }
+
+  const beforePayment = readNullableMoneyString(value.before_payment);
+  const paymentAmount = readNullableMoneyString(value.payment_amount);
+  const afterPayment = readNullableMoneyString(value.after_payment);
+
+  if (beforePayment === null || paymentAmount === null || afterPayment === null) {
+    return null;
+  }
+
+  return {
+    before_payment: beforePayment,
+    payment_amount: paymentAmount,
+    after_payment: afterPayment,
+  };
+}
+
 function readLockVersion(value: unknown): number {
   if (typeof value === 'number' && Number.isInteger(value) && value >= 0) {
     return value;
@@ -341,8 +494,32 @@ function readNullableString(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
+function readNullableMoneyString(value: unknown): string | null {
+  if (typeof value === 'string' && value.length > 0) {
+    return value;
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value.toFixed(2);
+  }
+
+  return null;
+}
+
 function isSupplierStatus(value: unknown): value is SupplierStatus {
   return value === 'active' || value === 'inactive';
+}
+
+function isSupplierPaymentMethod(value: unknown): value is SupplierPaymentMethod {
+  return (
+    value === 'cash' ||
+    value === 'gcash' ||
+    value === 'maya' ||
+    value === 'bank_transfer' ||
+    value === 'credit_card' ||
+    value === 'check' ||
+    value === 'other'
+  );
 }
 
 function isObjectRecord(value: unknown): value is Record<string, unknown> {

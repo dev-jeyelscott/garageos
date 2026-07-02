@@ -2,6 +2,14 @@ import type { ApiPaginationMeta } from '../../lib/api-envelope';
 
 export type SupplierStatus = 'active' | 'inactive';
 export type SupplierStatusFilter = 'all' | SupplierStatus;
+export type SupplierPaymentMethod =
+  | 'cash'
+  | 'gcash'
+  | 'maya'
+  | 'bank_transfer'
+  | 'credit_card'
+  | 'check'
+  | 'other';
 
 export interface SupplierListFilters {
   readonly q: string;
@@ -45,6 +53,45 @@ export interface SupplierMutationInput {
 
 export interface SupplierUpdateInput extends SupplierMutationInput {
   readonly lock_version: number;
+}
+
+export interface SupplierPaymentFormValues {
+  readonly amount: string;
+  readonly payment_date: string;
+  readonly payment_method: SupplierPaymentMethod;
+  readonly reference_number: string;
+  readonly notes: string;
+}
+
+export interface SupplierPaymentInput {
+  readonly amount: string;
+  readonly payment_date: string;
+  readonly payment_method: SupplierPaymentMethod;
+  readonly reference_number: string | null;
+  readonly notes: string | null;
+}
+
+export interface SupplierPaymentRecord {
+  readonly id: string;
+  readonly supplier_id: string;
+  readonly amount: string;
+  readonly payment_date: string;
+  readonly payment_method: SupplierPaymentMethod;
+  readonly reference_number: string | null;
+  readonly notes: string | null;
+  readonly created_by_user_id: string | null;
+  readonly created_at: string | null;
+}
+
+export interface SupplierPaymentBalanceSummary {
+  readonly before_payment: string;
+  readonly payment_amount: string;
+  readonly after_payment: string;
+}
+
+export interface SupplierPaymentMutationResult {
+  readonly payment: SupplierPaymentRecord;
+  readonly balance: SupplierPaymentBalanceSummary;
 }
 
 export interface SupplierListResult {
