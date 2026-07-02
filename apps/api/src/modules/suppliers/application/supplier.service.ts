@@ -20,6 +20,7 @@ import {
 import type {
   CreateSupplierRequest,
   ListSuppliersQuery,
+  SupplierPaymentRequest,
   SupplierStatusChangeRequest,
   UpdateSupplierRequest,
 } from '../api/supplier.schemas';
@@ -27,6 +28,8 @@ import {
   SupplierStore,
   type SupplierDeactivationBlocker,
   type SupplierListCursor,
+  type SupplierPaymentMethod,
+  type SupplierPaymentRecord,
   type SupplierRecord,
   type SupplierStatus,
 } from './supplier.store';
@@ -45,6 +48,18 @@ export interface SupplierResponse {
   readonly updated_at: string;
   readonly deactivated_at: string | null;
   readonly reactivated_at: string | null;
+}
+
+export interface SupplierPaymentResponse {
+  readonly id: string;
+  readonly supplier_id: string;
+  readonly amount: string;
+  readonly payment_date: string;
+  readonly payment_method: SupplierPaymentMethod;
+  readonly reference_number: string | null;
+  readonly notes: string | null;
+  readonly created_by_user_id: string | null;
+  readonly created_at: string;
 }
 
 export interface SupplierPaginationResponse {
@@ -66,6 +81,15 @@ export interface SupplierMutationResponse {
   readonly supplier: SupplierResponse;
 }
 
+export interface SupplierPaymentMutationResponse {
+  readonly payment: SupplierPaymentResponse;
+  readonly balance: {
+    readonly before_payment: string;
+    readonly payment_amount: string;
+    readonly after_payment: string;
+  };
+}
+
 interface NormalizedSupplierInput {
   readonly name: string;
   readonly normalizedName: string;
@@ -73,6 +97,14 @@ interface NormalizedSupplierInput {
   readonly mobileNumber: string | null;
   readonly email: string | null;
   readonly address: string | null;
+  readonly notes: string | null;
+}
+
+interface NormalizedSupplierPaymentInput {
+  readonly amount: string;
+  readonly paymentDate: string;
+  readonly paymentMethod: SupplierPaymentMethod;
+  readonly referenceNumber: string | null;
   readonly notes: string | null;
 }
 
@@ -292,6 +324,122 @@ export class SupplierService {
     });
   }
 
+  async recordSupplierPayment(
+    supplierId: string,
+    request: SupplierPaymentRequest,
+    session: TenantContextAuthenticatedSession,
+  ): Promise<SupplierPaymentMutationResponse> {
+    const context = resolveTenantContextFromAuthenticatedSession(session);
+    const isShopOwner = await this.supplierStore.isActiveShopOwner({
+      tenantId: context.tenantId,
+      userId: context.actorUserId,
+    });
+
+    assertTenantLifecycleAccess({
+      context,
+      isShopOwner,
+      action: TENANT_ACCESS_ACTIONS.OPERATIONAL_WRITE,
+    });
+    assertSupplierPermission(context, isShopOwner, 'supplier_payments.create');
+
+    const input = normalizeSupplierPaymentInput(request);
+
+    return this.transactionRunner.runInTransaction(async (transaction) => {
+      const supplier = await this.supplierStore.lockSupplierById(
+        context.tenantId,
+        supplierId.trim(),
+        transaction,
+      );
+
+      if (supplier === null) {
+        throw GarageOsApiException.resourceNotFound('Supplier was not found.');
+      }
+
+      if (supplier.status !== 'active') {
+        throw GarageOsApiException.workflowTransitionBlocked(
+          'Supplier payments require an active supplier.',
+          [
+            {
+              field: 'supplier_id',
+              code: 'supplier_inactive',
+              message: 'Supplier must be active before recording a supplier payment.',
+            },
+          ],
+        );
+      }
+
+      const balanceBeforePayment = formatMoneyCents(
+        parseMoneyCents(
+          await this.supplierStore.getSupplierPayableBalanceForUpdate(
+            context.tenantId,
+            supplier.id,
+            transaction,
+          ),
+        ),
+      );
+
+      if (compareMoney(input.amount, balanceBeforePayment) > 0) {
+        throw GarageOsApiException.validationFailed([
+          {
+            field: 'amount',
+            code: 'supplier_payment_exceeds_payable_balance',
+            message: 'Supplier payment amount cannot exceed the current supplier payable balance.',
+          },
+        ]);
+      }
+
+      const createdAt = new Date();
+      const payment = await this.supplierStore.createSupplierPayment(
+        {
+          id: randomUUID(),
+          tenantId: context.tenantId,
+          supplierId: supplier.id,
+          amount: input.amount,
+          paymentDate: input.paymentDate,
+          paymentMethod: input.paymentMethod,
+          referenceNumber: input.referenceNumber,
+          notes: input.notes,
+          createdByUserId: context.actorUserId,
+          createdAt,
+        },
+        transaction,
+      );
+      const balanceAfterPayment = subtractMoney(balanceBeforePayment, payment.amount);
+      const paymentResponse = toSupplierPaymentResponse(payment);
+
+      await this.auditService.record({
+        tenantId: context.tenantId,
+        actorUserId: context.actorUserId,
+        actorType: AUDIT_ACTOR_TYPES.TENANT_USER,
+        supportAccessSessionId: context.platformSupportAccessSessionId,
+        action: 'supplier_payments.created',
+        entityType: 'supplier_payment',
+        entityId: payment.id,
+        beforeJson: {
+          supplier_id: supplier.id,
+          supplier_balance: balanceBeforePayment,
+        },
+        afterJson: {
+          supplier_id: supplier.id,
+          payment: paymentResponse,
+          supplier_balance: balanceAfterPayment,
+        },
+        reason: 'supplier_payment_recorded',
+        createdAt,
+        client: transaction,
+      });
+
+      return {
+        payment: paymentResponse,
+        balance: {
+          before_payment: balanceBeforePayment,
+          payment_amount: payment.amount,
+          after_payment: balanceAfterPayment,
+        },
+      };
+    });
+  }
+
   async deactivateSupplier(
     supplierId: string,
     request: SupplierStatusChangeRequest,
@@ -443,6 +591,18 @@ function normalizeSupplierInput(
   };
 }
 
+function normalizeSupplierPaymentInput(
+  request: SupplierPaymentRequest,
+): NormalizedSupplierPaymentInput {
+  return {
+    amount: request.amount,
+    paymentDate: request.payment_date,
+    paymentMethod: request.payment_method,
+    referenceNumber: normalizeNullableText(request.reference_number),
+    notes: normalizeNullableText(request.notes),
+  };
+}
+
 function normalizeNullableText(value: string | null | undefined): string | null {
   if (value === null || value === undefined) {
     return null;
@@ -482,6 +642,20 @@ function toSupplierResponse(supplier: SupplierRecord): SupplierResponse {
     updated_at: supplier.updatedAt.toISOString(),
     deactivated_at: supplier.deactivatedAt?.toISOString() ?? null,
     reactivated_at: supplier.reactivatedAt?.toISOString() ?? null,
+  };
+}
+
+function toSupplierPaymentResponse(payment: SupplierPaymentRecord): SupplierPaymentResponse {
+  return {
+    id: payment.id,
+    supplier_id: payment.supplierId,
+    amount: payment.amount,
+    payment_date: payment.paymentDate,
+    payment_method: payment.paymentMethod,
+    reference_number: payment.referenceNumber,
+    notes: payment.notes,
+    created_by_user_id: payment.createdByUserId,
+    created_at: payment.createdAt.toISOString(),
   };
 }
 
@@ -577,4 +751,32 @@ function isCursorPayload(
 
 function formatBlocker(blocker: SupplierDeactivationBlocker): string {
   return blocker.replaceAll('_', ' ');
+}
+
+function compareMoney(left: string, right: string): number {
+  const leftCents = parseMoneyCents(left);
+  const rightCents = parseMoneyCents(right);
+
+  if (leftCents === rightCents) {
+    return 0;
+  }
+
+  return leftCents > rightCents ? 1 : -1;
+}
+
+function subtractMoney(left: string, right: string): string {
+  return formatMoneyCents(parseMoneyCents(left) - parseMoneyCents(right));
+}
+
+function parseMoneyCents(value: string): bigint {
+  const [wholePart = '0', decimalPart = ''] = value.split('.');
+
+  return BigInt(wholePart) * 100n + BigInt(decimalPart.padEnd(2, '0').slice(0, 2));
+}
+
+function formatMoneyCents(value: bigint): string {
+  const wholePart = value / 100n;
+  const decimalPart = value % 100n;
+
+  return `${wholePart.toString()}.${decimalPart.toString().padStart(2, '0')}`;
 }

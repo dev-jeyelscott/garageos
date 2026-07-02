@@ -21,6 +21,8 @@ import {
   type CreateSupplierRequest,
   listSuppliersQuerySchema,
   type ListSuppliersQuery,
+  supplierPaymentRequestSchema,
+  type SupplierPaymentRequest,
   supplierStatusChangeRequestSchema,
   type SupplierStatusChangeRequest,
   updateSupplierRequestSchema,
@@ -101,6 +103,61 @@ export class SuppliersController {
     const session = await this.authService.getAuthenticatedRouteSession(authorizationHeader);
 
     return this.supplierService.getSupplier(supplierId, session.tenantContextSession);
+  }
+
+  @Post(':supplier_id/payments')
+  async recordSupplierPayment(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Param('supplier_id') supplierId: string,
+    @Body(new ZodValidationPipe(supplierPaymentRequestSchema)) request: SupplierPaymentRequest,
+  ): ReturnType<SupplierService['recordSupplierPayment']> {
+    const session = await this.authService.getAuthenticatedRouteSession(authorizationHeader);
+    const now = new Date();
+    const requestIntent = {
+      supplier_id: supplierId,
+      ...request,
+    };
+
+    const idempotency = await this.idempotencyService.begin({
+      tenantId: session.tenantContextSession.actor.tenant_id,
+      userId: session.tenantContextSession.actor.user_id,
+      endpoint: 'POST /api/v1/suppliers/{supplier_id}/payments',
+      idempotencyKey,
+      requestIntent,
+      now,
+      expiresAt: this.supplierService.getIdempotencyExpiresAt(now),
+    });
+
+    if (idempotency.type === 'replayed') {
+      return idempotency.responseBodyJson as Awaited<
+        ReturnType<SupplierService['recordSupplierPayment']>
+      >;
+    }
+
+    try {
+      const response = await this.supplierService.recordSupplierPayment(
+        supplierId,
+        request,
+        session.tenantContextSession,
+      );
+
+      await this.idempotencyService.completeSucceeded({
+        id: idempotency.record.id,
+        responseStatusCode: 201,
+        responseBodyJson: response,
+        now: new Date(),
+      });
+
+      return response;
+    } catch (error) {
+      await this.idempotencyService.completeFailed({
+        id: idempotency.record.id,
+        now: new Date(),
+      });
+
+      throw error;
+    }
   }
 
   @Patch(':supplier_id')

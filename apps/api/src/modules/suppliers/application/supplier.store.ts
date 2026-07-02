@@ -2,6 +2,14 @@ import type { DatabaseQueryClient } from '../../../shared/database/database-clie
 
 export type SupplierStatus = 'active' | 'inactive';
 export type SupplierStatusFilter = SupplierStatus | 'all';
+export type SupplierPaymentMethod =
+  | 'cash'
+  | 'gcash'
+  | 'maya'
+  | 'bank_transfer'
+  | 'credit_card'
+  | 'check'
+  | 'other';
 
 export interface ShopOwnerCheckInput {
   readonly tenantId: string;
@@ -23,6 +31,19 @@ export interface SupplierRecord {
   readonly updatedAt: Date;
   readonly deactivatedAt: Date | null;
   readonly reactivatedAt: Date | null;
+}
+
+export interface SupplierPaymentRecord {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly supplierId: string;
+  readonly amount: string;
+  readonly paymentDate: string;
+  readonly paymentMethod: SupplierPaymentMethod;
+  readonly referenceNumber: string | null;
+  readonly notes: string | null;
+  readonly createdByUserId: string | null;
+  readonly createdAt: Date;
 }
 
 export interface ListSuppliersInput {
@@ -77,6 +98,19 @@ export interface ChangeSupplierStatusInput {
   readonly changedAt: Date;
 }
 
+export interface CreateSupplierPaymentInput {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly supplierId: string;
+  readonly amount: string;
+  readonly paymentDate: string;
+  readonly paymentMethod: SupplierPaymentMethod;
+  readonly referenceNumber: string | null;
+  readonly notes: string | null;
+  readonly createdByUserId: string;
+  readonly createdAt: Date;
+}
+
 export type SupplierDeactivationBlocker = 'open_purchase_orders' | 'unpaid_accounts_payable';
 
 export abstract class SupplierStore {
@@ -92,6 +126,14 @@ export abstract class SupplierStore {
     supplierId: string,
     client?: DatabaseQueryClient,
   ): Promise<SupplierRecord | null>;
+
+  lockSupplierById(
+    _tenantId: string,
+    _supplierId: string,
+    _client: DatabaseQueryClient,
+  ): Promise<SupplierRecord | null> {
+    throw new Error('SupplierStore.lockSupplierById is not implemented.');
+  }
 
   abstract createSupplier(
     input: CreateSupplierInput,
@@ -113,4 +155,19 @@ export abstract class SupplierStore {
     supplierId: string,
     client?: DatabaseQueryClient,
   ): Promise<readonly SupplierDeactivationBlocker[]>;
+
+  getSupplierPayableBalanceForUpdate(
+    _tenantId: string,
+    _supplierId: string,
+    _client: DatabaseQueryClient,
+  ): Promise<string> {
+    throw new Error('SupplierStore.getSupplierPayableBalanceForUpdate is not implemented.');
+  }
+
+  createSupplierPayment(
+    _input: CreateSupplierPaymentInput,
+    _client: DatabaseQueryClient,
+  ): Promise<SupplierPaymentRecord> {
+    throw new Error('SupplierStore.createSupplierPayment is not implemented.');
+  }
 }

@@ -9,8 +9,11 @@ import {
   SupplierStore,
   type ChangeSupplierStatusInput,
   type CreateSupplierInput,
+  type CreateSupplierPaymentInput,
   type ListSuppliersInput,
   type SupplierDeactivationBlocker,
+  type SupplierPaymentMethod,
+  type SupplierPaymentRecord,
   type SupplierRecord,
   type UpdateSupplierInput,
 } from '../application/supplier.store';
@@ -36,9 +39,43 @@ interface SupplierRow extends DatabaseRow {
   readonly reactivated_at: Date | string | null;
 }
 
+interface SupplierPaymentRow extends DatabaseRow {
+  readonly id: string;
+  readonly tenant_id: string;
+  readonly supplier_id: string;
+  readonly amount: string;
+  readonly payment_date: Date | string;
+  readonly payment_method: string;
+  readonly reference_number: string | null;
+  readonly notes: string | null;
+  readonly created_by_user_id: string | null;
+  readonly created_at: Date | string;
+}
+
+interface SupplierBalanceRow extends DatabaseRow {
+  readonly amount: string;
+}
+
 interface SupplierDeactivationBlockerRow extends DatabaseRow {
   readonly blocker: SupplierDeactivationBlocker;
 }
+
+const SUPPLIER_COLUMNS = `
+  id,
+  name,
+  normalized_name,
+  contact_person,
+  mobile_number,
+  email,
+  address,
+  notes,
+  status,
+  lock_version,
+  created_at,
+  updated_at,
+  deactivated_at,
+  reactivated_at
+`;
 
 @Injectable()
 export class PostgresSupplierRepository extends SupplierStore {
@@ -100,21 +137,7 @@ export class PostgresSupplierRepository extends SupplierStore {
 
     const result = await client.query<SupplierRow>(
       `
-        select
-          id,
-          name,
-          normalized_name,
-          contact_person,
-          mobile_number,
-          email,
-          address,
-          notes,
-          status,
-          lock_version,
-          created_at,
-          updated_at,
-          deactivated_at,
-          reactivated_at
+        select ${SUPPLIER_COLUMNS}
         from suppliers
         where ${predicates.join('\n          and ')}
         order by updated_at desc, id desc
@@ -133,25 +156,32 @@ export class PostgresSupplierRepository extends SupplierStore {
   ): Promise<SupplierRecord | null> {
     const result = await client.query<SupplierRow>(
       `
-        select
-          id,
-          name,
-          normalized_name,
-          contact_person,
-          mobile_number,
-          email,
-          address,
-          notes,
-          status,
-          lock_version,
-          created_at,
-          updated_at,
-          deactivated_at,
-          reactivated_at
+        select ${SUPPLIER_COLUMNS}
         from suppliers
         where tenant_id = $1
           and id = $2
         limit 1
+      `,
+      [tenantId, supplierId],
+    );
+
+    const row = result.rows[0];
+
+    return row === undefined ? null : toSupplierRecord(row);
+  }
+
+  override async lockSupplierById(
+    tenantId: string,
+    supplierId: string,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<SupplierRecord | null> {
+    const result = await client.query<SupplierRow>(
+      `
+        select ${SUPPLIER_COLUMNS}
+        from suppliers
+        where tenant_id = $1::uuid
+          and id = $2::uuid
+        for update
       `,
       [tenantId, supplierId],
     );
@@ -184,21 +214,7 @@ export class PostgresSupplierRepository extends SupplierStore {
           updated_at
         )
         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'active', $10, $11, $10, $11)
-        returning
-          id,
-          name,
-          normalized_name,
-          contact_person,
-          mobile_number,
-          email,
-          address,
-          notes,
-          status,
-          lock_version,
-          created_at,
-          updated_at,
-          deactivated_at,
-          reactivated_at
+        returning ${SUPPLIER_COLUMNS}
       `,
       [
         input.id,
@@ -245,21 +261,7 @@ export class PostgresSupplierRepository extends SupplierStore {
         where tenant_id = $1
           and id = $2
           and lock_version = $12
-        returning
-          id,
-          name,
-          normalized_name,
-          contact_person,
-          mobile_number,
-          email,
-          address,
-          notes,
-          status,
-          lock_version,
-          created_at,
-          updated_at,
-          deactivated_at,
-          reactivated_at
+        returning ${SUPPLIER_COLUMNS}
       `,
       [
         input.tenantId,
@@ -304,21 +306,7 @@ export class PostgresSupplierRepository extends SupplierStore {
           and id = $2
           and status = $3
           ${lockPredicate}
-        returning
-          id,
-          name,
-          normalized_name,
-          contact_person,
-          mobile_number,
-          email,
-          address,
-          notes,
-          status,
-          lock_version,
-          created_at,
-          updated_at,
-          deactivated_at,
-          reactivated_at
+        returning ${SUPPLIER_COLUMNS}
       `,
       [
         input.tenantId,
@@ -386,6 +374,105 @@ export class PostgresSupplierRepository extends SupplierStore {
 
     return result.rows.map((row) => row.blocker);
   }
+
+  override async getSupplierPayableBalanceForUpdate(
+    tenantId: string,
+    supplierId: string,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<string> {
+    const result = await client.query<SupplierBalanceRow>(
+      `
+        select (
+          coalesce((
+            select sum(amount_delta)
+            from supplier_payables
+            where tenant_id = $1::uuid
+              and supplier_id = $2::uuid
+          ), 0)
+          - coalesce((
+            select sum(amount)
+            from supplier_payments
+            where tenant_id = $1::uuid
+              and supplier_id = $2::uuid
+          ), 0)
+          - coalesce((
+            select sum(amount)
+            from supplier_credits
+            where tenant_id = $1::uuid
+              and supplier_id = $2::uuid
+          ), 0)
+        )::numeric(14,2)::text as amount
+      `,
+      [tenantId, supplierId],
+    );
+
+    return result.rows[0]?.amount ?? '0.00';
+  }
+
+  override async createSupplierPayment(
+    input: CreateSupplierPaymentInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<SupplierPaymentRecord> {
+    const result = await client.query<SupplierPaymentRow>(
+      `
+        insert into supplier_payments (
+          id,
+          tenant_id,
+          supplier_id,
+          amount,
+          payment_date,
+          payment_method,
+          reference_number,
+          notes,
+          created_by_user_id,
+          created_at
+        )
+        values (
+          $1::uuid,
+          $2::uuid,
+          $3::uuid,
+          $4::numeric(14,2),
+          $5::date,
+          $6,
+          $7,
+          $8,
+          $9::uuid,
+          $10::timestamptz
+        )
+        returning
+          id,
+          tenant_id,
+          supplier_id,
+          amount::text,
+          payment_date,
+          payment_method,
+          reference_number,
+          notes,
+          created_by_user_id,
+          created_at
+      `,
+      [
+        input.id,
+        input.tenantId,
+        input.supplierId,
+        input.amount,
+        input.paymentDate,
+        input.paymentMethod,
+        input.referenceNumber,
+        input.notes,
+        input.createdByUserId,
+        input.createdAt,
+      ],
+    );
+
+    const row = result.rows[0];
+
+    if (row === undefined) {
+      throw new Error('Supplier payment create did not return a row.');
+    }
+
+    return toSupplierPaymentRecord(row);
+  }
 }
 
 function toSupplierRecord(row: SupplierRow): SupplierRecord {
@@ -407,6 +494,41 @@ function toSupplierRecord(row: SupplierRow): SupplierRecord {
   };
 }
 
+function toSupplierPaymentRecord(row: SupplierPaymentRow): SupplierPaymentRecord {
+  return {
+    id: row.id,
+    tenantId: row.tenant_id,
+    supplierId: row.supplier_id,
+    amount: row.amount,
+    paymentDate: toDateOnlyString(row.payment_date),
+    paymentMethod: toSupplierPaymentMethod(row.payment_method),
+    referenceNumber: row.reference_number,
+    notes: row.notes,
+    createdByUserId: row.created_by_user_id,
+    createdAt: toDate(row.created_at),
+  };
+}
+
+function toSupplierPaymentMethod(value: string): SupplierPaymentMethod {
+  if (
+    value === 'cash' ||
+    value === 'gcash' ||
+    value === 'maya' ||
+    value === 'bank_transfer' ||
+    value === 'credit_card' ||
+    value === 'check' ||
+    value === 'other'
+  ) {
+    return value;
+  }
+
+  throw new Error(`Unknown supplier payment method: ${value}.`);
+}
+
 function toDate(value: Date | string): Date {
   return value instanceof Date ? value : new Date(value);
+}
+
+function toDateOnlyString(value: Date | string): string {
+  return typeof value === 'string' ? value.slice(0, 10) : value.toISOString().slice(0, 10);
 }
