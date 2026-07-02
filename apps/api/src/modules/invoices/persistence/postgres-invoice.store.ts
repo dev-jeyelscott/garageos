@@ -245,7 +245,7 @@ export class PostgresInvoiceStore extends InvoiceStore {
         from invoice_billing_allocations
         where tenant_id = $1::uuid
           and job_order_line_id = any($2::uuid[])
-          and status in ('reserved', 'final')
+          and status in ('reserved', 'final', 'closed')
         group by job_order_line_id
       `,
       [tenantId, jobOrderLineIds],
@@ -468,6 +468,15 @@ export class PostgresInvoiceStore extends InvoiceStore {
       return [];
     }
 
+    const allocationsFitRemaining = await this.validateBillingAllocationsFitRemaining(
+      input,
+      client,
+    );
+
+    if (!allocationsFitRemaining) {
+      return [];
+    }
+
     const values: unknown[] = [];
     const placeholders = input.allocations.map((allocation, index) => {
       const offset = index * 9;
@@ -518,6 +527,88 @@ export class PostgresInvoiceStore extends InvoiceStore {
     );
 
     return result.rows.map(mapInvoiceBillingAllocationRow);
+  }
+
+  private async validateBillingAllocationsFitRemaining(
+    input: CreateInvoiceBillingAllocationsInput,
+    client: DatabaseQueryClient,
+  ): Promise<boolean> {
+    const jobOrderLineIds = [
+      ...new Set(input.allocations.map((allocation) => allocation.jobOrderLineId)),
+    ];
+
+    const lockedLines = await client.query<{
+      id: string;
+      quantity: string;
+      authorized_amount: string;
+    }>(
+      `
+        select id, quantity::text, authorized_amount::text
+        from job_order_lines
+        where tenant_id = $1::uuid
+          and id = any($2::uuid[])
+        for update
+      `,
+      [input.tenantId, jobOrderLineIds],
+    );
+
+    if (lockedLines.rows.length !== jobOrderLineIds.length) {
+      return false;
+    }
+
+    const totals = await this.listOpenBillingAllocationTotals(
+      input.tenantId,
+      jobOrderLineIds,
+      client,
+    );
+    const totalsByLineId = new Map(totals.map((total) => [total.jobOrderLineId, total] as const));
+    const linesById = new Map(lockedLines.rows.map((line) => [line.id, line] as const));
+    const requestedByLineId = new Map<
+      string,
+      { allocatedQuantity: bigint; allocatedAmount: bigint }
+    >();
+
+    for (const allocation of input.allocations) {
+      const current = requestedByLineId.get(allocation.jobOrderLineId) ?? {
+        allocatedQuantity: 0n,
+        allocatedAmount: 0n,
+      };
+
+      requestedByLineId.set(allocation.jobOrderLineId, {
+        allocatedQuantity:
+          current.allocatedQuantity +
+          (allocation.allocatedQuantity === null
+            ? 0n
+            : parseQuantityThousandths(allocation.allocatedQuantity)),
+        allocatedAmount:
+          current.allocatedAmount +
+          (allocation.allocatedAmount === null ? 0n : parseMoneyCents(allocation.allocatedAmount)),
+      });
+    }
+
+    for (const [lineId, requested] of requestedByLineId) {
+      const line = linesById.get(lineId);
+
+      if (line === undefined) {
+        return false;
+      }
+
+      const total = totalsByLineId.get(lineId);
+      const remainingQuantity =
+        parseQuantityThousandths(line.quantity) -
+        parseQuantityThousandths(total?.allocatedQuantity ?? '0.000');
+      const remainingAmount =
+        parseMoneyCents(line.authorized_amount) - parseMoneyCents(total?.allocatedAmount ?? '0.00');
+
+      if (
+        requested.allocatedQuantity > remainingQuantity ||
+        requested.allocatedAmount > remainingAmount
+      ) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   async replaceDraftInvoiceLines(
@@ -796,4 +887,18 @@ function getRequiredRow<Row extends DatabaseRow>(
   }
 
   return row;
+}
+
+function parseMoneyCents(value: string): bigint {
+  const [wholePart = '0', fractionalPart = ''] = value.split('.');
+  const normalizedFractionalPart = fractionalPart.padEnd(2, '0').slice(0, 2);
+
+  return BigInt(wholePart) * 100n + BigInt(normalizedFractionalPart);
+}
+
+function parseQuantityThousandths(value: string): bigint {
+  const [wholePart = '0', fractionalPart = ''] = value.split('.');
+  const normalizedFractionalPart = fractionalPart.padEnd(3, '0').slice(0, 3);
+
+  return BigInt(wholePart) * 1000n + BigInt(normalizedFractionalPart);
 }

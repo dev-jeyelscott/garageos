@@ -164,6 +164,15 @@ export class GarageOsApiException extends HttpException {
     });
   }
 
+  static invoiceOverbillingBlocked(details: ApiErrorDetail[] = []): GarageOsApiException {
+    return new GarageOsApiException({
+      code: API_ERROR_CODES.INVOICE_OVERBILLING_BLOCKED,
+      message: 'Billing allocation exceeds remaining billable amount or quantity.',
+      status: HttpStatus.UNPROCESSABLE_ENTITY,
+      details,
+    });
+  }
+
   static rateLimited(): GarageOsApiException {
     return new GarageOsApiException({
       code: API_ERROR_CODES.RATE_LIMITED,

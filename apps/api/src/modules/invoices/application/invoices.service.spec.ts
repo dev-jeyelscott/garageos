@@ -92,10 +92,28 @@ describe('InvoicesService', () => {
         createSession(),
       ),
     ).rejects.toMatchObject({
-      code: 'workflow_transition_blocked',
+      code: 'invoice_overbilling_blocked',
     });
 
     expect(store.createdInvoice).toBeNull();
+  });
+
+  it('blocks draft creation when insert-time allocation protection detects overbilling', async () => {
+    const store = new FakeInvoiceStore();
+    store.createBillingAllocationsResult = [];
+    const service = createService(store);
+
+    await expect(
+      service.createDraftInvoice(
+        {
+          job_order_ids: [jobOrderId],
+          invoice_date: createdAt,
+        },
+        createSession(),
+      ),
+    ).rejects.toMatchObject({
+      code: 'invoice_overbilling_blocked',
+    });
   });
 });
 
@@ -142,6 +160,7 @@ class FakeInvoiceStore extends InvoiceStore {
   createdLines: readonly InvoiceLineRecord[] = [];
   createdJobOrderLinks: readonly InvoiceJobOrderRecord[] = [];
   createdAllocations: readonly InvoiceBillingAllocationRecord[] = [];
+  createBillingAllocationsResult: readonly InvoiceBillingAllocationRecord[] | null = null;
   statusEvents: readonly InvoiceStatusEventRecord[] = [];
 
   async isActiveShopOwner(): Promise<boolean> {
@@ -281,7 +300,7 @@ class FakeInvoiceStore extends InvoiceStore {
       updatedAt: allocation.createdAt,
     }));
 
-    return this.createdAllocations;
+    return this.createBillingAllocationsResult ?? this.createdAllocations;
   }
 
   async replaceDraftInvoiceLines(): Promise<readonly InvoiceLineRecord[]> {

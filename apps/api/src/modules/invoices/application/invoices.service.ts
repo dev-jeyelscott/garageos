@@ -396,7 +396,7 @@ export class InvoicesService {
         transaction,
       );
 
-      await this.invoiceStore.createBillingAllocations(
+      const createdAllocations = await this.invoiceStore.createBillingAllocations(
         {
           tenantId: context.tenantId,
           invoiceId,
@@ -412,6 +412,7 @@ export class InvoicesService {
         },
         transaction,
       );
+      assertBillingAllocationsCreated(createdLines.length, createdAllocations.length);
 
       await this.invoiceStore.insertStatusEvent(
         {
@@ -573,18 +574,27 @@ function assertNoOverbilling(
       continue;
     }
 
-    throw GarageOsApiException.workflowTransitionBlocked(
-      'Selected job order lines are already fully reserved or billed.',
-      [
-        {
-          field: 'job_order_line_ids',
-          code: 'invoice_job_order_line_overbilled',
-          message:
-            'Draft invoice creation cannot reserve more than the remaining billable line quantity.',
-        },
-      ],
-    );
+    throwOverbillingBlocked();
   }
+}
+
+function assertBillingAllocationsCreated(expected: number, actual: number): void {
+  if (actual === expected) {
+    return;
+  }
+
+  throwOverbillingBlocked();
+}
+
+function throwOverbillingBlocked(): never {
+  throw GarageOsApiException.invoiceOverbillingBlocked([
+    {
+      field: 'job_order_line_ids',
+      code: 'invoice_job_order_line_overbilled',
+      message:
+        'Draft invoice creation cannot reserve more than the remaining billable line quantity or amount.',
+    },
+  ]);
 }
 
 function assertSingleValue(

@@ -238,7 +238,7 @@
 ## Milestone 9 — Invoicing, Payments, Receipts, Refunds, AR
 
 - [x] Implement invoice draft from job orders
-- [ ] Implement billing allocation service
+- [x] Implement billing allocation service
 - [ ] Implement invoice calculations
 - [ ] Implement invoice-level discount allocation
 - [ ] Implement tax calculation from tenant tax settings

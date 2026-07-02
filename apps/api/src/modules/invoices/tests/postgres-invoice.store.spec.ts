@@ -177,7 +177,11 @@ describe('PostgresInvoiceStore', () => {
   });
 
   it('creates billing allocations as reserved by default for draft invoice workflows', async () => {
-    const client = new RecordingDatabaseClient([[createBillingAllocationRow()]]);
+    const client = new RecordingDatabaseClient([
+      [createJobOrderLineCapacityRow()],
+      [],
+      [createBillingAllocationRow()],
+    ]);
     const store = new PostgresInvoiceStore(client);
 
     const result = await store.createBillingAllocations({
@@ -196,7 +200,12 @@ describe('PostgresInvoiceStore', () => {
       ],
     });
 
-    expect(normalizeSql(client.queries[0]?.sql ?? '')).toContain(
+    expect(normalizeSql(client.queries[0]?.sql ?? '')).toContain('from job_order_lines');
+    expect(normalizeSql(client.queries[0]?.sql ?? '')).toContain('for update');
+    expect(normalizeSql(client.queries[1]?.sql ?? '')).toContain(
+      "status in ('reserved', 'final', 'closed')",
+    );
+    expect(normalizeSql(client.queries[2]?.sql ?? '')).toContain(
       'insert into invoice_billing_allocations',
     );
     expect(result[0]).toMatchObject({
@@ -206,6 +215,39 @@ describe('PostgresInvoiceStore', () => {
       jobOrderLineId,
       status: 'reserved',
     });
+  });
+
+  it('does not create billing allocations when remaining line quantity is exhausted', async () => {
+    const client = new RecordingDatabaseClient([
+      [createJobOrderLineCapacityRow()],
+      [
+        {
+          job_order_line_id: jobOrderLineId,
+          allocated_quantity: '1.000',
+          allocated_amount: '0.00',
+        },
+      ],
+    ]);
+    const store = new PostgresInvoiceStore(client);
+
+    const result = await store.createBillingAllocations({
+      tenantId,
+      invoiceId,
+      allocations: [
+        {
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          invoiceLineId,
+          jobOrderLineId,
+          allocatedQuantity: '1.000',
+          allocatedAmount: null,
+          status: 'reserved',
+          createdAt,
+        },
+      ],
+    });
+
+    expect(result).toEqual([]);
+    expect(client.queries).toHaveLength(2);
   });
 
   it('replaces lines only for tenant-scoped draft invoices and removes draft allocations first', async () => {
@@ -492,6 +534,14 @@ function createBillingAllocationRow(
     created_at: createdAt.toISOString(),
     updated_at: createdAt.toISOString(),
     ...overrides,
+  };
+}
+
+function createJobOrderLineCapacityRow() {
+  return {
+    id: jobOrderLineId,
+    quantity: '1.000',
+    authorized_amount: '1000.00',
   };
 }
 
