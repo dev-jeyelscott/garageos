@@ -3,665 +3,900 @@
 **Document:** `ui-tokens.md`  
 **Project:** GarageOS  
 **Status:** Source-aligned frontend design-system guidance  
-**Default theme:** Light  
-**Supported modes:** Light, dark, system  
-**Implementation target:** Next.js, React, TypeScript, Tailwind CSS, shadcn/ui
-
-> Purpose: provide compact, reusable UI token guidance for GarageOS frontend work. This document defines visual tokens only. It must not introduce product modules, routes, roles, workflows, permissions, or business behavior.
-
----
-
-## 1. Source Alignment Rules
-
-GarageOS UI is a mobile-first PWA. Tokens must support documented tenant status, permissions, branch access, plan limits, workflow states, offline read-only mode, API errors, immutability, and correction-only records.
-
-Core rules:
-
-- Use semantic tokens in components; keep raw colors in theme config.
-- Backend/API/database remain authoritative; UI guards are usability aids only.
-- Offline mode disables writes and presents read-only cached views only.
-- Issued financial records, receipts, refunds, ledgers, FIFO records, and audit logs must look immutable or correction-only.
-- Do not invent workflow states; map documented enums to visual groups.
-- Light mode is default; dark and system modes must be supported.
+**Default Theme:** Light mode  
+**Supported Theme Modes:** Light, dark, and system  
+**Primary Source:** `garageos-ui-inventory.md`  
+**Supporting Sources:** `ux-sreen-map.md`, `requirements-v2.4.md`, `architecture.md`, `tech-stack.md`, `api-contracts.md`, `permission-matrix.md`, `user-stories.md`
 
 ---
 
-## 2. Brand Direction
+## 1. Purpose
 
-GarageOS brand input from the logo:
+This document defines the GarageOS visual token system for frontend UI and page creation.
 
-| Attribute                   | UI direction                                  |
-| --------------------------- | --------------------------------------------- |
-| Orange/gold mark            | Primary action, active navigation, highlights |
-| Graphite/black garage shape | Operational seriousness, strong contrast      |
-| Chrome/silver accents       | Precision, reliability, machinery             |
-| White wordmark              | Clarity and clean SaaS readability            |
+It gives frontend engineers a consistent foundation for:
 
-UI tone: operational, fast, reliable, mechanic-friendly, modern SaaS. Use orange/gold sparingly on dense screens to preserve readability.
+- Tailwind CSS theme values.
+- CSS custom properties.
+- shadcn/ui theme variables.
+- Mobile-first responsive layouts.
+- Accessible component styling.
+- Consistent light, dark, and system-aware theme behavior.
+- Workflow, status, alert, and blocked-state styling.
 
-### 2.1 Public Marketing Token Guidance
-
-Public marketing pages may use a slightly more expressive version of the GarageOS visual system while still relying on the same semantic tokens.
-
-| Token usage            | Guidance                                                                                                               |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| Marketing background   | Prefer `background`, `card`, `muted`, and soft radial/linear gradients based on brand orange/gold.                     |
-| Marketing CTA          | Use `primary` with restrained orange/gold gradient treatment for primary conversion actions.                           |
-| Product mockup         | Use graphite/dark neutral preview panels to communicate operational software while keeping the surrounding page light. |
-| Marketing card shadow  | Use soft, wide shadows sparingly for hero preview, feature cards, and CTA panels.                                      |
-| Marketing border       | Use `border` plus low-opacity primary borders for highlighted cards.                                                   |
-| Marketing icon surface | Use `accent` background with `primary` foreground for feature and workflow icons.                                      |
-
-Rules:
-
-- Do not introduce new product states through visual tokens.
-- Do not overuse saturated orange across dense operational screens.
-- Public marketing styling must not override tenant app readability, accessibility, permission, lifecycle, offline, or immutable-record states.
+This document does **not** introduce new product modules, routes, roles, workflows, permissions, or business behavior. It only defines reusable visual and interaction tokens for the documented GarageOS mobile-first PWA.
 
 ---
 
-## 3. Token Model
+## 2. Source Alignment
 
-| Layer        | Purpose                 | Example                                |
-| ------------ | ----------------------- | -------------------------------------- |
-| Base palette | Raw colors              | `brand-orange-500`, `graphite-900`     |
-| Semantic     | UI meaning              | `primary`, `background`, `destructive` |
-| Component    | shadcn/Tailwind mapping | `card`, `popover`, `input`, `ring`     |
-| Workflow     | Product state           | `status-success`, `status-readonly`    |
+GarageOS frontend UI must remain aligned with the approved source documents.
 
-Naming rules:
+Core alignment rules:
 
-- Component code should use semantic tokens, not raw hex colors.
-- Define light and dark values for every semantic token.
-- Status tokens must be consistent across badges, alerts, tables, timelines, and filters.
-- Token additions require reusable need, accessibility check, and source alignment.
-
----
-
-## 4. Base Palette
-
-| Token              | Hex       | Use                    |
-| ------------------ | --------- | ---------------------- |
-| `brand-orange-50`  | `#FFF4E6` | Soft brand surface     |
-| `brand-orange-100` | `#FFE2BF` | Active background      |
-| `brand-orange-300` | `#FFAA40` | Hover accent           |
-| `brand-orange-400` | `#FF8A00` | Brand accent           |
-| `brand-orange-500` | `#F97300` | Primary action         |
-| `brand-orange-600` | `#EA580C` | Primary hover          |
-| `brand-orange-700` | `#C2410C` | Pressed/active         |
-| `brand-orange-800` | `#9A3412` | Brand text on light    |
-| `brand-gold-50`    | `#FFF9DB` | Soft warning surface   |
-| `brand-gold-300`   | `#FFD84D` | Highlight              |
-| `brand-gold-500`   | `#FBBF24` | Warning/accent         |
-| `brand-gold-700`   | `#B7791F` | Gold text              |
-| `brand-red-100`    | `#FFE0D5` | Destructive surface    |
-| `brand-red-500`    | `#DC2626` | Destructive            |
-| `brand-red-700`    | `#991B1B` | Destructive text       |
-| `graphite-950`     | `#0B0B0C` | Dark app bg            |
-| `graphite-900`     | `#111113` | Dark surface           |
-| `graphite-850`     | `#18181B` | Elevated dark surface  |
-| `graphite-800`     | `#27272A` | Dark border/surface    |
-| `graphite-700`     | `#3F3F46` | Muted dark border/text |
-| `metal-600`        | `#71717A` | Secondary text         |
-| `metal-500`        | `#A1A1AA` | Muted text             |
-| `metal-300`        | `#D4D4D8` | Light border           |
-| `metal-200`        | `#E4E4E7` | Subtle border          |
-| `metal-100`        | `#F4F4F5` | Light surface          |
-| `metal-50`         | `#FAFAFA` | Page bg                |
-| `white`            | `#FFFFFF` | Card surface           |
+1. The UI is a **mobile-first PWA**.
+2. The default visual theme is **light mode**.
+3. Dark mode must be supported.
+4. System theme mode must be supported.
+5. UI implementation should align with **Next.js, React, TypeScript, Tailwind CSS, and shadcn/ui**.
+6. UI state must reflect documented tenant status, permissions, branch access, plan limits, workflow status, offline mode, and API errors.
+7. UI permission checks improve usability but do not replace backend authorization.
+8. Offline mode is read-only only.
+9. Financial, receipt, refund, inventory ledger, FIFO, and audit records must visually communicate immutability or correction-only behavior where applicable.
+10. Tokens must not imply undocumented product behavior.
 
 ---
 
-## 5. Core Semantic Tokens
+## 3. Brand Interpretation from Logo
 
-| Token                    | Light     | Dark      | Use                 |
-| ------------------------ | --------- | --------- | ------------------- |
-| `background`             | `#FAFAFA` | `#0B0B0C` | App background      |
-| `foreground`             | `#18181B` | `#FAFAFA` | Primary text        |
-| `card`                   | `#FFFFFF` | `#18181B` | Cards/panels        |
-| `card-foreground`        | `#18181B` | `#FAFAFA` | Card text           |
-| `popover`                | `#FFFFFF` | `#18181B` | Menus/popovers      |
-| `popover-foreground`     | `#18181B` | `#FAFAFA` | Popover text        |
-| `primary`                | `#F97300` | `#FF8A00` | Main CTA            |
-| `primary-foreground`     | `#FFFFFF` | `#111113` | Text on primary     |
-| `secondary`              | `#F4F4F5` | `#27272A` | Secondary surface   |
-| `secondary-foreground`   | `#18181B` | `#FAFAFA` | Secondary text      |
-| `muted`                  | `#F4F4F5` | `#27272A` | Muted bg            |
-| `muted-foreground`       | `#71717A` | `#A1A1AA` | Muted text          |
-| `accent`                 | `#FFF4E6` | `#3A2415` | Soft brand bg       |
-| `accent-foreground`      | `#9A3412` | `#FFD84D` | Accent text         |
-| `destructive`            | `#DC2626` | `#F87171` | Destructive actions |
-| `destructive-foreground` | `#FFFFFF` | `#111113` | Text on destructive |
-| `border`                 | `#E4E4E7` | `#27272A` | Default border      |
-| `input`                  | `#D4D4D8` | `#3F3F46` | Inputs              |
-| `ring`                   | `#F97300` | `#FFAA40` | Focus ring          |
+The provided GarageOS logo communicates:
+
+| Logo Attribute                | UI Interpretation                                             |
+| ----------------------------- | ------------------------------------------------------------- |
+| Orange and gold gradient mark | Primary brand energy, action, speed, shop-floor activity      |
+| Chrome/silver accents         | Precision, machinery, reliability, professional tooling       |
+| Graphite/black garage shape   | Operational seriousness, contrast, technical depth            |
+| White wordmark                | Clarity, readability, clean SaaS interface                    |
+| Dimensional badge shape       | Strong app identity, but UI should remain clean and practical |
+
+### Brand Direction
+
+GarageOS UI should feel:
+
+- Operational.
+- Fast.
+- Reliable.
+- Professional.
+- Mechanic-friendly.
+- Modern SaaS, not decorative or game-like.
+
+### Brand Usage Rule
+
+Use the orange/gold brand palette for primary actions, highlights, and key navigation affordances. Do **not** overuse high-saturation orange across dense operational screens, because GarageOS includes forms, tables, workflows, reports, invoices, and status-heavy views that require calm readability.
 
 ---
 
-## 6. CSS Variable Source
+## 4. Token Naming Model
 
-Use RGB component variables so Tailwind can support opacity via `rgb(var(--token) / <alpha-value>)`.
+Use semantic tokens first. Raw brand colors should rarely be used directly in components.
+
+### Token Layers
+
+| Layer            | Purpose                           | Example                                |
+| ---------------- | --------------------------------- | -------------------------------------- |
+| Base palette     | Raw brand and neutral colors      | `brand-orange-500`, `graphite-900`     |
+| Semantic tokens  | UI meaning                        | `primary`, `background`, `destructive` |
+| Component tokens | Component-specific mappings       | `card`, `popover`, `input`, `sidebar`  |
+| Workflow tokens  | Product status and business state | `status-success`, `workflow-blocked`   |
+
+### Naming Rules
+
+- Prefer semantic names in component code.
+- Keep raw colors in theme configuration only.
+- Keep light and dark mode values in CSS variables.
+- Use status colors consistently across badges, banners, alerts, filters, timelines, and tables.
+- Do not invent new workflow states. Use documented API/schema enums.
+
+---
+
+## 5. Base Color Palette
+
+The following palette is inspired by the logo and adjusted for usable UI contrast.
+
+### Brand Colors
+
+| Token              | Hex       | Intended Use                  |
+| ------------------ | --------- | ----------------------------- |
+| `brand-orange-50`  | `#FFF4E6` | Light brand surface           |
+| `brand-orange-100` | `#FFE2BF` | Soft active background        |
+| `brand-orange-200` | `#FFC680` | Light highlight               |
+| `brand-orange-300` | `#FFAA40` | Hover accent                  |
+| `brand-orange-400` | `#FF8A00` | Brand accent                  |
+| `brand-orange-500` | `#F97300` | Primary brand action          |
+| `brand-orange-600` | `#EA580C` | Primary action hover          |
+| `brand-orange-700` | `#C2410C` | Active/pressed                |
+| `brand-orange-800` | `#9A3412` | Strong text on light surfaces |
+| `brand-orange-900` | `#7C2D12` | Deep brand foreground         |
+
+### Gold Accent
+
+| Token            | Hex       | Intended Use                   |
+| ---------------- | --------- | ------------------------------ |
+| `brand-gold-50`  | `#FFF9DB` | Soft warning/highlight surface |
+| `brand-gold-100` | `#FFF0A6` | Light gold chip                |
+| `brand-gold-300` | `#FFD84D` | Accent highlight               |
+| `brand-gold-500` | `#FBBF24` | Warning/accent                 |
+| `brand-gold-700` | `#B7791F` | Text on light gold surfaces    |
+
+### Red-Orange Accent
+
+| Token           | Hex       | Intended Use             |
+| --------------- | --------- | ------------------------ |
+| `brand-red-100` | `#FFE0D5` | Soft destructive surface |
+| `brand-red-500` | `#DC2626` | Destructive action       |
+| `brand-red-700` | `#991B1B` | Destructive text         |
+
+### Graphite and Metal Neutrals
+
+| Token          | Hex       | Intended Use                 |
+| -------------- | --------- | ---------------------------- |
+| `graphite-950` | `#0B0B0C` | Dark mode app background     |
+| `graphite-900` | `#111113` | Dark surfaces                |
+| `graphite-850` | `#18181B` | Elevated dark surface        |
+| `graphite-800` | `#27272A` | Dark border/surface          |
+| `graphite-700` | `#3F3F46` | Muted dark text/border       |
+| `metal-600`    | `#71717A` | Secondary text               |
+| `metal-500`    | `#A1A1AA` | Muted text                   |
+| `metal-300`    | `#D4D4D8` | Light border                 |
+| `metal-200`    | `#E4E4E7` | Subtle border                |
+| `metal-100`    | `#F4F4F5` | Light surface                |
+| `metal-50`     | `#FAFAFA` | Page background              |
+| `white`        | `#FFFFFF` | Card/page foreground surface |
+
+---
+
+## 6. Semantic Color Tokens
+
+### Core Semantic Tokens
+
+| Token                    | Light Mode | Dark Mode | Use                        |
+| ------------------------ | ---------- | --------- | -------------------------- |
+| `background`             | `#FAFAFA`  | `#0B0B0C` | App background             |
+| `foreground`             | `#18181B`  | `#FAFAFA` | Primary text               |
+| `card`                   | `#FFFFFF`  | `#18181B` | Cards, panels              |
+| `card-foreground`        | `#18181B`  | `#FAFAFA` | Card text                  |
+| `popover`                | `#FFFFFF`  | `#18181B` | Menus, popovers            |
+| `popover-foreground`     | `#18181B`  | `#FAFAFA` | Popover text               |
+| `primary`                | `#F97300`  | `#FF8A00` | Main CTA                   |
+| `primary-foreground`     | `#FFFFFF`  | `#111113` | Text on primary            |
+| `secondary`              | `#F4F4F5`  | `#27272A` | Secondary buttons/surfaces |
+| `secondary-foreground`   | `#18181B`  | `#FAFAFA` | Text on secondary          |
+| `muted`                  | `#F4F4F5`  | `#27272A` | Muted backgrounds          |
+| `muted-foreground`       | `#71717A`  | `#A1A1AA` | Muted text                 |
+| `accent`                 | `#FFF4E6`  | `#3A2415` | Soft brand accent          |
+| `accent-foreground`      | `#9A3412`  | `#FFD84D` | Text on accent             |
+| `destructive`            | `#DC2626`  | `#F87171` | Destructive actions        |
+| `destructive-foreground` | `#FFFFFF`  | `#111113` | Text on destructive        |
+| `border`                 | `#E4E4E7`  | `#27272A` | Default border             |
+| `input`                  | `#D4D4D8`  | `#3F3F46` | Inputs                     |
+| `ring`                   | `#F97300`  | `#FFAA40` | Focus ring                 |
+
+---
+
+## 7. Light Mode Token Defaults
+
+Light mode is the default GarageOS theme.
 
 ```css
 :root {
   color-scheme: light;
+
   --background: 250 250 250;
   --foreground: 24 24 27;
+
   --card: 255 255 255;
   --card-foreground: 24 24 27;
+
   --popover: 255 255 255;
   --popover-foreground: 24 24 27;
+
   --primary: 249 115 0;
   --primary-foreground: 255 255 255;
+
   --secondary: 244 244 245;
   --secondary-foreground: 24 24 27;
+
   --muted: 244 244 245;
   --muted-foreground: 113 113 122;
+
   --accent: 255 244 230;
   --accent-foreground: 154 52 18;
+
   --destructive: 220 38 38;
   --destructive-foreground: 255 255 255;
+
   --border: 228 228 231;
   --input: 212 212 216;
   --ring: 249 115 0;
+
   --success: 22 163 74;
   --success-foreground: 255 255 255;
+
   --warning: 245 158 11;
   --warning-foreground: 24 24 27;
+
   --info: 37 99 235;
   --info-foreground: 255 255 255;
+
   --readonly: 82 82 91;
   --readonly-foreground: 255 255 255;
+
   --offline: 113 113 122;
   --offline-foreground: 255 255 255;
+
   --radius: 0.75rem;
 }
+```
 
+---
+
+## 8. Dark Mode Token Overrides
+
+Dark mode must preserve readability and should use orange/gold sparingly for active states.
+
+```css
 .dark {
   color-scheme: dark;
+
   --background: 11 11 12;
   --foreground: 250 250 250;
+
   --card: 24 24 27;
   --card-foreground: 250 250 250;
+
   --popover: 24 24 27;
   --popover-foreground: 250 250 250;
+
   --primary: 255 138 0;
   --primary-foreground: 17 17 19;
+
   --secondary: 39 39 42;
   --secondary-foreground: 250 250 250;
+
   --muted: 39 39 42;
   --muted-foreground: 161 161 170;
+
   --accent: 58 36 21;
   --accent-foreground: 255 216 77;
+
   --destructive: 248 113 113;
   --destructive-foreground: 17 17 19;
+
   --border: 39 39 42;
   --input: 63 63 70;
   --ring: 255 170 64;
+
   --success: 74 222 128;
   --success-foreground: 17 17 19;
+
   --warning: 251 191 36;
   --warning-foreground: 17 17 19;
+
   --info: 96 165 250;
   --info-foreground: 17 17 19;
+
   --readonly: 161 161 170;
   --readonly-foreground: 17 17 19;
+
   --offline: 161 161 170;
   --offline-foreground: 17 17 19;
 }
 ```
 
-Theme behavior:
+---
 
-- `light`: force `:root` light tokens.
-- `dark`: add `class="dark"` to document root.
-- `system`: follow `prefers-color-scheme`.
-- Persist only UI theme preference locally; never store auth/session secrets there.
-- Avoid hydration mismatch by delaying theme-dependent rendering until mounted where needed.
+## 9. Theme Mode Behavior
+
+GarageOS must support:
+
+| Theme Mode | Behavior                                                  |
+| ---------- | --------------------------------------------------------- |
+| Light      | Force light token set                                     |
+| Dark       | Force dark token set                                      |
+| System     | Follow OS/browser preference using `prefers-color-scheme` |
+
+### Implementation Guidance
+
+Use a theme provider compatible with Next.js and class-based dark mode.
+
+Recommended behavior:
+
+1. Default new sessions to `system` when no user preference exists.
+2. Resolve system to light/dark at runtime.
+3. Avoid hydration mismatch by delaying theme-dependent rendering until mounted when necessary.
+4. Persist explicit user preference locally only for UI preference.
+5. Do not store sensitive auth/session data in theme storage.
+6. Use `class="dark"` on the document root for dark mode.
+7. Keep CSS variables as the single source for shadcn/ui and Tailwind mappings.
+
+### Theme Switching UX
+
+Use a simple menu in the user/account menu:
+
+- Light.
+- Dark.
+- System.
+
+Do not make theme selection part of product onboarding unless a documented requirement later adds it.
 
 ---
 
-## 7. Status and Workflow Tokens
+## 10. Semantic Status Tokens
 
-| Token             | Light Surface/Text    | Dark Surface/Text     | Use                                |
-| ----------------- | --------------------- | --------------------- | ---------------------------------- |
-| `status-neutral`  | `#F4F4F5` / `#3F3F46` | `#27272A` / `#D4D4D8` | Draft, inactive, cancelled         |
-| `status-info`     | `#DBEAFE` / `#1D4ED8` | `#1E3A8A` / `#BFDBFE` | Info, queued                       |
-| `status-progress` | `#FFF4E6` / `#C2410C` | `#3A2415` / `#FFAA40` | In progress, running, in transit   |
-| `status-success`  | `#DCFCE7` / `#15803D` | `#14532D` / `#BBF7D0` | Paid, completed, succeeded         |
-| `status-warning`  | `#FEF3C7` / `#B45309` | `#451A03` / `#FDE68A` | Grace, pending approval, low stock |
-| `status-danger`   | `#FEE2E2` / `#B91C1C` | `#7F1D1D` / `#FECACA` | Failed, suspended, blocked         |
-| `status-readonly` | `#E4E4E7` / `#52525B` | `#3F3F46` / `#D4D4D8` | Read-only tenant/record            |
-| `status-offline`  | `#E4E4E7` / `#52525B` | `#27272A` / `#D4D4D8` | Offline state                      |
+Status colors must support badges, timeline nodes, banners, table chips, filter chips, and detail headers.
 
-Tenant status mapping:
+### General Status Tokens
 
-| Tenant status      | Token             | UI treatment                                    |
-| ------------------ | ----------------- | ----------------------------------------------- |
-| `pending_setup`    | `status-warning`  | Setup gate/checklist                            |
-| `active`           | `status-success`  | Normal access                                   |
-| `grace_period`     | `status-warning`  | Renewal warning; writes remain permission-based |
-| `read_only`        | `status-readonly` | Read-only banner; writes disabled               |
-| `suspended`        | `status-danger`   | Suspended screen; owner renewal/export only     |
-| `pending_deletion` | `status-danger`   | Operational access blocked                      |
-| `deleted`          | `status-danger`   | Tenant unavailable                              |
-
-Common workflow mapping:
-
-| Meaning          | Token             | Examples                             |
-| ---------------- | ----------------- | ------------------------------------ |
-| Draft/editable   | `status-neutral`  | Draft estimate/invoice/purchase      |
-| Waiting/review   | `status-warning`  | Pending approval, ordered            |
-| Active work      | `status-progress` | In progress, running, in transit     |
-| Final success    | `status-success`  | Paid, completed, received            |
-| Cancelled/voided | `status-neutral`  | Cancelled, voided, released          |
-| Failed/blocked   | `status-danger`   | Rejected, failed job, blocked access |
-| Immutable        | `status-readonly` | Receipt, audit log, ledger entry     |
-
-Required blocked states: `forbidden`, `branch_access_denied`, `subscription_access_blocked`, `plan_limit_exceeded`, `validation_failed`, `workflow_transition_blocked`, `inventory_insufficient_available_stock`, `invoice_overpayment_blocked`, `invoice_overbilling_blocked`, `version_conflict`, `idempotency_conflict`, and offline write attempt.
+| Token             | Light Surface | Light Text | Dark Surface | Dark Text | Use                                  |
+| ----------------- | ------------- | ---------- | ------------ | --------- | ------------------------------------ |
+| `status-neutral`  | `#F4F4F5`     | `#3F3F46`  | `#27272A`    | `#D4D4D8` | Draft, inactive, default             |
+| `status-info`     | `#DBEAFE`     | `#1D4ED8`  | `#1E3A8A`    | `#BFDBFE` | Informational, queued                |
+| `status-progress` | `#FFF4E6`     | `#C2410C`  | `#3A2415`    | `#FFAA40` | In progress, running                 |
+| `status-success`  | `#DCFCE7`     | `#15803D`  | `#14532D`    | `#BBF7D0` | Paid, completed, succeeded           |
+| `status-warning`  | `#FEF3C7`     | `#B45309`  | `#451A03`    | `#FDE68A` | Grace, pending approval, low stock   |
+| `status-danger`   | `#FEE2E2`     | `#B91C1C`  | `#7F1D1D`    | `#FECACA` | Blocked, failed, suspended           |
+| `status-readonly` | `#E4E4E7`     | `#52525B`  | `#3F3F46`    | `#D4D4D8` | Read-only tenant or read-only record |
+| `status-offline`  | `#E4E4E7`     | `#52525B`  | `#27272A`    | `#D4D4D8` | Offline read-only state              |
 
 ---
 
-## 8. Motion Tokens
+## 11. Workflow-State Token Guidance
 
-Motion tokens define consistent timing, easing, transform distance, and reduced-motion behavior for GarageOS UI.
+Use documented status enum values as the data source. The UI may group them into visual categories, but must not invent additional workflow states.
 
-These tokens are visual and interaction guidance only. They do not introduce product modules, routes, roles, workflows, permissions, business behavior, product states, offline writes, or unsupported capabilities.
+### Tenant Lifecycle
 
-Motion must support the documented mobile-first PWA experience, permission-aware UI, tenant lifecycle UI, offline read-only behavior, explicit workflow actions, immutable/correction-only record treatment, and source-aligned public marketing surfaces.
+| Status             | Visual Token      | UI Treatment                                               |
+| ------------------ | ----------------- | ---------------------------------------------------------- |
+| `pending_setup`    | `status-warning`  | Setup gate and onboarding checklist                        |
+| `active`           | `status-success`  | Normal access                                              |
+| `grace_period`     | `status-warning`  | Persistent renewal warning; writes remain permission-based |
+| `read_only`        | `status-readonly` | Read-only banner; writes disabled                          |
+| `suspended`        | `status-danger`   | Suspended screen; owner renewal/export only                |
+| `pending_deletion` | `status-danger`   | Operational access blocked                                 |
+| `deleted`          | `status-danger`   | Tenant unavailable/account inactive                        |
 
-### 8.1 Motion Principles
+### Common Workflow Mapping
 
-| Principle                | Guidance                                                                                                                                                                        |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Productivity first       | Operational screens should use minimal motion that preserves scanability and speed.                                                                                             |
-| State clarity            | Motion must reinforce documented UI state, not obscure it.                                                                                                                      |
-| Server-confirmed success | Critical workflow success motion may render only after confirmed API success.                                                                                                   |
-| Reduced motion           | All motion tokens must have reduced-motion behavior.                                                                                                                            |
-| Semantic usage           | Components should reference semantic motion tokens rather than hard-coded durations/easing.                                                                                     |
-| Mobile-first             | Motion must feel fast on small screens and unstable mobile networks.                                                                                                            |
-| Scope-safe               | Motion must not imply native apps, offline writes, customer portal, standalone POS, payroll, full accounting, automatic subscription collection, 2FA, or unsupported workflows. |
+| Workflow Meaning    | Visual Token      | Examples                                            |
+| ------------------- | ----------------- | --------------------------------------------------- |
+| Draft/editable      | `status-neutral`  | Draft estimate, draft invoice, draft purchase       |
+| Waiting/review      | `status-warning`  | Pending approval, ordered, pending                  |
+| Active work         | `status-progress` | In progress, running, in transit                    |
+| Complete/final      | `status-success`  | Paid, completed, received, succeeded                |
+| Cancelled/voided    | `status-neutral`  | Cancelled, voided, released                         |
+| Failed/blocked      | `status-danger`   | Failed job, rejected action, blocked access         |
+| Immutable/read-only | `status-readonly` | Receipt, issued payment, audit record, ledger entry |
 
-### 8.2 Duration Tokens
+---
 
-| Token                      |   Value | Use                                                                    |
-| -------------------------- | ------: | ---------------------------------------------------------------------- |
-| `motion-duration-none`     |   `0ms` | Reduced-motion final state, no animation                               |
-| `motion-duration-instant`  |  `80ms` | Very small feedback where animation is nearly immediate                |
-| `motion-duration-fast`     | `120ms` | Hover, focus, press, badge, chip, tab, simple feedback                 |
-| `motion-duration-standard` | `180ms` | Card reveal, alert reveal, small panel transition                      |
-| `motion-duration-measured` | `240ms` | Dialog/sheet entrance, workflow summary reveal                         |
-| `motion-duration-rich`     | `420ms` | Public marketing section reveal or staged non-critical storytelling    |
-| `motion-duration-max`      | `700ms` | Upper bound for rare marketing sequences; avoid on operational screens |
+## 12. Alert and Blocking Tokens
 
-Rules:
+Use alert tokens for system-level notices, API errors, and workflow blockers.
 
-- Dense operational screens should usually use `motion-duration-none`, `motion-duration-instant`, or `motion-duration-fast`.
-- Workflow dialogs should usually use `motion-duration-standard` or `motion-duration-measured`.
-- Public marketing pages may use `motion-duration-rich` when it improves storytelling.
-- Avoid long chained delays on task screens.
+| Token            | Use                                               |
+| ---------------- | ------------------------------------------------- |
+| `alert-info`     | General guidance, contextual help                 |
+| `alert-success`  | Completed action confirmation                     |
+| `alert-warning`  | Renewal warning, pending setup, approval required |
+| `alert-danger`   | Suspended tenant, destructive action, failed job  |
+| `alert-readonly` | Read-only tenant or immutable record              |
+| `alert-offline`  | Offline mode and blocked write attempt            |
 
-### 8.3 Easing Tokens
+### Required Blocking States
 
-| Token                    | CSS Value                        | Use                                                      |
-| ------------------------ | -------------------------------- | -------------------------------------------------------- |
-| `motion-ease-standard`   | `cubic-bezier(0.2, 0, 0, 1)`     | Default UI motion                                        |
-| `motion-ease-enter`      | `cubic-bezier(0.16, 1, 0.3, 1)`  | Reveals, dialogs, sheets, cards                          |
-| `motion-ease-exit`       | `cubic-bezier(0.4, 0, 1, 1)`     | Dismissals and exits                                     |
-| `motion-ease-emphasized` | `cubic-bezier(0.2, 0.8, 0.2, 1)` | Public marketing emphasis only                           |
-| `motion-ease-linear`     | `linear`                         | Progress indicators and non-decorative continuous motion |
+The UI must provide consistent presentation for:
 
-Rules:
+- `forbidden`.
+- `branch_access_denied`.
+- `subscription_access_blocked`.
+- `plan_limit_exceeded`.
+- `validation_failed`.
+- `workflow_transition_blocked`.
+- `inventory_insufficient_available_stock`.
+- `invoice_overpayment_blocked`.
+- `invoice_overbilling_blocked`.
+- `version_conflict`.
+- `idempotency_conflict`.
+- Offline write attempt.
 
-- Use `motion-ease-standard` for most UI transitions.
-- Use `motion-ease-emphasized` sparingly and primarily on public marketing surfaces.
-- Avoid bounce/spring effects on operational workflows unless a future ADR explicitly approves them.
+---
 
-### 8.4 Distance and Transform Tokens
+## 13. Typography Tokens
 
-| Token                     |  Value | Use                                                  |
-| ------------------------- | -----: | ---------------------------------------------------- |
-| `motion-distance-none`    |  `0px` | Reduced-motion and no movement                       |
-| `motion-distance-micro-y` |  `2px` | Button press or tiny hover lift                      |
-| `motion-distance-xs-y`    |  `4px` | Small chip/card feedback                             |
-| `motion-distance-sm-y`    |  `8px` | Alert/card reveal                                    |
-| `motion-distance-md-y`    | `12px` | Dialog/sheet content reveal                          |
-| `motion-distance-lg-y`    | `24px` | Public marketing reveal; avoid on operational tables |
-| `motion-scale-press`      | `0.98` | Pressed button/card feedback                         |
-| `motion-scale-reveal`     | `0.98` | Subtle reveal start state                            |
-| `motion-opacity-hidden`   |    `0` | Hidden reveal state                                  |
-| `motion-opacity-visible`  |    `1` | Visible final state                                  |
+### Font Families
 
-Rules:
+| Token          | Value                                                                                 | Use                                             |
+| -------------- | ------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| `font-sans`    | `ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif` | Product UI                                      |
+| `font-mono`    | `ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace` | IDs, technical values, logs                     |
+| `font-numeric` | `font-variant-numeric: tabular-nums`                                                  | Currency, quantity, timestamps, invoice numbers |
 
-- Avoid horizontal movement for critical workflow feedback unless it improves spatial orientation.
-- Avoid parallax or large transforms on operational screens.
-- Public marketing parallax, if later implemented, should stay subtle and capped by documented transform tokens.
+Do not use the logo wordmark style as the application UI font. The logo is a brand asset, not a text-system font.
 
-### 8.5 Semantic Motion Tokens
+### Type Scale
 
-| Token                         |                                Recommended Duration | Recommended Transform             | Use                                                                           |
-| ----------------------------- | --------------------------------------------------: | --------------------------------- | ----------------------------------------------------------------------------- |
-| `motion-operational-feedback` |                              `motion-duration-fast` | `motion-distance-micro-y` or none | Hover, focus, active states                                                   |
-| `motion-operational-reveal`   |                          `motion-duration-standard` | `motion-distance-sm-y`            | Non-dense card or alert reveal                                                |
-| `motion-workflow-dialog`      |                          `motion-duration-measured` | `motion-distance-md-y`            | Workflow action dialog/sheet entrance                                         |
-| `motion-workflow-success`     |                          `motion-duration-standard` | none or `motion-scale-reveal`     | Server-confirmed success feedback                                             |
-| `motion-blocked-state`        |                           `motion-duration-instant` | none                              | Permission, branch, plan, tenant, read-only, suspended, offline blockers      |
-| `motion-dense-data`           | `motion-duration-none` or `motion-duration-instant` | none                              | Tables, ledgers, audit logs, financial records, inventory records, FIFO views |
-| `motion-marketing-reveal`     |                              `motion-duration-rich` | `motion-distance-lg-y`            | Public marketing page section reveal                                          |
-| `motion-marketing-sequence`   |     `motion-duration-rich` to `motion-duration-max` | tokenized transform only          | Public homepage storytelling sequences                                        |
+| Token       |       Size | Line Height |    Weight | Use                                 |
+| ----------- | ---------: | ----------: | --------: | ----------------------------------- |
+| `text-xs`   |  `0.75rem` |      `1rem` | `400/500` | Badges, helper text, table metadata |
+| `text-sm`   | `0.875rem` |   `1.25rem` | `400/500` | Default body, inputs, table cells   |
+| `text-base` |     `1rem` |    `1.5rem` | `400/500` | Primary body, mobile form labels    |
+| `text-lg`   | `1.125rem` |   `1.75rem` |     `600` | Card titles, section headers        |
+| `text-xl`   |  `1.25rem` |   `1.75rem` | `600/700` | Page titles on mobile               |
+| `text-2xl`  |   `1.5rem` |      `2rem` |     `700` | Desktop page titles                 |
+| `text-3xl`  | `1.875rem` |   `2.25rem` |     `700` | Dashboard hero metrics              |
+| `text-4xl`  |  `2.25rem` |    `2.5rem` | `700/800` | Rare marketing/auth hero use        |
 
-### 8.6 Reduced-Motion Token Behavior
+### Typography Rules
 
-When `prefers-reduced-motion: reduce` is active:
+- Use `text-sm` as the default dense operations size.
+- Use tabular numbers for money, quantities, invoice numbers, receipt numbers, document numbers, and timestamps.
+- Keep operational screens compact but not cramped.
+- Use clear hierarchy for mobile: page title, section label, card title, field label, helper/error text.
+- Avoid decorative text effects inside operational screens.
 
-| Token Category     | Reduced-Motion Behavior                                                             |
-| ------------------ | ----------------------------------------------------------------------------------- |
-| Duration           | Use `motion-duration-none` or near-instant completion.                              |
-| Distance/transform | Use `motion-distance-none`; avoid scale, parallax, and scroll-linked transforms.    |
-| Opacity            | Content may appear immediately without delayed fade.                                |
-| GSAP timelines     | Skip timeline playback and set final visible state.                                 |
-| Workflow feedback  | Preserve messages, banners, validation errors, and server-confirmed result content. |
-| Skeletons/loading  | Prefer static loading placeholders.                                                 |
+---
 
-### 8.7 Critical Workflow Motion Rules
+## 14. Spacing Tokens
 
-Motion must not fake successful completion of critical workflows.
+Use Tailwind’s spacing scale with these semantic aliases.
 
-The following action categories may show final success animation only after a successful server response:
+| Token      |     Value | Use                             |
+| ---------- | --------: | ------------------------------- |
+| `space-0`  |       `0` | No gap                          |
+| `space-1`  | `0.25rem` | Tight icon/text gap             |
+| `space-2`  |  `0.5rem` | Dense row gap                   |
+| `space-3`  | `0.75rem` | Default internal card gap       |
+| `space-4`  |    `1rem` | Default section gap             |
+| `space-5`  | `1.25rem` | Form group gap                  |
+| `space-6`  |  `1.5rem` | Page section gap                |
+| `space-8`  |    `2rem` | Large page block gap            |
+| `space-10` |  `2.5rem` | Auth/onboarding vertical rhythm |
+| `space-12` |    `3rem` | Large marketing/auth spacing    |
 
-- Inventory reservation, release, transfer, adjustment, FIFO consumption, and stock-changing operations.
-- Job order workflow transitions and completion.
-- Invoice issue, void, billing allocation, payment, receipt, refund, and AR/AP changes.
-- Purchase receiving, supplier return posting, and supplier payment operations.
-- Tenant lifecycle changes, support access, exports, deletion jobs, and platform-admin actions.
-- Any action requiring idempotency, optimistic locking, audit logging, or workflow status history.
+### Layout Spacing
 
-Before server confirmation, the UI may show loading, submitting, validating, queued, or pending states only when those states are documented and backed by API behavior.
+| Token                     |     Value | Use                                   |
+| ------------------------- | --------: | ------------------------------------- |
+| `page-padding-mobile`     |    `1rem` | Mobile page padding                   |
+| `page-padding-tablet`     |  `1.5rem` | Tablet page padding                   |
+| `page-padding-desktop`    |    `2rem` | Desktop content padding               |
+| `shell-bottom-nav-height` |    `4rem` | Mobile bottom navigation safe spacing |
+| `sticky-action-height`    |  `4.5rem` | Sticky mobile action region           |
+| `form-control-height`     | `2.75rem` | Touch-friendly control height         |
+| `compact-control-height`  | `2.25rem` | Dense table/filter controls           |
+| `touch-target-min`        | `2.75rem` | Minimum touch target                  |
 
-### 8.8 CSS Variable Guidance
+---
 
-Future implementation may expose motion tokens as CSS custom properties:
+## 15. Radius Tokens
+
+Use moderate radius values. The logo has strong badge geometry, but product UI should remain clean and practical.
+
+| Token         |      Value | Use                             |
+| ------------- | ---------: | ------------------------------- |
+| `radius-none` |        `0` | Tables and joined controls      |
+| `radius-xs`   |  `0.25rem` | Small badges                    |
+| `radius-sm`   | `0.375rem` | Inputs, small controls          |
+| `radius-md`   |   `0.5rem` | Buttons, cards in dense layouts |
+| `radius-lg`   |  `0.75rem` | Default cards, dialogs, sheets  |
+| `radius-xl`   |     `1rem` | Feature cards, auth panels      |
+| `radius-2xl`  |  `1.25rem` | Large onboarding/auth panels    |
+| `radius-full` |   `9999px` | Pills, avatars, status chips    |
+
+shadcn/ui base radius:
 
 ```css
 :root {
-  --motion-duration-none: 0ms;
-  --motion-duration-instant: 80ms;
-  --motion-duration-fast: 120ms;
-  --motion-duration-standard: 180ms;
-  --motion-duration-measured: 240ms;
-  --motion-duration-rich: 420ms;
-  --motion-duration-max: 700ms;
-
-  --motion-ease-standard: cubic-bezier(0.2, 0, 0, 1);
-  --motion-ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
-  --motion-ease-exit: cubic-bezier(0.4, 0, 1, 1);
-  --motion-ease-emphasized: cubic-bezier(0.2, 0.8, 0.2, 1);
-  --motion-ease-linear: linear;
-
-  --motion-distance-none: 0px;
-  --motion-distance-micro-y: 2px;
-  --motion-distance-xs-y: 4px;
-  --motion-distance-sm-y: 8px;
-  --motion-distance-md-y: 12px;
-  --motion-distance-lg-y: 24px;
-  --motion-scale-press: 0.98;
-  --motion-scale-reveal: 0.98;
-
-  --motion-stagger-none: 0ms;
-  --motion-stagger-tight: 40ms;
-  --motion-stagger-standard: 70ms;
-  --motion-stagger-relaxed: 100ms;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  :root {
-    --motion-duration-instant: 0ms;
-    --motion-duration-fast: 0ms;
-    --motion-duration-standard: 0ms;
-    --motion-duration-measured: 0ms;
-    --motion-duration-rich: 0ms;
-    --motion-duration-max: 0ms;
-
-    --motion-distance-micro-y: 0px;
-    --motion-distance-xs-y: 0px;
-    --motion-distance-sm-y: 0px;
-    --motion-distance-md-y: 0px;
-    --motion-distance-lg-y: 0px;
-    --motion-scale-press: 1;
-    --motion-scale-reveal: 1;
-
-    --motion-stagger-tight: 0ms;
-    --motion-stagger-standard: 0ms;
-    --motion-stagger-relaxed: 0ms;
-  }
+  --radius: 0.75rem;
 }
 ```
 
-### 8.9 Tailwind Motion Mapping Guidance
+---
 
-Future Tailwind configuration may map semantic motion tokens to transition duration, timing function, animation distance, and transform utilities.
+## 16. Shadow and Elevation Tokens
 
-Rules:
+Keep elevation subtle. Operational interfaces should communicate hierarchy without visual noise.
 
-- Keep token names semantic.
-- Avoid component-specific hard-coded timing values.
-- Do not create tokens for undocumented workflow states.
-- Prefer CSS/Tailwind-only transitions for hover, focus, active, and simple component state.
-- Use GSAP only where timeline orchestration or scroll/staged animation is justified by `ui-registry.md`.
+| Token          | Value                              | Use                              |
+| -------------- | ---------------------------------- | -------------------------------- |
+| `shadow-none`  | `none`                             | Flat table rows, inline controls |
+| `shadow-xs`    | `0 1px 2px rgb(0 0 0 / 0.05)`      | Inputs, small cards              |
+| `shadow-sm`    | `0 1px 3px rgb(0 0 0 / 0.08)`      | Default cards                    |
+| `shadow-md`    | `0 4px 12px rgb(0 0 0 / 0.10)`     | Sticky bars, dropdowns           |
+| `shadow-lg`    | `0 12px 24px rgb(0 0 0 / 0.14)`    | Dialogs, drawers                 |
+| `shadow-brand` | `0 8px 24px rgb(249 115 0 / 0.20)` | Rare primary CTA emphasis        |
 
-### 8.10 Stagger Tokens
+### Elevation Rules
 
-Stagger tokens are reserved for small, non-blocking groups where sequencing improves comprehension.
-
-| Token                     |   Value | Use                                               |
-| ------------------------- | ------: | ------------------------------------------------- |
-| `motion-stagger-none`     |   `0ms` | Operational UI, reduced motion, dense data        |
-| `motion-stagger-tight`    |  `40ms` | Small public marketing groups                     |
-| `motion-stagger-standard` |  `70ms` | Public homepage feature or role-card reveal       |
-| `motion-stagger-relaxed`  | `100ms` | Public homepage hero or dashboard mockup sequence |
-
-Rules:
-
-- Do not stagger operational tables, forms, invoice lines, stock lines, payment lines, ledger rows, FIFO rows, audit rows, or report rows.
-- Stagger must never block user input, delay validation errors, or delay blocked-state visibility.
-- Reduced-motion mode must use `motion-stagger-none`.
-- Use stagger primarily on public marketing surfaces unless a later implementation review approves another use.
-
-### 8.11 Motion Token Acceptance Criteria
-
-Motion token guidance is acceptable when:
-
-- Token names remain semantic and reusable.
-- Tokens support light, dark, and system UI without requiring separate motion behavior per theme.
-- Reduced-motion behavior is explicit.
-- Tokens do not introduce product scope, product states, routes, permissions, workflows, or backend behavior.
-- Tokens do not imply offline writes, queued operational mutations, optimistic critical success, or workflow changes.
-- Dense operational screens remain productivity-first.
-- Critical workflow success motion remains server-confirmed only.
-- CSS/Tailwind-only transitions remain preferred for simple hover, focus, active, and component-state feedback.
-- Public marketing homepage remains the first approved rich-motion target.
+- Do not use heavy shadow on every card.
+- Use borders plus light shadow for most surfaces.
+- Use `shadow-lg` only for overlays.
+- Use `shadow-brand` sparingly for primary onboarding/auth moments, not dense workflows.
 
 ---
 
-## 9. Type, Spacing, Radius, Elevation
+## 17. Border Tokens
 
-Typography:
+| Token            | Light     | Dark      | Use                               |
+| ---------------- | --------- | --------- | --------------------------------- |
+| `border-default` | `#E4E4E7` | `#27272A` | Cards, tables, separators         |
+| `border-strong`  | `#D4D4D8` | `#3F3F46` | Active panels, important sections |
+| `border-muted`   | `#F4F4F5` | `#18181B` | Subtle dividers                   |
+| `border-primary` | `#F97300` | `#FF8A00` | Focus/selected brand state        |
+| `border-danger`  | `#DC2626` | `#F87171` | Error/destructive state           |
+| `border-warning` | `#F59E0B` | `#FBBF24` | Warning state                     |
+| `border-success` | `#16A34A` | `#4ADE80` | Success state                     |
 
-| Token       | Size / line          | Weight    | Use                         |
-| ----------- | -------------------- | --------- | --------------------------- |
-| `text-xs`   | `0.75rem / 1rem`     | `400/500` | Badges, helper text         |
-| `text-sm`   | `0.875rem / 1.25rem` | `400/500` | Default body, inputs, cells |
-| `text-base` | `1rem / 1.5rem`      | `400/500` | Mobile labels/body          |
-| `text-lg`   | `1.125rem / 1.75rem` | `600`     | Card/section titles         |
-| `text-xl`   | `1.25rem / 1.75rem`  | `600/700` | Mobile page titles          |
-| `text-2xl`  | `1.5rem / 2rem`      | `700`     | Desktop page titles         |
-| `text-3xl`  | `1.875rem / 2.25rem` | `700`     | Dashboard metrics           |
+### Border Rules
 
-Rules: use system sans for UI, monospace for IDs/logs, tabular numbers for money, quantities, dates, invoice/receipt/document numbers, and timestamps.
-
-Spacing aliases:
-
-| Token                     |     Value | Use                      |
-| ------------------------- | --------: | ------------------------ |
-| `space-2`                 |  `0.5rem` | Dense row gap            |
-| `space-3`                 | `0.75rem` | Card internal gap        |
-| `space-4`                 |    `1rem` | Default section/form gap |
-| `space-6`                 |  `1.5rem` | Page section gap         |
-| `page-padding-mobile`     |    `1rem` | Mobile page padding      |
-| `page-padding-tablet`     |  `1.5rem` | Tablet page padding      |
-| `page-padding-desktop`    |    `2rem` | Desktop page padding     |
-| `shell-bottom-nav-height` |    `4rem` | Mobile nav safe area     |
-| `sticky-action-height`    |  `4.5rem` | Sticky action region     |
-| `form-control-height`     | `2.75rem` | Touch-friendly inputs    |
-| `touch-target-min`        | `2.75rem` | Minimum touch target     |
-
-Radius:
-
-| Token         |      Value | Use                        |
-| ------------- | ---------: | -------------------------- |
-| `radius-sm`   | `0.375rem` | Inputs/small controls      |
-| `radius-md`   |   `0.5rem` | Buttons/dense cards        |
-| `radius-lg`   |  `0.75rem` | Default cards/dialogs      |
-| `radius-xl`   |     `1rem` | Feature/auth cards         |
-| `radius-full` |   `9999px` | Pills/avatars/status chips |
-
-Elevation: prefer border + subtle shadow. `shadow-sm` for cards, `shadow-md` for sticky bars/dropdowns, `shadow-lg` for dialogs/drawers, `shadow-brand` only for rare auth/onboarding emphasis.
+- Prefer 1px borders for cards, lists, tables, filters, and inputs.
+- Use left-border accents for important alerts and status timelines.
+- Use brand border only for selected/active states, not decoration.
 
 ---
 
-## 10. Component Usage
+## 18. Icon Usage Guidance
 
-Buttons:
+GarageOS iconography should be simple, outline-based, and operational.
 
-- `primary`: main CTA.
-- `secondary`/`outline`/`ghost`: lower-emphasis actions.
-- `destructive`: delete, void, cancel, reject, corrective actions.
-- `readonly`: explanation/action for read-only states.
-- One primary CTA per screen region.
-- Disabled actions must explain permission, branch, plan, tenant-status, read-only, or offline reason.
+### Icon Rules
 
-Forms:
+- Use one icon style consistently across the app.
+- Prefer line icons with `1.75px` to `2px` stroke.
+- Use icons to support scanning, not replace labels on critical actions.
+- All icon-only buttons require accessible labels.
+- Use status icons consistently:
+  - Success: check.
+  - Warning: alert triangle.
+  - Error/destructive: circle alert or octagon alert.
+  - Info: info circle.
+  - Offline: wifi-off/cloud-off.
+  - Locked/read-only: lock.
+  - Branch: map-pin/building.
+  - Support access: shield/user-check.
+  - Audit/history: clock/history.
 
-- Use `foreground` labels, `input` borders, `ring` focus, `muted-foreground` helper text, `destructive` errors.
-- Preserve input on validation failure.
+### Size Tokens
+
+| Token     |       Size | Use                |
+| --------- | ---------: | ------------------ |
+| `icon-xs` | `0.875rem` | Tiny metadata      |
+| `icon-sm` |     `1rem` | Inline labels      |
+| `icon-md` |  `1.25rem` | Buttons/navigation |
+| `icon-lg` |   `1.5rem` | Empty states/cards |
+| `icon-xl` |     `2rem` | Large empty states |
+
+---
+
+## 19. Component Token Usage
+
+### Buttons
+
+| Variant       | Token Use                               | Usage                                 |
+| ------------- | --------------------------------------- | ------------------------------------- |
+| `primary`     | `primary`, `primary-foreground`         | Main screen CTA                       |
+| `secondary`   | `secondary`, `secondary-foreground`     | Secondary actions                     |
+| `outline`     | `border`, `background`                  | Neutral actions                       |
+| `ghost`       | Transparent + hover muted               | Low-emphasis actions                  |
+| `destructive` | `destructive`, `destructive-foreground` | Delete, cancel, void, reject          |
+| `readonly`    | `readonly`                              | Disabled/read-only explanation action |
+| `link`        | `primary` text                          | Inline navigation                     |
+
+Rules:
+
+- Use one primary CTA per screen region.
+- Use destructive styling only for destructive or corrective actions.
+- Disabled buttons must have explanatory nearby text, tooltip, or blocked-state message when the reason is not obvious.
+- Offline, read-only tenant, and permission-blocked states must disable operational write actions.
+
+### Forms
+
+| Element         | Token Guidance                                    |
+| --------------- | ------------------------------------------------- |
+| Label           | `foreground`, `text-sm`, `font-medium`            |
+| Input           | `background`, `input`, `foreground`, focus `ring` |
+| Helper text     | `muted-foreground`, `text-xs`                     |
+| Error text      | `destructive`, `text-xs`                          |
+| Required marker | `destructive` or `primary`                        |
+| Field group     | `space-2` to `space-3`                            |
+| Form section    | `card`, `border`, `radius-lg`, `space-4`          |
+
+Rules:
+
+- Use field-level validation messages for API `validation_failed`.
+- Preserve user input on validation failure.
+- Use optimistic UI only where safe; do not fake completion of critical writes.
 - Use idempotency-aware submission for critical writes.
-- Do not fake completion of financial/inventory/deletion workflows.
 
-Tables and cards:
+### Tables
 
-- Use cards for mobile list items, dashboards, detail sections, workflow summaries.
-- Collapse dense tables into mobile card rows.
-- Use tabular numbers and right alignment for money/quantity.
-- Use status badges in list rows and detail headers.
-- Use keyset/cursor pagination patterns for high-volume lists.
+| Element       | Token Guidance                                             |
+| ------------- | ---------------------------------------------------------- |
+| Header        | `muted`, `muted-foreground`, `text-xs`, uppercase optional |
+| Row           | `card/background`, border bottom                           |
+| Hover         | `muted`                                                    |
+| Selected row  | `accent`, `accent-foreground`                              |
+| Numeric cells | `font-numeric`, right aligned                              |
+| Status cell   | Status badge                                               |
+| Empty table   | Empty state pattern                                        |
 
-Dialogs/sheets/toasts:
+Rules:
 
-- Dialogs: confirmations, destructive actions, reason-required transitions, short forms.
-- Sheets: mobile filters, long forms, detail panels, review summaries.
-- Toasts: save success, export queued, non-blocking notices. Blocking errors require inline alert/state.
+- Tables must collapse into cards or row summaries on mobile where horizontal density is too high.
+- Keep actions in row menu on mobile.
+- Use sticky headers only when useful and performant.
+- Use cursor pagination patterns for high-volume lists.
 
-Navigation:
+### Cards
 
-- Active nav: `accent`/`accent-foreground` plus optional primary indicator.
-- Branch chip: `secondary`.
-- Tenant/offline/support banners: status tokens.
-- Permission-hidden routes should not leak inaccessible data.
+| Token             | Use               |
+| ----------------- | ----------------- |
+| `card`            | Surface           |
+| `card-foreground` | Text              |
+| `border`          | Boundary          |
+| `radius-lg`       | Shape             |
+| `shadow-sm`       | Default elevation |
 
-Icons:
+Rules:
 
-- Use one outline icon style, `1.75px–2px` stroke.
-- Icon-only buttons require accessible labels.
-- Suggested semantics: check=success, alert=warning/error, info=info, wifi/cloud-off=offline, lock=read-only, shield=user support access, history=audit.
+- Use cards for mobile list items, dashboard metrics, detail sections, and workflow summaries.
+- Avoid deep card nesting on mobile.
+- Use section headers inside cards for dense operational forms.
+
+### Modals and Dialogs
+
+Use dialogs for:
+
+- Confirmation.
+- Destructive action.
+- Workflow transition.
+- Reason-required action.
+- Short forms.
+
+Token guidance:
+
+- Surface: `popover`.
+- Border: `border`.
+- Radius: `radius-lg`.
+- Shadow: `shadow-lg`.
+
+Rules:
+
+- Dialog titles must clearly name the action.
+- Dialogs for corrective actions must show impact summary.
+- Use destructive styling for irreversible or corrective actions.
+- Do not place long multi-step workflows in small dialogs.
+
+### Drawers and Sheets
+
+Use drawers/sheets for:
+
+- Mobile filters.
+- Detail side panels.
+- Long forms.
+- Review summaries.
+- Workflow action panels.
+
+Rules:
+
+- Prefer bottom drawer on mobile.
+- Prefer side sheet on tablet/desktop.
+- Keep sticky action footer for long mobile forms.
+- Always preserve context when closing without submitting.
+
+### Toasts
+
+Use toasts for:
+
+- Save success.
+- Background job queued.
+- Non-blocking error summary.
+- Export started.
+- Session or network notices.
+
+Rules:
+
+- Blocking errors require inline alert or state page, not only toast.
+- Toasts must not contain sensitive payloads.
+- Include recovery action only when documented and safe.
+
+### Navigation
+
+| Component         | Token Use                                                   |
+| ----------------- | ----------------------------------------------------------- |
+| Active nav item   | `accent`, `accent-foreground`, optional `primary` indicator |
+| Inactive nav item | `muted-foreground`                                          |
+| Disabled nav item | `muted-foreground` with blocked state                       |
+| Tenant banner     | Status token                                                |
+| Branch chip       | `secondary`, `secondary-foreground`                         |
+| Offline indicator | `status-offline`                                            |
 
 ---
 
-## 11. Accessibility and Responsive Rules
+## 20. Accessibility Requirements
 
-Accessibility:
+GarageOS UI must support accessible, touch-friendly, mobile-first workflows.
 
-- Maintain contrast in light/dark modes.
-- Do not use color alone; pair status with text/icon.
-- Use semantic HTML and visible focus rings.
-- Support keyboard navigation for dialogs, menus, sheets, forms, and tables.
-- Trap/restore focus in modals.
-- Respect reduced motion.
-- Associate errors with fields.
-- Keep touch targets at least `2.75rem`.
+### Required Practices
 
-Responsive:
-
-| Breakpoint |    Width | Use                             |
-| ---------- | -------: | ------------------------------- |
-| `sm`       |  `640px` | Large phones                    |
-| `md`       |  `768px` | Tablets                         |
-| `lg`       | `1024px` | Desktop layout                  |
-| `xl`       | `1280px` | Wide desktop                    |
-| `2xl`      | `1536px` | Data-heavy admin/report layouts |
-
-Design at `360px` minimum first. Use single-column mobile forms, sticky bottom actions, mobile filter drawers, and card rows where tables are too dense. Promote side panels and richer tables only on tablet/desktop.
+- Maintain accessible contrast in light and dark themes.
+- Do not use color alone to communicate status.
+- Pair status color with text and/or icon.
+- Use semantic HTML elements.
+- Provide visible focus states with `ring`.
+- Ensure keyboard navigation for dialogs, menus, sheets, forms, and tables.
+- Provide accessible labels for icon-only actions.
+- Maintain minimum touch target size of `2.75rem`.
+- Respect reduced-motion preferences.
+- Avoid flashing or excessive animation.
+- Ensure error messages are associated with fields.
+- Ensure modals trap focus and restore focus on close.
+- Ensure disabled actions have an understandable reason when blocked by permission, tenant status, plan, branch access, read-only mode, or offline mode.
 
 ---
 
-## 12. Tailwind and shadcn Mapping
+## 21. Responsive Tokens
 
-Use CSS variables as the single source for Tailwind and shadcn/ui.
+### Breakpoints
+
+Use Tailwind defaults unless the project changes them through an approved frontend ADR.
+
+| Token |    Width | Use                             |
+| ----- | -------: | ------------------------------- |
+| `sm`  |  `640px` | Large phones / small tablets    |
+| `md`  |  `768px` | Tablet                          |
+| `lg`  | `1024px` | Desktop layout begins           |
+| `xl`  | `1280px` | Wide desktop                    |
+| `2xl` | `1536px` | Data-heavy admin/report layouts |
+
+### Mobile-First Layout Rules
+
+- Design at `360px` minimum width first.
+- Use single-column forms on mobile.
+- Use sticky bottom actions for primary submit actions on long forms.
+- Use drawers for filters on mobile.
+- Use tables only when readable; otherwise use card rows.
+- Promote side-by-side summary panels only on tablet/desktop.
+- Keep branch, tenant, offline, and support-access context visible.
+
+---
+
+## 22. Tailwind Implementation Notes
+
+### Tailwind Theme Mapping
+
+Use CSS variables as the source for shadcn/ui and Tailwind colors.
+
+Example:
 
 ```ts
-// tailwind.config.ts excerpt
-colors: {
-  background: 'rgb(var(--background) / <alpha-value>)',
-  foreground: 'rgb(var(--foreground) / <alpha-value>)',
-  card: 'rgb(var(--card) / <alpha-value>)',
-  'card-foreground': 'rgb(var(--card-foreground) / <alpha-value>)',
-  popover: 'rgb(var(--popover) / <alpha-value>)',
-  'popover-foreground': 'rgb(var(--popover-foreground) / <alpha-value>)',
-  primary: 'rgb(var(--primary) / <alpha-value>)',
-  'primary-foreground': 'rgb(var(--primary-foreground) / <alpha-value>)',
-  secondary: 'rgb(var(--secondary) / <alpha-value>)',
-  'secondary-foreground': 'rgb(var(--secondary-foreground) / <alpha-value>)',
-  muted: 'rgb(var(--muted) / <alpha-value>)',
-  'muted-foreground': 'rgb(var(--muted-foreground) / <alpha-value>)',
-  accent: 'rgb(var(--accent) / <alpha-value>)',
-  'accent-foreground': 'rgb(var(--accent-foreground) / <alpha-value>)',
-  destructive: 'rgb(var(--destructive) / <alpha-value>)',
-  'destructive-foreground': 'rgb(var(--destructive-foreground) / <alpha-value>)',
-  border: 'rgb(var(--border) / <alpha-value>)',
-  input: 'rgb(var(--input) / <alpha-value>)',
-  ring: 'rgb(var(--ring) / <alpha-value>)',
-  success: 'rgb(var(--success) / <alpha-value>)',
-  warning: 'rgb(var(--warning) / <alpha-value>)',
-  info: 'rgb(var(--info) / <alpha-value>)',
-  readonly: 'rgb(var(--readonly) / <alpha-value>)',
-  offline: 'rgb(var(--offline) / <alpha-value>)',
-},
-borderRadius: {
-  lg: 'var(--radius)',
-  md: 'calc(var(--radius) - 2px)',
-  sm: 'calc(var(--radius) - 4px)',
-}
+// tailwind.config.ts
+export default {
+  darkMode: ['class'],
+  theme: {
+    extend: {
+      colors: {
+        background: 'rgb(var(--background) / <alpha-value>)',
+        foreground: 'rgb(var(--foreground) / <alpha-value>)',
+        card: 'rgb(var(--card) / <alpha-value>)',
+        'card-foreground': 'rgb(var(--card-foreground) / <alpha-value>)',
+        popover: 'rgb(var(--popover) / <alpha-value>)',
+        'popover-foreground': 'rgb(var(--popover-foreground) / <alpha-value>)',
+        primary: 'rgb(var(--primary) / <alpha-value>)',
+        'primary-foreground': 'rgb(var(--primary-foreground) / <alpha-value>)',
+        secondary: 'rgb(var(--secondary) / <alpha-value>)',
+        'secondary-foreground': 'rgb(var(--secondary-foreground) / <alpha-value>)',
+        muted: 'rgb(var(--muted) / <alpha-value>)',
+        'muted-foreground': 'rgb(var(--muted-foreground) / <alpha-value>)',
+        accent: 'rgb(var(--accent) / <alpha-value>)',
+        'accent-foreground': 'rgb(var(--accent-foreground) / <alpha-value>)',
+        destructive: 'rgb(var(--destructive) / <alpha-value>)',
+        'destructive-foreground': 'rgb(var(--destructive-foreground) / <alpha-value>)',
+        border: 'rgb(var(--border) / <alpha-value>)',
+        input: 'rgb(var(--input) / <alpha-value>)',
+        ring: 'rgb(var(--ring) / <alpha-value>)',
+        success: 'rgb(var(--success) / <alpha-value>)',
+        warning: 'rgb(var(--warning) / <alpha-value>)',
+        info: 'rgb(var(--info) / <alpha-value>)',
+        readonly: 'rgb(var(--readonly) / <alpha-value>)',
+        offline: 'rgb(var(--offline) / <alpha-value>)',
+      },
+      borderRadius: {
+        lg: 'var(--radius)',
+        md: 'calc(var(--radius) - 2px)',
+        sm: 'calc(var(--radius) - 4px)',
+      },
+    },
+  },
+};
 ```
-
-shadcn-compatible variables: `background`, `foreground`, `card`, `card-foreground`, `popover`, `popover-foreground`, `primary`, `primary-foreground`, `secondary`, `secondary-foreground`, `muted`, `muted-foreground`, `accent`, `accent-foreground`, `destructive`, `destructive-foreground`, `border`, `input`, `ring`, `radius`.
-
-Extend variants only for documented UI needs: `readonly`, `offline`, `warning`, `success`, `info`.
 
 ---
 
-## 13. Governance and Acceptance Criteria
+## 23. shadcn/ui Implementation Notes
 
-New tokens are allowed only when existing semantic tokens cannot represent a reusable need, both light/dark values are defined, accessibility is checked, and the token does not introduce undocumented behavior.
+GarageOS should use shadcn/ui-compatible variables for:
 
-Token changes are allowed only when they improve consistency, accessibility, or maintainability; preserve documented states; keep Tailwind/shadcn mappings valid; and include light/dark/system review.
+- `background`.
+- `foreground`.
+- `card`.
+- `card-foreground`.
+- `popover`.
+- `popover-foreground`.
+- `primary`.
+- `primary-foreground`.
+- `secondary`.
+- `secondary-foreground`.
+- `muted`.
+- `muted-foreground`.
+- `accent`.
+- `accent-foreground`.
+- `destructive`.
+- `destructive-foreground`.
+- `border`.
+- `input`.
+- `ring`.
+- `radius`.
 
-This token system is acceptable when it:
+Component variants should be extended only when they map to documented UI needs such as:
 
-- Keeps light mode as default.
-- Supports dark and system modes.
-- Maps cleanly to Tailwind CSS and shadcn/ui.
-- Reflects GarageOS brand without decorative overuse.
-- Supports mobile-first PWA layouts.
-- Provides accessible focus, contrast, and touch behavior.
-- Defines semantic status, alert, workflow, offline, read-only, and tenant lifecycle tokens.
-- Does not add undocumented modules, routes, roles, permissions, workflows, or behavior.
+- `readonly`.
+- `offline`.
+- `warning`.
+- `success`.
+- `info`.
+
+Do not create component variants for undocumented product flows.
+
+---
+
+## 24. Token Governance
+
+### Adding Tokens
+
+A new token may be added only when:
+
+1. Existing semantic tokens cannot represent the need.
+2. The need applies to more than one component or screen.
+3. The token does not introduce undocumented product behavior.
+4. Light and dark values are both defined.
+5. Accessibility contrast has been checked.
+6. The token name describes semantic purpose, not a one-off page.
+
+### Modifying Tokens
+
+A token may be changed only when:
+
+1. The visual change improves consistency, accessibility, or implementation maintainability.
+2. It does not break documented states.
+3. shadcn/ui and Tailwind mappings remain valid.
+4. Affected components are reviewed in light, dark, and system modes.
+5. Regression screenshots or UI tests are updated where applicable.
+
+---
+
+## 25. Acceptance Criteria
+
+`ui-tokens.md` is acceptable when:
+
+- It keeps light mode as the default theme.
+- It supports dark mode.
+- It supports system theme mode.
+- It maps cleanly to Tailwind CSS variables.
+- It maps cleanly to shadcn/ui theming.
+- It reflects the GarageOS logo without overusing decorative brand styling.
+- It supports mobile-first PWA layouts.
+- It supports accessible contrast and visible focus states.
+- It defines semantic status, alert, workflow, offline, read-only, and tenant lifecycle tokens.
+- It does not introduce undocumented modules, routes, roles, permissions, or workflows.
