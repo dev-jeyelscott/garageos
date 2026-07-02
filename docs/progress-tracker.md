@@ -239,9 +239,9 @@
 
 - [x] Implement invoice draft from job orders
 - [x] Implement billing allocation service
-- [ ] Implement invoice calculations
-- [ ] Implement invoice-level discount allocation
-- [ ] Implement tax calculation from tenant tax settings
+- [x] Implement invoice calculations
+- [x] Implement invoice-level discount allocation
+- [x] Implement tax calculation from tenant tax settings
 - [ ] Implement invoice issuance
 - [ ] Implement invoice cancel and void rules
 - [ ] Implement payment creation
