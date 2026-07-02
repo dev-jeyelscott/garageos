@@ -226,10 +226,10 @@
 - [x] Verify supplier lifecycle backend/API coverage
 - [x] Implement purchase order draft/create/update workflow
 - [x] Implement purchase order order/cancel/close workflow actions
-- [ ] Implement purchase receiving UI workflow
-- [ ] Implement supplier payment workflow
-- [ ] Implement supplier credit workflow
-- [ ] Implement supplier return workflow
+- [x] Implement purchase receiving UI workflow
+- [x] Implement supplier payment workflow
+- [x] Implement supplier credit workflow
+- [x] Implement supplier return workflow
 - [ ] Implement supplier return valuation
 - [ ] Implement AP balances/report basis
 - [ ] Complete purchasing/AP mobile screens beyond existing supplier and purchase order pages
