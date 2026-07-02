@@ -1,5 +1,5 @@
-import { OnboardingGateScreen } from '../../src/features/app-shell/components/authenticated-shell.client';
+import { TenantOnboardingCompletionScreen } from '../../src/features/onboarding/onboarding.screen';
 
 export default function OnboardingPage() {
-  return <OnboardingGateScreen />;
+  return <TenantOnboardingCompletionScreen />;
 }

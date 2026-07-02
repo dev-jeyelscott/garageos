@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Post, Put, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Inject, Post, Put, UseGuards } from '@nestjs/common';
 
 import { ZodValidationPipe } from '../../../shared/api/zod-validation.pipe';
 import { AccessTokenAuthGuard } from '../../auth/api/access-token-auth.guard';
@@ -15,7 +15,9 @@ import { ShopService } from '../application/shop.service';
 @UseGuards(AccessTokenAuthGuard)
 export class ShopController {
   constructor(
+    @Inject(AuthService)
     private readonly authService: AuthService,
+    @Inject(ShopService)
     private readonly shopService: ShopService,
   ) {}
 

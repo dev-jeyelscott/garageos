@@ -4,6 +4,7 @@ import {
   Get,
   Headers,
   HttpCode,
+  Inject,
   Param,
   Patch,
   Post,
@@ -28,8 +29,11 @@ import {
 @UseGuards(AccessTokenAuthGuard)
 export class BranchController {
   constructor(
+    @Inject(AuthService)
     private readonly authService: AuthService,
+    @Inject(BranchService)
     private readonly branchService: BranchService,
+    @Inject(IdempotencyService)
     private readonly idempotencyService: IdempotencyService,
   ) {}
 

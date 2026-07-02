@@ -93,6 +93,7 @@
 - [x] Implement tenant lifecycle command service
 - [x] Add idempotency to platform critical writes
 - [x] Keep renewal/payment behavior external to GarageOS
+- [x] Implement tenant onboarding completion UI workflow
 - [ ] Implement or verify `/platform/tenants` UI
 - [ ] Implement or verify `/platform/tenants/{tenant_id}` UI
 - [ ] Implement or verify `/platform/tenants/new` UI
