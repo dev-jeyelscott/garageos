@@ -40,6 +40,14 @@ export function buildPurchaseOrderNumber(datePart: string, sequence: number): st
   return `PO-${datePart}-${String(sequence).padStart(6, '0')}`;
 }
 
+export function buildReceiptNumber(sequence: number): string {
+  if (!Number.isSafeInteger(sequence) || sequence < 1) {
+    throw new Error('Receipt sequence must be a positive safe integer.');
+  }
+
+  return `RCPT-${String(sequence).padStart(6, '0')}`;
+}
+
 export function formatTenantBusinessDate(value: Date, timezone: string): string {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: timezone || DEFAULT_DOCUMENT_NUMBER_TIMEZONE,

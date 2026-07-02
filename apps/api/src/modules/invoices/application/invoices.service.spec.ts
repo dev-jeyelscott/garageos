@@ -9,6 +9,8 @@ import {
   type InvoiceBillingAllocationRecord,
   type InvoiceJobOrderRecord,
   type InvoiceLineRecord,
+  type InvoicePaymentRecord,
+  type InvoiceReceiptRecord,
   type InvoiceRecord,
   type InvoiceStatusEventRecord,
   type InvoiceWithDetailsRecord,
@@ -20,12 +22,15 @@ import {
   type CreateInvoiceBillingAllocationsInput,
   type CreateInvoiceJobOrderLinksInput,
   type CreateInvoiceLinesInput,
+  type CreateInvoicePaymentInput,
+  type CreateInvoiceReceiptInput,
   type FindLatestInvoiceNumberForDateInput,
   type InsertInvoiceStatusEventInput,
   type InvoiceDraftJobOrderLineRecord,
   type InvoiceDraftJobOrderRecord,
   type InvoiceSettingsRecord,
   type ListInvoicesInput,
+  type UpdateInvoicePaymentTotalsInput,
   type UpdateBillingAllocationStatusesInput,
   type UpdateInvoiceWorkflowStatusInput,
 } from './invoice.store';
@@ -403,6 +408,147 @@ describe('InvoicesService', () => {
 
     expect(store.createdInvoice?.status).toBe('pending');
   });
+
+  it('records a payment, creates one receipt, and marks invoice paid when balance is fully collected', async () => {
+    const store = new FakeInvoiceStore();
+    const service = createService(store);
+    const draft = await service.createDraftInvoice(
+      {
+        job_order_ids: [jobOrderId],
+        invoice_date: createdAt,
+      },
+      createSession(),
+    );
+    await service.issueInvoice(draft.invoice.id, {}, createSession());
+
+    const result = await service.recordPayment(
+      draft.invoice.id,
+      {
+        amount: '1120.00',
+        payment_date: createdAt,
+        payment_method: 'gcash',
+        reference_number: 'GCASH-123',
+        notes: 'Full customer payment',
+      },
+      createSession(['payments.create']),
+    );
+
+    expect(result.payment).toMatchObject({
+      invoice_id: draft.invoice.id,
+      amount: '1120.00',
+      refundable_amount: '1120.00',
+      payment_method: 'gcash',
+      reference_number: 'GCASH-123',
+    });
+    expect(result.receipt).toMatchObject({
+      invoice_id: draft.invoice.id,
+      payment_id: result.payment.id,
+      receipt_number: 'RCPT-000001',
+      amount: '1120.00',
+      payment_method: 'gcash',
+    });
+    expect(result.invoice).toMatchObject({
+      status: 'paid',
+      amount_paid: '1120.00',
+      remaining_collectible_balance: '0.00',
+    });
+    expect(store.statusEvents.at(-1)).toMatchObject({
+      fromStatus: 'pending',
+      toStatus: 'paid',
+      reason: 'invoice_payment_recorded',
+    });
+  });
+
+  it('blocks payment amounts greater than remaining collectible balance', async () => {
+    const store = new FakeInvoiceStore();
+    const service = createService(store);
+    const draft = await service.createDraftInvoice(
+      {
+        job_order_ids: [jobOrderId],
+        invoice_date: createdAt,
+      },
+      createSession(),
+    );
+    await service.issueInvoice(draft.invoice.id, {}, createSession());
+
+    await expect(
+      service.recordPayment(
+        draft.invoice.id,
+        {
+          amount: '1120.01',
+          payment_date: createdAt,
+          payment_method: 'cash',
+        },
+        createSession(['payments.create']),
+      ),
+    ).rejects.toMatchObject({
+      code: 'invoice_overpayment_blocked',
+    });
+
+    expect(store.createdPayments).toEqual([]);
+    expect(store.createdReceipts).toEqual([]);
+  });
+
+  it('blocks payments for draft invoices', async () => {
+    const store = new FakeInvoiceStore();
+    const service = createService(store);
+    const draft = await service.createDraftInvoice(
+      {
+        job_order_ids: [jobOrderId],
+        invoice_date: createdAt,
+      },
+      createSession(),
+    );
+
+    await expect(
+      service.recordPayment(
+        draft.invoice.id,
+        {
+          amount: '100.00',
+          payment_date: createdAt,
+          payment_method: 'cash',
+        },
+        createSession(['payments.create']),
+      ),
+    ).rejects.toMatchObject({
+      code: 'workflow_transition_blocked',
+      details: [
+        expect.objectContaining({
+          code: 'invoice_status_not_collectible',
+        }),
+      ],
+    });
+
+    expect(store.createdPayments).toEqual([]);
+  });
+
+  it('requires payments.create permission to record invoice payments', async () => {
+    const store = new FakeInvoiceStore();
+    const service = createService(store);
+    const draft = await service.createDraftInvoice(
+      {
+        job_order_ids: [jobOrderId],
+        invoice_date: createdAt,
+      },
+      createSession(),
+    );
+    await service.issueInvoice(draft.invoice.id, {}, createSession());
+
+    await expect(
+      service.recordPayment(
+        draft.invoice.id,
+        {
+          amount: '100.00',
+          payment_date: createdAt,
+          payment_method: 'cash',
+        },
+        createSession([]),
+      ),
+    ).rejects.toMatchObject({
+      code: 'forbidden',
+      details: [{ required_permission: 'payments.create' }],
+    });
+  });
 });
 
 function createService(store: FakeInvoiceStore): InvoicesService {
@@ -473,6 +619,8 @@ class FakeInvoiceStore extends InvoiceStore {
   createdLines: readonly InvoiceLineRecord[] = [];
   createdJobOrderLinks: readonly InvoiceJobOrderRecord[] = [];
   createdAllocations: readonly InvoiceBillingAllocationRecord[] = [];
+  createdPayments: readonly InvoicePaymentRecord[] = [];
+  createdReceipts: readonly InvoiceReceiptRecord[] = [];
   createBillingAllocationsResult: readonly InvoiceBillingAllocationRecord[] | null = null;
   invoiceSettings: InvoiceSettingsRecord = {
     invoicePrefix: 'INV-',
@@ -667,6 +815,67 @@ class FakeInvoiceStore extends InvoiceStore {
     });
 
     return changed;
+  }
+
+  async createPayment(input: CreateInvoicePaymentInput): Promise<InvoicePaymentRecord> {
+    const payment = {
+      id: input.id,
+      tenantId: input.tenantId,
+      invoiceId: input.invoiceId,
+      amount: input.amount,
+      refundableAmount: input.amount,
+      paymentDate: input.paymentDate,
+      paymentMethod: input.paymentMethod,
+      referenceNumber: input.referenceNumber,
+      notes: input.notes,
+      createdByUserId: input.createdByUserId,
+      createdAt: input.createdAt,
+    };
+
+    this.createdPayments = [...this.createdPayments, payment];
+
+    return payment;
+  }
+
+  async createReceipt(input: CreateInvoiceReceiptInput): Promise<InvoiceReceiptRecord> {
+    const receipt = {
+      id: input.id,
+      tenantId: input.tenantId,
+      invoiceId: input.invoiceId,
+      paymentId: input.paymentId,
+      receiptNumber: input.receiptNumber,
+      amount: input.amount,
+      paymentMethod: input.paymentMethod,
+      issuedAt: input.issuedAt,
+      createdByUserId: input.createdByUserId,
+    };
+
+    this.createdReceipts = [...this.createdReceipts, receipt];
+
+    return receipt;
+  }
+
+  async updateInvoicePaymentTotals(
+    input: UpdateInvoicePaymentTotalsInput,
+  ): Promise<InvoiceRecord | null> {
+    if (this.createdInvoice === null) {
+      return null;
+    }
+
+    this.createdInvoice = {
+      ...this.createdInvoice,
+      amountPaid: input.amountPaid,
+      remainingCollectibleBalance: input.remainingCollectibleBalance,
+      status: input.status,
+      updatedAt: input.changedAt,
+      lockVersion: this.createdInvoice.lockVersion + 1,
+    };
+
+    return this.createdInvoice;
+  }
+
+  async allocateReceiptNumber(): Promise<string> {
+    return `RCPT-${String(this.createdReceipts.length + 1).padStart(6, '0')}`;
   }
 
   async insertStatusEvent(input: InsertInvoiceStatusEventInput): Promise<InvoiceStatusEventRecord> {

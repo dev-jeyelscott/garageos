@@ -78,3 +78,29 @@ export const INVOICE_STATUS_EVENT_COLUMNS = `
   created_by_user_id,
   created_at
 `;
+
+export const INVOICE_PAYMENT_COLUMNS = `
+  id,
+  tenant_id,
+  invoice_id,
+  amount::text,
+  refundable_amount::text,
+  payment_date,
+  payment_method,
+  reference_number,
+  notes,
+  created_by_user_id,
+  created_at
+`;
+
+export const INVOICE_RECEIPT_COLUMNS = `
+  id,
+  tenant_id,
+  invoice_id,
+  payment_id,
+  receipt_number,
+  amount::text,
+  payment_method,
+  issued_at,
+  created_by_user_id
+`;

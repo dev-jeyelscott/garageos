@@ -6,12 +6,16 @@ import {
   type DatabaseQueryResult,
   type DatabaseRow,
 } from '../../../shared/database/database-client';
+import { buildReceiptNumber } from '../../../shared/numbering/document-numbering';
 import {
+  type AllocateReceiptNumberInput,
   type BillingAllocationTotalRecord,
   type CreateDraftInvoiceInput,
   type CreateInvoiceBillingAllocationsInput,
   type CreateInvoiceJobOrderLinksInput,
   type CreateInvoiceLinesInput,
+  type CreateInvoicePaymentInput,
+  type CreateInvoiceReceiptInput,
   type FindInvoiceWithDetailsInput,
   type FindLatestInvoiceNumberForDateInput,
   type InvoiceDraftJobOrderLineRecord,
@@ -23,12 +27,15 @@ import {
   type LockInvoiceWithDetailsForUpdateInput,
   type ReplaceDraftInvoiceLinesInput,
   type UpdateBillingAllocationStatusesInput,
+  type UpdateInvoicePaymentTotalsInput,
   type UpdateInvoiceWorkflowStatusInput,
 } from '../application/invoice.store';
 import type {
   InvoiceBillingAllocationRecord,
   InvoiceJobOrderRecord,
   InvoiceLineRecord,
+  InvoicePaymentRecord,
+  InvoiceReceiptRecord,
   InvoiceRecord,
   InvoiceStatusEventRecord,
   InvoiceWithDetailsRecord,
@@ -37,11 +44,15 @@ import {
   type InvoiceBillingAllocationRow,
   type InvoiceJobOrderRow,
   type InvoiceLineRow,
+  type InvoicePaymentRow,
+  type InvoiceReceiptRow,
   type InvoiceRow,
   type InvoiceStatusEventRow,
   mapInvoiceBillingAllocationRow,
   mapInvoiceJobOrderRow,
   mapInvoiceLineRow,
+  mapInvoicePaymentRow,
+  mapInvoiceReceiptRow,
   mapInvoiceRow,
   mapInvoiceStatusEventRow,
 } from '../application/invoice.mappers';
@@ -50,6 +61,8 @@ import {
   INVOICE_COLUMNS,
   INVOICE_JOB_ORDER_COLUMNS,
   INVOICE_LINE_COLUMNS,
+  INVOICE_PAYMENT_COLUMNS,
+  INVOICE_RECEIPT_COLUMNS,
   INVOICE_STATUS_EVENT_COLUMNS,
 } from './postgres-invoice.sql';
 
@@ -736,6 +749,162 @@ export class PostgresInvoiceStore extends InvoiceStore {
     );
 
     return result.rows.map(mapInvoiceBillingAllocationRow);
+  }
+
+  async createPayment(
+    input: CreateInvoicePaymentInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<InvoicePaymentRecord> {
+    const result = await client.query<InvoicePaymentRow>(
+      `
+        insert into payments (
+          id,
+          tenant_id,
+          invoice_id,
+          amount,
+          refundable_amount,
+          payment_date,
+          payment_method,
+          reference_number,
+          notes,
+          created_by_user_id,
+          created_at
+        )
+        values (
+          $1::uuid,
+          $2::uuid,
+          $3::uuid,
+          $4::numeric(14,2),
+          $4::numeric(14,2),
+          $5::date,
+          $6,
+          $7,
+          $8,
+          $9::uuid,
+          $10::timestamptz
+        )
+        returning ${INVOICE_PAYMENT_COLUMNS}
+      `,
+      [
+        input.id,
+        input.tenantId,
+        input.invoiceId,
+        input.amount,
+        input.paymentDate,
+        input.paymentMethod,
+        input.referenceNumber,
+        input.notes,
+        input.createdByUserId,
+        input.createdAt,
+      ],
+    );
+
+    return mapInvoicePaymentRow(getRequiredRow(result, 'create invoice payment'));
+  }
+
+  async createReceipt(
+    input: CreateInvoiceReceiptInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<InvoiceReceiptRecord> {
+    const result = await client.query<InvoiceReceiptRow>(
+      `
+        insert into receipts (
+          id,
+          tenant_id,
+          invoice_id,
+          payment_id,
+          receipt_number,
+          amount,
+          payment_method,
+          issued_at,
+          created_by_user_id
+        )
+        values (
+          $1::uuid,
+          $2::uuid,
+          $3::uuid,
+          $4::uuid,
+          $5,
+          $6::numeric(14,2),
+          $7,
+          $8::timestamptz,
+          $9::uuid
+        )
+        returning ${INVOICE_RECEIPT_COLUMNS}
+      `,
+      [
+        input.id,
+        input.tenantId,
+        input.invoiceId,
+        input.paymentId,
+        input.receiptNumber,
+        input.amount,
+        input.paymentMethod,
+        input.issuedAt,
+        input.createdByUserId,
+      ],
+    );
+
+    return mapInvoiceReceiptRow(getRequiredRow(result, 'create invoice receipt'));
+  }
+
+  async updateInvoicePaymentTotals(
+    input: UpdateInvoicePaymentTotalsInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<InvoiceRecord | null> {
+    const result = await client.query<InvoiceRow>(
+      `
+        update invoices
+        set
+          amount_paid = $3::numeric(14,2),
+          remaining_collectible_balance = $4::numeric(14,2),
+          status = $5,
+          updated_at = $6::timestamptz,
+          lock_version = lock_version + 1
+        where tenant_id = $1::uuid
+          and id = $2::uuid
+        returning ${INVOICE_COLUMNS}
+      `,
+      [
+        input.tenantId,
+        input.invoiceId,
+        input.amountPaid,
+        input.remainingCollectibleBalance,
+        input.status,
+        input.changedAt,
+      ],
+    );
+
+    const row = result.rows[0];
+
+    return row === undefined ? null : mapInvoiceRow(row);
+  }
+
+  async allocateReceiptNumber(
+    input: AllocateReceiptNumberInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<string | null> {
+    const result = await client.query<{ last_value: string | number }>(
+      `
+        insert into document_sequences (
+          tenant_id,
+          sequence_type,
+          sequence_date,
+          last_value,
+          updated_at
+        )
+        values ($1::uuid, 'receipt', '0001-01-01'::date, 1, now())
+        on conflict (tenant_id, sequence_type, sequence_date)
+        do update set
+          last_value = document_sequences.last_value + 1,
+          updated_at = now()
+        returning last_value
+      `,
+      [input.tenantId],
+    );
+    const sequence = result.rows[0]?.last_value;
+
+    return sequence === undefined ? null : buildReceiptNumber(Number(sequence));
   }
 
   async insertStatusEvent(

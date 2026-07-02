@@ -19,6 +19,8 @@ import { InvoicesService } from '../application/invoices.service';
 import {
   cancelInvoiceRequestSchema,
   type CancelInvoiceRequest,
+  createInvoicePaymentRequestSchema,
+  type CreateInvoicePaymentRequest,
   createDraftInvoiceRequestSchema,
   type CreateDraftInvoiceRequest,
   issueInvoiceRequestSchema,
@@ -140,6 +142,24 @@ export class InvoicesController {
       request: { invoice_id: invoiceId, ...request },
       responseStatusCode: 200,
       handler: (session) => this.invoicesService.voidInvoice(invoiceId, request, session),
+    });
+  }
+
+  @Post(':invoice_id/payments')
+  async recordPayment(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Param('invoice_id') invoiceId: string,
+    @Body(new ZodValidationPipe(createInvoicePaymentRequestSchema))
+    request: CreateInvoicePaymentRequest,
+  ): ReturnType<InvoicesService['recordPayment']> {
+    return this.runIdempotentWorkflow({
+      authorizationHeader,
+      idempotencyKey,
+      endpoint: 'POST /api/v1/invoices/{invoice_id}/payments',
+      request: { invoice_id: invoiceId, ...request },
+      responseStatusCode: 201,
+      handler: (session) => this.invoicesService.recordPayment(invoiceId, request, session),
     });
   }
 

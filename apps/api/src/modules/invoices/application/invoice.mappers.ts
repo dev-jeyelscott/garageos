@@ -3,6 +3,7 @@ import {
   BILLING_ALLOCATION_STATUS_VALUES,
   INVOICE_LINE_TYPE_VALUES,
   INVOICE_STATUS_VALUES,
+  PAYMENT_METHOD_VALUES,
   TAX_MODE_VALUES,
   TAX_PROFILE_VALUES,
   type BillingAllocationStatus,
@@ -10,9 +11,12 @@ import {
   type InvoiceJobOrderRecord,
   type InvoiceLineRecord,
   type InvoiceLineType,
+  type InvoicePaymentRecord,
+  type InvoiceReceiptRecord,
   type InvoiceRecord,
   type InvoiceStatus,
   type InvoiceStatusEventRecord,
+  type PaymentMethod,
   type TaxMode,
   type TaxProfile,
 } from './invoice.records';
@@ -96,6 +100,32 @@ export interface InvoiceStatusEventRow extends DatabaseRow {
   readonly reason: string | null;
   readonly created_by_user_id: string;
   readonly created_at: Date | string;
+}
+
+export interface InvoicePaymentRow extends DatabaseRow {
+  readonly id: string;
+  readonly tenant_id: string;
+  readonly invoice_id: string;
+  readonly amount: string;
+  readonly refundable_amount: string;
+  readonly payment_date: Date | string;
+  readonly payment_method: string;
+  readonly reference_number: string | null;
+  readonly notes: string | null;
+  readonly created_by_user_id: string | null;
+  readonly created_at: Date | string;
+}
+
+export interface InvoiceReceiptRow extends DatabaseRow {
+  readonly id: string;
+  readonly tenant_id: string;
+  readonly invoice_id: string;
+  readonly payment_id: string;
+  readonly receipt_number: string;
+  readonly amount: string;
+  readonly payment_method: string;
+  readonly issued_at: Date | string;
+  readonly created_by_user_id: string | null;
 }
 
 export function mapInvoiceRow(row: InvoiceRow): InvoiceRecord {
@@ -191,6 +221,36 @@ export function mapInvoiceStatusEventRow(row: InvoiceStatusEventRow): InvoiceSta
   };
 }
 
+export function mapInvoicePaymentRow(row: InvoicePaymentRow): InvoicePaymentRecord {
+  return {
+    id: row.id,
+    tenantId: row.tenant_id,
+    invoiceId: row.invoice_id,
+    amount: row.amount,
+    refundableAmount: row.refundable_amount,
+    paymentDate: toDate(row.payment_date),
+    paymentMethod: mapPaymentMethod(row.payment_method),
+    referenceNumber: row.reference_number,
+    notes: row.notes,
+    createdByUserId: row.created_by_user_id,
+    createdAt: toDate(row.created_at),
+  };
+}
+
+export function mapInvoiceReceiptRow(row: InvoiceReceiptRow): InvoiceReceiptRecord {
+  return {
+    id: row.id,
+    tenantId: row.tenant_id,
+    invoiceId: row.invoice_id,
+    paymentId: row.payment_id,
+    receiptNumber: row.receipt_number,
+    amount: row.amount,
+    paymentMethod: mapPaymentMethod(row.payment_method),
+    issuedAt: toDate(row.issued_at),
+    createdByUserId: row.created_by_user_id,
+  };
+}
+
 function mapInvoiceStatus(status: string): InvoiceStatus {
   if ((INVOICE_STATUS_VALUES as readonly string[]).includes(status)) {
     return status as InvoiceStatus;
@@ -229,6 +289,14 @@ function mapTaxMode(taxMode: string): TaxMode {
   }
 
   throw new Error(`Unknown invoice tax mode: ${taxMode}.`);
+}
+
+function mapPaymentMethod(paymentMethod: string): PaymentMethod {
+  if ((PAYMENT_METHOD_VALUES as readonly string[]).includes(paymentMethod)) {
+    return paymentMethod as PaymentMethod;
+  }
+
+  throw new Error(`Unknown invoice payment method: ${paymentMethod}.`);
 }
 
 function toDate(value: Date | string): Date {

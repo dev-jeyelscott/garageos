@@ -173,6 +173,15 @@ export class GarageOsApiException extends HttpException {
     });
   }
 
+  static invoiceOverpaymentBlocked(details: ApiErrorDetail[] = []): GarageOsApiException {
+    return new GarageOsApiException({
+      code: API_ERROR_CODES.INVOICE_OVERPAYMENT_BLOCKED,
+      message: 'Payment exceeds remaining collectible balance.',
+      status: HttpStatus.UNPROCESSABLE_ENTITY,
+      details,
+    });
+  }
+
   static rateLimited(): GarageOsApiException {
     return new GarageOsApiException({
       code: API_ERROR_CODES.RATE_LIMITED,

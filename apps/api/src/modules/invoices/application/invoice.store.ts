@@ -10,6 +10,8 @@ import type {
   InvoiceJobOrderRecord,
   InvoiceLineRecord,
   InvoiceLineType,
+  InvoicePaymentRecord,
+  InvoiceReceiptRecord,
   InvoiceRecord,
   InvoiceStatus,
   InvoiceStatusEventRecord,
@@ -182,6 +184,44 @@ export interface UpdateBillingAllocationStatusesInput {
   readonly changedAt: Date;
 }
 
+export interface CreateInvoicePaymentInput {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly invoiceId: string;
+  readonly amount: string;
+  readonly paymentDate: Date;
+  readonly paymentMethod: InvoicePaymentRecord['paymentMethod'];
+  readonly referenceNumber: string | null;
+  readonly notes: string | null;
+  readonly createdByUserId: string;
+  readonly createdAt: Date;
+}
+
+export interface CreateInvoiceReceiptInput {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly invoiceId: string;
+  readonly paymentId: string;
+  readonly receiptNumber: string;
+  readonly amount: string;
+  readonly paymentMethod: InvoicePaymentRecord['paymentMethod'];
+  readonly issuedAt: Date;
+  readonly createdByUserId: string;
+}
+
+export interface UpdateInvoicePaymentTotalsInput {
+  readonly tenantId: string;
+  readonly invoiceId: string;
+  readonly amountPaid: string;
+  readonly remainingCollectibleBalance: string;
+  readonly status: InvoiceStatus;
+  readonly changedAt: Date;
+}
+
+export interface AllocateReceiptNumberInput {
+  readonly tenantId: string;
+}
+
 export abstract class InvoiceStore {
   abstract isActiveShopOwner(input: {
     readonly tenantId: string;
@@ -256,6 +296,26 @@ export abstract class InvoiceStore {
     input: UpdateBillingAllocationStatusesInput,
     client?: DatabaseQueryClient,
   ): Promise<readonly InvoiceBillingAllocationRecord[]>;
+
+  abstract createPayment(
+    input: CreateInvoicePaymentInput,
+    client?: DatabaseQueryClient,
+  ): Promise<InvoicePaymentRecord>;
+
+  abstract createReceipt(
+    input: CreateInvoiceReceiptInput,
+    client?: DatabaseQueryClient,
+  ): Promise<InvoiceReceiptRecord>;
+
+  abstract updateInvoicePaymentTotals(
+    input: UpdateInvoicePaymentTotalsInput,
+    client?: DatabaseQueryClient,
+  ): Promise<InvoiceRecord | null>;
+
+  abstract allocateReceiptNumber(
+    input: AllocateReceiptNumberInput,
+    client?: DatabaseQueryClient,
+  ): Promise<string | null>;
 
   abstract insertStatusEvent(
     input: InsertInvoiceStatusEventInput,

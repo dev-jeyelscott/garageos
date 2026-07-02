@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { INVOICE_STATUS_VALUES } from '../application/invoice.records';
+import { INVOICE_STATUS_VALUES, PAYMENT_METHOD_VALUES } from '../application/invoice.records';
 
 const uuidSchema = z.string().uuid();
 const moneyAmountSchema = z.string().regex(/^\d+(\.\d{2})$/, {
@@ -103,8 +103,19 @@ export const voidInvoiceRequestSchema = z.object({
   reason: workflowReasonSchema,
 });
 
+export const createInvoicePaymentRequestSchema = z.object({
+  amount: moneyAmountSchema.refine((value) => Number(value) > 0, {
+    message: 'Payment amount must be greater than zero.',
+  }),
+  payment_date: z.coerce.date(),
+  payment_method: z.enum(PAYMENT_METHOD_VALUES),
+  reference_number: z.string().trim().min(1).max(120).optional(),
+  notes: z.string().trim().min(1).max(500).optional(),
+});
+
 export type ListInvoicesQuery = z.infer<typeof listInvoicesQuerySchema>;
 export type CreateDraftInvoiceRequest = z.infer<typeof createDraftInvoiceRequestSchema>;
 export type IssueInvoiceRequest = z.infer<typeof issueInvoiceRequestSchema>;
 export type CancelInvoiceRequest = z.infer<typeof cancelInvoiceRequestSchema>;
 export type VoidInvoiceRequest = z.infer<typeof voidInvoiceRequestSchema>;
+export type CreateInvoicePaymentRequest = z.infer<typeof createInvoicePaymentRequestSchema>;

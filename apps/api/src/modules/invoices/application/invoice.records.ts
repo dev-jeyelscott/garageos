@@ -56,6 +56,20 @@ export const TAX_MODE_VALUES = Object.values(TAX_MODES);
 
 export type TaxMode = (typeof TAX_MODES)[keyof typeof TAX_MODES];
 
+export const PAYMENT_METHODS = {
+  CASH: 'cash',
+  GCASH: 'gcash',
+  MAYA: 'maya',
+  BANK_TRANSFER: 'bank_transfer',
+  CREDIT_CARD: 'credit_card',
+  CHECK: 'check',
+  OTHER: 'other',
+} as const;
+
+export const PAYMENT_METHOD_VALUES = Object.values(PAYMENT_METHODS);
+
+export type PaymentMethod = (typeof PAYMENT_METHODS)[keyof typeof PAYMENT_METHODS];
+
 export interface InvoiceRecord {
   readonly id: string;
   readonly tenantId: string;
@@ -135,6 +149,32 @@ export interface InvoiceStatusEventRecord {
   readonly reason: string | null;
   readonly createdByUserId: string;
   readonly createdAt: Date;
+}
+
+export interface InvoicePaymentRecord {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly invoiceId: string;
+  readonly amount: string;
+  readonly refundableAmount: string;
+  readonly paymentDate: Date;
+  readonly paymentMethod: PaymentMethod;
+  readonly referenceNumber: string | null;
+  readonly notes: string | null;
+  readonly createdByUserId: string | null;
+  readonly createdAt: Date;
+}
+
+export interface InvoiceReceiptRecord {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly invoiceId: string;
+  readonly paymentId: string;
+  readonly receiptNumber: string;
+  readonly amount: string;
+  readonly paymentMethod: PaymentMethod;
+  readonly issuedAt: Date;
+  readonly createdByUserId: string | null;
 }
 
 export interface InvoiceWithDetailsRecord {

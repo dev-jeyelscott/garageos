@@ -23,6 +23,7 @@ import {
 } from '../../../shared/tenant-context/tenant-context';
 import type {
   CancelInvoiceRequest,
+  CreateInvoicePaymentRequest,
   CreateDraftInvoiceRequest,
   IssueInvoiceRequest,
   ListInvoicesQuery,
@@ -39,6 +40,8 @@ import {
   INVOICE_STATUSES,
   type BillingAllocationStatus,
   type InvoiceLineType,
+  type InvoicePaymentRecord,
+  type InvoiceReceiptRecord,
   type InvoiceRecord,
   type InvoiceStatus,
   type InvoiceStatusEventRecord,
@@ -120,6 +123,34 @@ export interface InvoiceStatusEventResponse {
 
 export interface InvoiceStatusEventsResponse {
   readonly status_events: readonly InvoiceStatusEventResponse[];
+}
+
+export interface InvoicePaymentResponse {
+  readonly id: string;
+  readonly invoice_id: string;
+  readonly amount: string;
+  readonly refundable_amount: string;
+  readonly payment_date: string;
+  readonly payment_method: InvoicePaymentRecord['paymentMethod'];
+  readonly reference_number: string | null;
+  readonly notes: string | null;
+  readonly created_at: string;
+}
+
+export interface InvoiceReceiptResponse {
+  readonly id: string;
+  readonly invoice_id: string;
+  readonly payment_id: string;
+  readonly receipt_number: string;
+  readonly amount: string;
+  readonly payment_method: InvoiceReceiptRecord['paymentMethod'];
+  readonly issued_at: string;
+}
+
+export interface InvoicePaymentMutationResponse {
+  readonly payment: InvoicePaymentResponse;
+  readonly receipt: InvoiceReceiptResponse;
+  readonly invoice: InvoiceResponse;
 }
 
 @Injectable()
@@ -609,6 +640,144 @@ export class InvoicesService {
     });
   }
 
+  async recordPayment(
+    invoiceId: string,
+    request: CreateInvoicePaymentRequest,
+    session: TenantContextAuthenticatedSession,
+  ): Promise<InvoicePaymentMutationResponse> {
+    const context = resolveTenantContextFromAuthenticatedSession(session);
+    const isShopOwner = await this.invoiceStore.isActiveShopOwner({
+      tenantId: context.tenantId,
+      userId: context.actorUserId,
+    });
+
+    assertTenantLifecycleAccess({
+      context,
+      isShopOwner,
+      action: TENANT_ACCESS_ACTIONS.OPERATIONAL_WRITE,
+    });
+    assertInvoicePermission(context, isShopOwner, 'payments.create');
+
+    return this.transactionRunner.runInTransaction(async (transaction) => {
+      const current = await this.invoiceStore.lockInvoiceWithDetailsForUpdate(
+        {
+          tenantId: context.tenantId,
+          invoiceId: invoiceId.trim(),
+        },
+        transaction,
+      );
+
+      if (current === null) {
+        throw GarageOsApiException.resourceNotFound('Invoice was not found.');
+      }
+
+      assertBranchAccessAllowed({ context, branchId: current.invoice.branchId });
+      assertInvoiceCanReceivePayment(current.invoice);
+      assertPaymentDoesNotOverpay(request.amount, current.invoice.remainingCollectibleBalance);
+
+      const createdAt = new Date();
+      const receiptNumber = await this.invoiceStore.allocateReceiptNumber(
+        {
+          tenantId: context.tenantId,
+        },
+        transaction,
+      );
+
+      if (receiptNumber === null) {
+        throw new Error('Invoice store failed to allocate receipt number.');
+      }
+
+      const payment = await this.invoiceStore.createPayment(
+        {
+          id: randomUUID(),
+          tenantId: context.tenantId,
+          invoiceId: current.invoice.id,
+          amount: request.amount,
+          paymentDate: request.payment_date,
+          paymentMethod: request.payment_method,
+          referenceNumber: request.reference_number ?? null,
+          notes: request.notes ?? null,
+          createdByUserId: context.actorUserId,
+          createdAt,
+        },
+        transaction,
+      );
+      const receipt = await this.invoiceStore.createReceipt(
+        {
+          id: randomUUID(),
+          tenantId: context.tenantId,
+          invoiceId: current.invoice.id,
+          paymentId: payment.id,
+          receiptNumber,
+          amount: payment.amount,
+          paymentMethod: payment.paymentMethod,
+          issuedAt: createdAt,
+          createdByUserId: context.actorUserId,
+        },
+        transaction,
+      );
+      const nextAmountPaid = addMoney(current.invoice.amountPaid, payment.amount);
+      const nextRemainingBalance = subtractMoney(
+        current.invoice.remainingCollectibleBalance,
+        payment.amount,
+      );
+      const nextStatus = calculateInvoicePaymentStatus(current.invoice, nextRemainingBalance);
+      const updatedInvoice = await this.invoiceStore.updateInvoicePaymentTotals(
+        {
+          tenantId: context.tenantId,
+          invoiceId: current.invoice.id,
+          amountPaid: nextAmountPaid,
+          remainingCollectibleBalance: nextRemainingBalance,
+          status: nextStatus,
+          changedAt: createdAt,
+        },
+        transaction,
+      );
+
+      if (updatedInvoice === null) {
+        throw GarageOsApiException.versionConflict();
+      }
+
+      if (updatedInvoice.status !== current.invoice.status) {
+        await this.invoiceStore.insertStatusEvent(
+          {
+            id: randomUUID(),
+            tenantId: context.tenantId,
+            invoiceId: updatedInvoice.id,
+            fromStatus: current.invoice.status,
+            toStatus: updatedInvoice.status,
+            reason: 'invoice_payment_recorded',
+            createdByUserId: context.actorUserId,
+            createdAt,
+          },
+          transaction,
+        );
+      }
+
+      const response = {
+        payment: toInvoicePaymentResponse(payment),
+        receipt: toInvoiceReceiptResponse(receipt),
+        invoice: toInvoiceResponse(updatedInvoice),
+      };
+
+      await this.auditService.record({
+        tenantId: context.tenantId,
+        actorUserId: context.actorUserId,
+        actorType: AUDIT_ACTOR_TYPES.TENANT_USER,
+        action: 'payments.created',
+        entityType: 'payment',
+        entityId: payment.id,
+        branchId: updatedInvoice.branchId,
+        beforeJson: toInvoiceDetailResponse(current),
+        afterJson: response,
+        reason: 'invoice_payment_recorded',
+        client: transaction,
+      });
+
+      return response;
+    });
+  }
+
   private async transitionInvoiceWorkflow(input: {
     readonly context: ResolvedTenantContext;
     readonly invoiceId: string;
@@ -918,6 +1087,63 @@ function assertInvoicePaymentsRefundedBeforeVoid(invoice: InvoiceRecord): void {
   );
 }
 
+function assertInvoiceCanReceivePayment(invoice: InvoiceRecord): void {
+  if (
+    invoice.status === INVOICE_STATUSES.PENDING ||
+    invoice.status === INVOICE_STATUSES.PARTIALLY_PAID ||
+    invoice.status === INVOICE_STATUSES.OVERDUE
+  ) {
+    return;
+  }
+
+  throw GarageOsApiException.workflowTransitionBlocked(
+    'Invoice cannot receive payments in its current status.',
+    [
+      {
+        field: 'invoice_id',
+        code: 'invoice_status_not_collectible',
+        message: 'Draft, cancelled, voided, refunded, and paid invoices cannot receive payments.',
+      },
+    ],
+  );
+}
+
+function assertPaymentDoesNotOverpay(amount: string, remainingCollectibleBalance: string): void {
+  if (parseMoneyCents(amount) <= parseMoneyCents(remainingCollectibleBalance)) {
+    return;
+  }
+
+  throw GarageOsApiException.invoiceOverpaymentBlocked([
+    {
+      field: 'amount',
+      code: 'invoice_payment_exceeds_remaining_balance',
+      message: 'Payment amount cannot exceed invoice remaining collectible balance.',
+    },
+  ]);
+}
+
+function calculateInvoicePaymentStatus(
+  invoice: InvoiceRecord,
+  remainingCollectibleBalance: string,
+): InvoiceStatus {
+  if (parseMoneyCents(remainingCollectibleBalance) === 0n) {
+    return INVOICE_STATUSES.PAID;
+  }
+
+  if (
+    parseMoneyCents(invoice.amountPaid) > 0n ||
+    invoice.status === INVOICE_STATUSES.PARTIALLY_PAID
+  ) {
+    return INVOICE_STATUSES.PARTIALLY_PAID;
+  }
+
+  if (invoice.status === INVOICE_STATUSES.OVERDUE) {
+    return INVOICE_STATUSES.OVERDUE;
+  }
+
+  return INVOICE_STATUSES.PARTIALLY_PAID;
+}
+
 function assertSingleValue(
   values: readonly string[],
   detail: { readonly field: string; readonly code: string; readonly message: string },
@@ -1077,6 +1303,32 @@ function toInvoiceStatusEventResponse(
   };
 }
 
+function toInvoicePaymentResponse(payment: InvoicePaymentRecord): InvoicePaymentResponse {
+  return {
+    id: payment.id,
+    invoice_id: payment.invoiceId,
+    amount: payment.amount,
+    refundable_amount: payment.refundableAmount,
+    payment_date: payment.paymentDate.toISOString().slice(0, 10),
+    payment_method: payment.paymentMethod,
+    reference_number: payment.referenceNumber,
+    notes: payment.notes,
+    created_at: payment.createdAt.toISOString(),
+  };
+}
+
+function toInvoiceReceiptResponse(receipt: InvoiceReceiptRecord): InvoiceReceiptResponse {
+  return {
+    id: receipt.id,
+    invoice_id: receipt.invoiceId,
+    payment_id: receipt.paymentId,
+    receipt_number: receipt.receiptNumber,
+    amount: receipt.amount,
+    payment_method: receipt.paymentMethod,
+    issued_at: receipt.issuedAt.toISOString(),
+  };
+}
+
 function uniqueIds(ids: readonly string[]): readonly string[] {
   return [...new Set(ids.map((id) => id.trim()))];
 }
@@ -1087,6 +1339,21 @@ function subtractQuantity(left: string, right: string): string {
   const fractionalPart = difference % 1000n;
 
   return `${wholePart.toString()}.${fractionalPart.toString().padStart(3, '0')}`;
+}
+
+function addMoney(left: string, right: string): string {
+  return formatMoneyCents(parseMoneyCents(left) + parseMoneyCents(right));
+}
+
+function subtractMoney(left: string, right: string): string {
+  return formatMoneyCents(parseMoneyCents(left) - parseMoneyCents(right));
+}
+
+function formatMoneyCents(value: bigint): string {
+  const wholePart = value / 100n;
+  const fractionalPart = value % 100n;
+
+  return `${wholePart.toString()}.${fractionalPart.toString().padStart(2, '0')}`;
 }
 
 function parseQuantityThousandths(value: string): bigint {
