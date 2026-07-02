@@ -239,6 +239,7 @@ describe('calculateInvoice', () => {
         invoiceLevelDiscount: {
           type: 'fixed',
           amount: '1000.01',
+          reason: 'Invalid discount test.',
         },
       });
     } catch (error) {
