@@ -225,7 +225,7 @@
 - [x] Add database-backed purchase receiving integration/concurrency tests
 - [x] Verify supplier lifecycle backend/API coverage
 - [x] Implement purchase order draft/create/update workflow
-- [ ] Implement purchase order order/cancel/close workflow actions
+- [x] Implement purchase order order/cancel/close workflow actions
 - [ ] Implement purchase receiving UI workflow
 - [ ] Implement supplier payment workflow
 - [ ] Implement supplier credit workflow

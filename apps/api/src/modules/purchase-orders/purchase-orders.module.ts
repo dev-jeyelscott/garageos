@@ -10,6 +10,7 @@ import { ProductsModule } from '../products/products.module';
 import { SuppliersModule } from '../suppliers/suppliers.module';
 import { PurchaseOrdersController } from './api/purchase-orders.controller';
 import { PurchaseOrderDraftService } from './application/purchase-order-draft.service';
+import { PurchaseOrderLifecycleService } from './application/purchase-order-lifecycle.service';
 import { ReceivePurchaseOrderService } from './application/receive-purchase-order.service';
 import { PURCHASE_ORDER_PROVIDERS } from './purchase-order.providers';
 
@@ -25,7 +26,17 @@ import { PURCHASE_ORDER_PROVIDERS } from './purchase-order.providers';
     SuppliersModule,
   ],
   controllers: [PurchaseOrdersController],
-  providers: [PurchaseOrderDraftService, ReceivePurchaseOrderService, ...PURCHASE_ORDER_PROVIDERS],
-  exports: [PurchaseOrderDraftService, ReceivePurchaseOrderService, ...PURCHASE_ORDER_PROVIDERS],
+  providers: [
+    PurchaseOrderDraftService,
+    PurchaseOrderLifecycleService,
+    ReceivePurchaseOrderService,
+    ...PURCHASE_ORDER_PROVIDERS,
+  ],
+  exports: [
+    PurchaseOrderDraftService,
+    PurchaseOrderLifecycleService,
+    ReceivePurchaseOrderService,
+    ...PURCHASE_ORDER_PROVIDERS,
+  ],
 })
 export class PurchaseOrdersModule {}

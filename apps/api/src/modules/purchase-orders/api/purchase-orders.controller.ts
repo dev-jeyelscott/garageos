@@ -13,6 +13,11 @@ import {
   type UpdatePurchaseOrderRequest,
 } from './purchase-order-draft.schemas';
 import { PurchaseOrderDraftService } from '../application/purchase-order-draft.service';
+import { PurchaseOrderLifecycleService } from '../application/purchase-order-lifecycle.service';
+import {
+  cancelPurchaseOrderRequestSchema,
+  type CancelPurchaseOrderRequest,
+} from './purchase-order-lifecycle.schemas';
 import { ReceivePurchaseOrderService } from '../application/receive-purchase-order.service';
 import {
   receivePurchaseOrderRequestSchema,
@@ -27,6 +32,7 @@ export class PurchaseOrdersController {
     private readonly receivePurchaseOrderService: ReceivePurchaseOrderService,
     private readonly idempotencyService: IdempotencyService,
     private readonly purchaseOrderDraftService?: PurchaseOrderDraftService,
+    private readonly purchaseOrderLifecycleService?: PurchaseOrderLifecycleService,
   ) {}
 
   @Post()
@@ -94,6 +100,172 @@ export class PurchaseOrdersController {
     );
   }
 
+  @Post(':purchase_order_id/order')
+  async orderPurchaseOrder(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Param(new ZodValidationPipe(purchaseOrderIdParamsSchema))
+    params: PurchaseOrderIdParams,
+  ): ReturnType<PurchaseOrderLifecycleService['orderPurchaseOrder']> {
+    const session = await this.authService.getAuthenticatedRouteSession(authorizationHeader);
+    const service = this.getPurchaseOrderLifecycleService();
+    const now = new Date();
+    const requestIntent = {
+      purchase_order_id: params.purchase_order_id,
+    };
+
+    const idempotency = await this.idempotencyService.begin({
+      tenantId: session.tenantContextSession.actor.tenant_id,
+      userId: session.tenantContextSession.actor.user_id,
+      endpoint: 'POST /api/v1/purchase-orders/{purchase_order_id}/order',
+      idempotencyKey,
+      requestIntent,
+      now,
+      expiresAt: service.getIdempotencyExpiresAt(now),
+    });
+
+    if (idempotency.type === 'replayed') {
+      return idempotency.responseBodyJson as Awaited<
+        ReturnType<PurchaseOrderLifecycleService['orderPurchaseOrder']>
+      >;
+    }
+
+    try {
+      const response = await service.orderPurchaseOrder(
+        params.purchase_order_id,
+        session.tenantContextSession,
+      );
+
+      await this.idempotencyService.completeSucceeded({
+        id: idempotency.record.id,
+        responseStatusCode: 200,
+        responseBodyJson: response,
+        now: new Date(),
+      });
+
+      return response;
+    } catch (error) {
+      await this.idempotencyService.completeFailed({
+        id: idempotency.record.id,
+        now: new Date(),
+      });
+
+      throw error;
+    }
+  }
+
+  @Post(':purchase_order_id/cancel')
+  async cancelPurchaseOrder(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Param(new ZodValidationPipe(purchaseOrderIdParamsSchema))
+    params: PurchaseOrderIdParams,
+    @Body(new ZodValidationPipe(cancelPurchaseOrderRequestSchema))
+    request: CancelPurchaseOrderRequest,
+  ): ReturnType<PurchaseOrderLifecycleService['cancelPurchaseOrder']> {
+    const session = await this.authService.getAuthenticatedRouteSession(authorizationHeader);
+    const service = this.getPurchaseOrderLifecycleService();
+    const now = new Date();
+    const requestIntent = {
+      purchase_order_id: params.purchase_order_id,
+      ...request,
+    };
+
+    const idempotency = await this.idempotencyService.begin({
+      tenantId: session.tenantContextSession.actor.tenant_id,
+      userId: session.tenantContextSession.actor.user_id,
+      endpoint: 'POST /api/v1/purchase-orders/{purchase_order_id}/cancel',
+      idempotencyKey,
+      requestIntent,
+      now,
+      expiresAt: service.getIdempotencyExpiresAt(now),
+    });
+
+    if (idempotency.type === 'replayed') {
+      return idempotency.responseBodyJson as Awaited<
+        ReturnType<PurchaseOrderLifecycleService['cancelPurchaseOrder']>
+      >;
+    }
+
+    try {
+      const response = await service.cancelPurchaseOrder(
+        params.purchase_order_id,
+        request,
+        session.tenantContextSession,
+      );
+
+      await this.idempotencyService.completeSucceeded({
+        id: idempotency.record.id,
+        responseStatusCode: 200,
+        responseBodyJson: response,
+        now: new Date(),
+      });
+
+      return response;
+    } catch (error) {
+      await this.idempotencyService.completeFailed({
+        id: idempotency.record.id,
+        now: new Date(),
+      });
+
+      throw error;
+    }
+  }
+
+  @Post(':purchase_order_id/close')
+  async closePurchaseOrder(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Param(new ZodValidationPipe(purchaseOrderIdParamsSchema))
+    params: PurchaseOrderIdParams,
+  ): ReturnType<PurchaseOrderLifecycleService['closePurchaseOrder']> {
+    const session = await this.authService.getAuthenticatedRouteSession(authorizationHeader);
+    const service = this.getPurchaseOrderLifecycleService();
+    const now = new Date();
+    const requestIntent = {
+      purchase_order_id: params.purchase_order_id,
+    };
+
+    const idempotency = await this.idempotencyService.begin({
+      tenantId: session.tenantContextSession.actor.tenant_id,
+      userId: session.tenantContextSession.actor.user_id,
+      endpoint: 'POST /api/v1/purchase-orders/{purchase_order_id}/close',
+      idempotencyKey,
+      requestIntent,
+      now,
+      expiresAt: service.getIdempotencyExpiresAt(now),
+    });
+
+    if (idempotency.type === 'replayed') {
+      return idempotency.responseBodyJson as Awaited<
+        ReturnType<PurchaseOrderLifecycleService['closePurchaseOrder']>
+      >;
+    }
+
+    try {
+      const response = await service.closePurchaseOrder(
+        params.purchase_order_id,
+        session.tenantContextSession,
+      );
+
+      await this.idempotencyService.completeSucceeded({
+        id: idempotency.record.id,
+        responseStatusCode: 200,
+        responseBodyJson: response,
+        now: new Date(),
+      });
+
+      return response;
+    } catch (error) {
+      await this.idempotencyService.completeFailed({
+        id: idempotency.record.id,
+        now: new Date(),
+      });
+
+      throw error;
+    }
+  }
+
   @Post(':purchase_order_id/receivings')
   async receivePurchaseOrder(
     @Headers('authorization') authorizationHeader: string | undefined,
@@ -156,5 +328,13 @@ export class PurchaseOrdersController {
     }
 
     return this.purchaseOrderDraftService;
+  }
+
+  private getPurchaseOrderLifecycleService(): PurchaseOrderLifecycleService {
+    if (this.purchaseOrderLifecycleService === undefined) {
+      throw new Error('Purchase order lifecycle service is not configured.');
+    }
+
+    return this.purchaseOrderLifecycleService;
   }
 }
