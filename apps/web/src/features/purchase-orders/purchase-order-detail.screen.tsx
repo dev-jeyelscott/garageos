@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 
 import {
   Alert,
@@ -10,8 +10,10 @@ import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
+  Input,
   Skeleton,
   Table,
   TableBody,
@@ -24,13 +26,15 @@ import {
 import { getCurrentSession } from '../auth/queries/get-current-session.query';
 import type { AuthSessionResponseData } from '../auth/types/auth-session';
 
-import { getPurchaseOrder } from './purchase-order.api';
+import { getPurchaseOrder, receivePurchaseOrder } from './purchase-order.api';
 import type {
   PurchaseOrderDetail,
   PurchaseOrderDetailState,
   PurchaseOrderLineItem,
+  PurchaseOrderReceiveInput,
   PurchaseOrderStatus,
   PurchaseOrderSummaryField,
+  PurchasePaymentMethod,
 } from './purchase-order.types';
 import {
   canUsePurchaseWriteActions,
@@ -46,8 +50,39 @@ interface PurchaseOrderDetailScreenProps {
   readonly purchaseOrderId: string;
 }
 
+interface ReceivingLineDraft {
+  readonly lineId: string;
+  readonly receivedQuantity: string;
+  readonly receivedUnitCost: string;
+}
+
+type ReceivingFormState =
+  | { readonly status: 'idle' }
+  | { readonly status: 'submitting' }
+  | { readonly status: 'success'; readonly message: string }
+  | {
+      readonly status: 'error';
+      readonly message: string;
+      readonly detail: string | null;
+      readonly code: string | null;
+    };
+
+const purchasePaymentMethodOptions: readonly {
+  readonly value: PurchasePaymentMethod;
+  readonly label: string;
+}[] = [
+  { value: 'cash', label: 'Cash' },
+  { value: 'gcash', label: 'GCash' },
+  { value: 'maya', label: 'Maya' },
+  { value: 'bank_transfer', label: 'Bank transfer' },
+  { value: 'credit_card', label: 'Credit card' },
+  { value: 'check', label: 'Check' },
+  { value: 'other', label: 'Other' },
+];
+
 export function PurchaseOrderDetailScreen({ purchaseOrderId }: PurchaseOrderDetailScreenProps) {
   const targetPurchaseOrderId = purchaseOrderId.length > 0 ? purchaseOrderId : null;
+  const [refreshKey, setRefreshKey] = useState(0);
   const [sessionState, setSessionState] = useState<
     | { readonly status: 'loading' }
     | { readonly status: 'ready'; readonly session: AuthSessionResponseData }
@@ -92,6 +127,7 @@ export function PurchaseOrderDetailScreen({ purchaseOrderId }: PurchaseOrderDeta
 
   const session = sessionState.status === 'ready' ? sessionState.session : null;
   const canReadPurchaseOrders = hasPermission(session, 'purchases.read');
+  const canReceivePurchaseOrders = hasPermission(session, 'purchases.receive');
   const canAccessPurchaseOrders = canViewPurchaseOrders(session);
   const writeActionsAllowed = canUsePurchaseWriteActions({ session, networkStatus });
 
@@ -158,7 +194,7 @@ export function PurchaseOrderDetailScreen({ purchaseOrderId }: PurchaseOrderDeta
     return () => {
       active = false;
     };
-  }, [canAccessPurchaseOrders, networkStatus, targetPurchaseOrderId]);
+  }, [canAccessPurchaseOrders, networkStatus, refreshKey, targetPurchaseOrderId]);
 
   if (sessionState.status === 'error') {
     return (
@@ -223,6 +259,8 @@ export function PurchaseOrderDetailScreen({ purchaseOrderId }: PurchaseOrderDeta
       isOffline={networkStatus === 'offline'}
       isReadOnlyTenant={session?.access.read_only === true}
       writeActionsAllowed={writeActionsAllowed}
+      canReceivePurchaseOrders={canReceivePurchaseOrders}
+      onPurchaseOrderReceived={() => setRefreshKey((current) => current + 1)}
     />
   );
 }
@@ -274,11 +312,15 @@ function PurchaseOrderDetailView({
   isOffline,
   isReadOnlyTenant,
   writeActionsAllowed,
+  canReceivePurchaseOrders,
+  onPurchaseOrderReceived,
 }: {
   readonly purchaseOrder: PurchaseOrderDetail;
   readonly isOffline: boolean;
   readonly isReadOnlyTenant: boolean;
   readonly writeActionsAllowed: boolean;
+  readonly canReceivePurchaseOrders: boolean;
+  readonly onPurchaseOrderReceived: () => void;
 }) {
   return (
     <div className="grid gap-4">
@@ -310,7 +352,7 @@ function PurchaseOrderDetailView({
         <Alert>
           <p className="text-sm leading-6">
             Offline mode is read-only. Existing on-screen details remain viewable, but reconnect
-            before refreshing this purchase order.
+            before receiving stock or refreshing this purchase order.
           </p>
         </Alert>
       ) : null}
@@ -319,12 +361,19 @@ function PurchaseOrderDetailView({
         <Alert>
           <p className="text-sm leading-6">
             This tenant is read-only. Purchase order viewing remains available with{' '}
-            <strong>purchases.read</strong>, but purchasing writes are blocked.
+            <strong>purchases.read</strong>, but purchase receiving is blocked.
           </p>
         </Alert>
       ) : null}
 
-      <PurchaseOrderPlannedActions writeActionsAllowed={writeActionsAllowed} />
+      <PurchaseOrderWorkflowActions
+        purchaseOrder={purchaseOrder}
+        isOffline={isOffline}
+        isReadOnlyTenant={isReadOnlyTenant}
+        writeActionsAllowed={writeActionsAllowed}
+        canReceivePurchaseOrders={canReceivePurchaseOrders}
+        onPurchaseOrderReceived={onPurchaseOrderReceived}
+      />
       <PurchaseOrderSummaryCard purchaseOrder={purchaseOrder} />
       <PurchaseOrderReceivingSummary fields={purchaseOrder.receiving_status_summary} />
       <PurchaseOrderLineItems lineItems={purchaseOrder.line_items} />
@@ -332,13 +381,23 @@ function PurchaseOrderDetailView({
   );
 }
 
-function PurchaseOrderPlannedActions({
+function PurchaseOrderWorkflowActions({
+  purchaseOrder,
+  isOffline,
+  isReadOnlyTenant,
   writeActionsAllowed,
+  canReceivePurchaseOrders,
+  onPurchaseOrderReceived,
 }: {
+  readonly purchaseOrder: PurchaseOrderDetail;
+  readonly isOffline: boolean;
+  readonly isReadOnlyTenant: boolean;
   readonly writeActionsAllowed: boolean;
+  readonly canReceivePurchaseOrders: boolean;
+  readonly onPurchaseOrderReceived: () => void;
 }) {
-  const blockedTitle = writeActionsAllowed
-    ? 'This workflow action is planned for a later Milestone 8 slice.'
+  const plannedBlockedTitle = writeActionsAllowed
+    ? 'This workflow action is planned for a separate Milestone 8 UI slice.'
     : 'This workflow action is blocked by permission, read-only tenant state, offline mode, or this slice scope.';
 
   return (
@@ -346,18 +405,499 @@ function PurchaseOrderPlannedActions({
       <CardHeader>
         <CardTitle>Workflow actions</CardTitle>
         <CardDescription>
-          This slice is read-only. Edit, order, receive, cancel, and close actions are shown as
-          planned controls only.
+          This slice enables purchase receiving only. Edit, order, cancel, and close controls remain
+          disabled until their own approved UI slice.
         </CardDescription>
       </CardHeader>
-      <CardContent className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-        {['Edit', 'Order', 'Receive', 'Cancel', 'Close'].map((action) => (
-          <Button key={action} type="button" variant="secondary" disabled title={blockedTitle}>
-            {action} planned
-          </Button>
-        ))}
+      <CardContent className="grid gap-4">
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          {['Edit', 'Order', 'Cancel', 'Close'].map((action) => (
+            <Button
+              key={action}
+              type="button"
+              variant="secondary"
+              disabled
+              title={plannedBlockedTitle}
+            >
+              {action} planned
+            </Button>
+          ))}
+        </div>
+        <PurchaseOrderReceiveForm
+          purchaseOrder={purchaseOrder}
+          isOffline={isOffline}
+          isReadOnlyTenant={isReadOnlyTenant}
+          writeActionsAllowed={writeActionsAllowed}
+          canReceivePurchaseOrders={canReceivePurchaseOrders}
+          onPurchaseOrderReceived={onPurchaseOrderReceived}
+        />
       </CardContent>
     </Card>
+  );
+}
+
+function PurchaseOrderReceiveForm({
+  purchaseOrder,
+  isOffline,
+  isReadOnlyTenant,
+  writeActionsAllowed,
+  canReceivePurchaseOrders,
+  onPurchaseOrderReceived,
+}: {
+  readonly purchaseOrder: PurchaseOrderDetail;
+  readonly isOffline: boolean;
+  readonly isReadOnlyTenant: boolean;
+  readonly writeActionsAllowed: boolean;
+  readonly canReceivePurchaseOrders: boolean;
+  readonly onPurchaseOrderReceived: () => void;
+}) {
+  const [receivedAt, setReceivedAt] = useState(() => toLocalDateTimeInputValue(new Date()));
+  const [paymentMethod, setPaymentMethod] = useState<PurchasePaymentMethod>('cash');
+  const [paymentReference, setPaymentReference] = useState('');
+  const [lineDrafts, setLineDrafts] = useState<readonly ReceivingLineDraft[]>(() =>
+    buildReceivingLineDrafts(purchaseOrder.line_items),
+  );
+  const [validationErrors, setValidationErrors] = useState<Readonly<Record<string, string>>>({});
+  const [formState, setFormState] = useState<ReceivingFormState>({ status: 'idle' });
+
+  useEffect(() => {
+    setReceivedAt(toLocalDateTimeInputValue(new Date()));
+    setPaymentMethod('cash');
+    setPaymentReference('');
+    setLineDrafts(buildReceivingLineDrafts(purchaseOrder.line_items));
+    setValidationErrors({});
+    setFormState({ status: 'idle' });
+  }, [purchaseOrder.id, purchaseOrder.line_items]);
+
+  const receivableLines = purchaseOrder.line_items.filter((lineItem) => {
+    const remainingQuantity = getRemainingQuantity(lineItem);
+    return remainingQuantity !== null && remainingQuantity > 0 && !isSyntheticLineId(lineItem.id);
+  });
+  const receiveBlockedReason = getReceiveBlockedReason({
+    purchaseOrder,
+    isOffline,
+    isReadOnlyTenant,
+    writeActionsAllowed,
+    canReceivePurchaseOrders,
+    hasReceivableLines: receivableLines.length > 0,
+  });
+  const submitDisabled = receiveBlockedReason !== null || formState.status === 'submitting';
+
+  function updateLineDraft(
+    lineId: string,
+    field: 'receivedQuantity' | 'receivedUnitCost',
+    value: string,
+  ) {
+    setLineDrafts((current) =>
+      current.map((lineDraft) =>
+        lineDraft.lineId === lineId ? { ...lineDraft, [field]: value } : lineDraft,
+      ),
+    );
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const localValidation = validateReceivingForm({
+      purchaseOrder,
+      receivedAt,
+      paymentMethod,
+      paymentReference,
+      lineDrafts,
+    });
+
+    setValidationErrors(localValidation.errors);
+
+    if (localValidation.input === null) {
+      setFormState({
+        status: 'error',
+        message: localValidation.message,
+        detail: null,
+        code: 'validation_failed',
+      });
+      return;
+    }
+
+    if (receiveBlockedReason !== null) {
+      setFormState({
+        status: 'error',
+        message: receiveBlockedReason,
+        detail: null,
+        code: 'forbidden',
+      });
+      return;
+    }
+
+    setFormState({ status: 'submitting' });
+
+    try {
+      await receivePurchaseOrder({
+        purchaseOrderId: purchaseOrder.id,
+        input: localValidation.input,
+        idempotencyKey: generateIdempotencyKey('purchase-receiving'),
+      });
+
+      setFormState({
+        status: 'success',
+        message: 'Stock receiving was posted. Purchase order details are refreshing.',
+      });
+      onPurchaseOrderReceived();
+    } catch (error) {
+      setFormState({
+        status: 'error',
+        message: toSafeErrorMessage(error, 'Unable to receive stock for this purchase order.'),
+        detail: toSafeErrorDetail(error),
+        code: getApiErrorCode(error),
+      });
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Receive stock</CardTitle>
+        <CardDescription>
+          Receive ordered stock into the purchase order branch. The backend remains authoritative
+          for branch access, status transitions, FIFO layers, inventory ledger entries, AP effects,
+          and over-receiving protection.
+        </CardDescription>
+      </CardHeader>
+      <form onSubmit={handleSubmit}>
+        <CardContent className="grid gap-5">
+          {receiveBlockedReason === null ? null : (
+            <Alert>
+              <p className="text-sm leading-6">{receiveBlockedReason}</p>
+            </Alert>
+          )}
+
+          {formState.status === 'success' ? (
+            <Alert>
+              <p className="text-sm leading-6">{formState.message}</p>
+            </Alert>
+          ) : null}
+
+          {formState.status === 'error' ? (
+            <Alert variant="destructive">
+              <p className="text-sm font-bold">{formState.message}</p>
+              {formState.code === null ? null : (
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  Error code: {formState.code}
+                </p>
+              )}
+              {formState.detail === null ? null : (
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">{formState.detail}</p>
+              )}
+            </Alert>
+          ) : null}
+
+          <div className="grid gap-3 lg:grid-cols-[1fr_14rem_1fr]">
+            <label className="grid gap-2">
+              <span className="text-sm font-bold text-foreground">Received at</span>
+              <Input
+                type="datetime-local"
+                value={receivedAt}
+                onChange={(event) => setReceivedAt(event.currentTarget.value)}
+                disabled={submitDisabled}
+              />
+              {validationErrors.received_at === undefined ? null : (
+                <span className="text-sm text-destructive">{validationErrors.received_at}</span>
+              )}
+            </label>
+
+            {purchaseOrder.payment_terms === 'cash' ? (
+              <label className="grid gap-2">
+                <span className="text-sm font-bold text-foreground">Payment method</span>
+                <select
+                  value={paymentMethod}
+                  onChange={(event) =>
+                    setPaymentMethod(event.currentTarget.value as PurchasePaymentMethod)
+                  }
+                  disabled={submitDisabled}
+                  className="min-h-11 rounded-xl border border-input bg-background px-3 py-2 text-base text-foreground shadow-sm outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {purchasePaymentMethodOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                {validationErrors.payment_method === undefined ? null : (
+                  <span className="text-sm text-destructive">
+                    {validationErrors.payment_method}
+                  </span>
+                )}
+              </label>
+            ) : (
+              <DetailField label="AP effect" value="Credit purchase receiving increases AP." />
+            )}
+
+            {purchaseOrder.payment_terms === 'cash' ? (
+              <label className="grid gap-2">
+                <span className="text-sm font-bold text-foreground">Payment reference</span>
+                <Input
+                  value={paymentReference}
+                  onChange={(event) => setPaymentReference(event.currentTarget.value)}
+                  placeholder="Optional receipt or reference number"
+                  disabled={submitDisabled}
+                />
+              </label>
+            ) : (
+              <DetailField label="Payment terms" value="Credit" />
+            )}
+          </div>
+
+          <div className="grid gap-3">
+            <div>
+              <h3 className="text-sm font-black uppercase tracking-[0.14em] text-muted-foreground">
+                Receiving lines
+              </h3>
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                Enter received quantity only for lines received in this action. Quantity defaults to
+                the remaining ordered quantity, and unit cost defaults from the purchase order line.
+              </p>
+            </div>
+            <PurchaseOrderReceiveLineCards
+              lineItems={purchaseOrder.line_items}
+              lineDrafts={lineDrafts}
+              validationErrors={validationErrors}
+              disabled={submitDisabled}
+              onUpdateLineDraft={updateLineDraft}
+            />
+            <PurchaseOrderReceiveLineTable
+              lineItems={purchaseOrder.line_items}
+              lineDrafts={lineDrafts}
+              validationErrors={validationErrors}
+              disabled={submitDisabled}
+              onUpdateLineDraft={updateLineDraft}
+            />
+          </div>
+        </CardContent>
+        <CardFooter className="flex flex-col items-stretch gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm leading-6 text-muted-foreground">
+            Purchase receiving requires <strong>purchases.receive</strong> and an online,
+            write-enabled tenant session.
+          </p>
+          <Button type="submit" disabled={submitDisabled}>
+            {formState.status === 'submitting' ? 'Receiving stock...' : 'Receive stock'}
+          </Button>
+        </CardFooter>
+      </form>
+    </Card>
+  );
+}
+
+function PurchaseOrderReceiveLineCards({
+  lineItems,
+  lineDrafts,
+  validationErrors,
+  disabled,
+  onUpdateLineDraft,
+}: {
+  readonly lineItems: readonly PurchaseOrderLineItem[];
+  readonly lineDrafts: readonly ReceivingLineDraft[];
+  readonly validationErrors: Readonly<Record<string, string>>;
+  readonly disabled: boolean;
+  readonly onUpdateLineDraft: (
+    lineId: string,
+    field: 'receivedQuantity' | 'receivedUnitCost',
+    value: string,
+  ) => void;
+}) {
+  return (
+    <ul className="grid gap-3 xl:hidden">
+      {lineItems.map((lineItem, index) => {
+        const lineDraft = lineDrafts.find((candidate) => candidate.lineId === lineItem.id);
+        const remainingQuantity = getRemainingQuantity(lineItem);
+        const isLineDisabled =
+          disabled ||
+          remainingQuantity === null ||
+          remainingQuantity <= 0 ||
+          isSyntheticLineId(lineItem.id);
+
+        return (
+          <li key={lineItem.id}>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">
+                  {lineItem.product_name ?? 'Product not returned'}
+                </CardTitle>
+                <CardDescription>{lineItem.notes ?? 'No line notes returned.'}</CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-3">
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <DetailField label="Ordered" value={formatQuantity(lineItem.ordered_quantity)} />
+                  <DetailField
+                    label="Received"
+                    value={formatQuantity(lineItem.received_quantity)}
+                  />
+                  <DetailField
+                    label="Remaining"
+                    value={
+                      remainingQuantity === null ? null : formatQuantity(String(remainingQuantity))
+                    }
+                  />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="grid gap-2">
+                    <span className="text-sm font-bold text-foreground">Receive quantity</span>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.001"
+                      inputMode="decimal"
+                      value={lineDraft?.receivedQuantity ?? ''}
+                      onChange={(event) =>
+                        onUpdateLineDraft(
+                          lineItem.id,
+                          'receivedQuantity',
+                          event.currentTarget.value,
+                        )
+                      }
+                      disabled={isLineDisabled}
+                    />
+                    {validationErrors[`lines.${index}.received_quantity`] === undefined ? null : (
+                      <span className="text-sm text-destructive">
+                        {validationErrors[`lines.${index}.received_quantity`]}
+                      </span>
+                    )}
+                  </label>
+                  <label className="grid gap-2">
+                    <span className="text-sm font-bold text-foreground">Unit cost</span>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      inputMode="decimal"
+                      value={lineDraft?.receivedUnitCost ?? ''}
+                      onChange={(event) =>
+                        onUpdateLineDraft(
+                          lineItem.id,
+                          'receivedUnitCost',
+                          event.currentTarget.value,
+                        )
+                      }
+                      disabled={isLineDisabled}
+                    />
+                    {validationErrors[`lines.${index}.received_unit_cost`] === undefined ? null : (
+                      <span className="text-sm text-destructive">
+                        {validationErrors[`lines.${index}.received_unit_cost`]}
+                      </span>
+                    )}
+                  </label>
+                </div>
+              </CardContent>
+            </Card>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function PurchaseOrderReceiveLineTable({
+  lineItems,
+  lineDrafts,
+  validationErrors,
+  disabled,
+  onUpdateLineDraft,
+}: {
+  readonly lineItems: readonly PurchaseOrderLineItem[];
+  readonly lineDrafts: readonly ReceivingLineDraft[];
+  readonly validationErrors: Readonly<Record<string, string>>;
+  readonly disabled: boolean;
+  readonly onUpdateLineDraft: (
+    lineId: string,
+    field: 'receivedQuantity' | 'receivedUnitCost',
+    value: string,
+  ) => void;
+}) {
+  return (
+    <div className="hidden overflow-hidden rounded-2xl border border-border xl:block">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Product</TableHead>
+            <TableHead className="text-right">Ordered</TableHead>
+            <TableHead className="text-right">Received</TableHead>
+            <TableHead className="text-right">Remaining</TableHead>
+            <TableHead className="text-right">Receive quantity</TableHead>
+            <TableHead className="text-right">Unit cost</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {lineItems.map((lineItem, index) => {
+            const lineDraft = lineDrafts.find((candidate) => candidate.lineId === lineItem.id);
+            const remainingQuantity = getRemainingQuantity(lineItem);
+            const isLineDisabled =
+              disabled ||
+              remainingQuantity === null ||
+              remainingQuantity <= 0 ||
+              isSyntheticLineId(lineItem.id);
+
+            return (
+              <TableRow key={lineItem.id}>
+                <TableCell>{lineItem.product_name ?? '—'}</TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {formatQuantity(lineItem.ordered_quantity) ?? '—'}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {formatQuantity(lineItem.received_quantity) ?? '—'}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {remainingQuantity === null ? '—' : formatQuantity(String(remainingQuantity))}
+                </TableCell>
+                <TableCell>
+                  <label className="sr-only" htmlFor={`receive-quantity-${lineItem.id}`}>
+                    Receive quantity for {lineItem.product_name ?? lineItem.id}
+                  </label>
+                  <Input
+                    id={`receive-quantity-${lineItem.id}`}
+                    type="number"
+                    min="0"
+                    step="0.001"
+                    inputMode="decimal"
+                    value={lineDraft?.receivedQuantity ?? ''}
+                    onChange={(event) =>
+                      onUpdateLineDraft(lineItem.id, 'receivedQuantity', event.currentTarget.value)
+                    }
+                    disabled={isLineDisabled}
+                    className="text-right tabular-nums"
+                  />
+                  {validationErrors[`lines.${index}.received_quantity`] === undefined ? null : (
+                    <p className="mt-1 text-sm text-destructive">
+                      {validationErrors[`lines.${index}.received_quantity`]}
+                    </p>
+                  )}
+                </TableCell>
+                <TableCell>
+                  <label className="sr-only" htmlFor={`receive-unit-cost-${lineItem.id}`}>
+                    Unit cost for {lineItem.product_name ?? lineItem.id}
+                  </label>
+                  <Input
+                    id={`receive-unit-cost-${lineItem.id}`}
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    inputMode="decimal"
+                    value={lineDraft?.receivedUnitCost ?? ''}
+                    onChange={(event) =>
+                      onUpdateLineDraft(lineItem.id, 'receivedUnitCost', event.currentTarget.value)
+                    }
+                    disabled={isLineDisabled}
+                    className="text-right tabular-nums"
+                  />
+                  {validationErrors[`lines.${index}.received_unit_cost`] === undefined ? null : (
+                    <p className="mt-1 text-sm text-destructive">
+                      {validationErrors[`lines.${index}.received_unit_cost`]}
+                    </p>
+                  )}
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </div>
   );
 }
 
@@ -415,9 +955,7 @@ function PurchaseOrderReceivingSummary({
     <Card>
       <CardHeader>
         <CardTitle>Receiving summary</CardTitle>
-        <CardDescription>
-          Optional receiving status summary from the API. No receiving workflow is enabled here.
-        </CardDescription>
+        <CardDescription>Optional receiving status summary from the API.</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {fields.map((field) => (
@@ -547,6 +1085,229 @@ function DetailField({ label, value }: { readonly label: string; readonly value:
       <span className="break-words text-foreground">{value ?? '—'}</span>
     </div>
   );
+}
+
+function getReceiveBlockedReason({
+  purchaseOrder,
+  isOffline,
+  isReadOnlyTenant,
+  writeActionsAllowed,
+  canReceivePurchaseOrders,
+  hasReceivableLines,
+}: {
+  readonly purchaseOrder: PurchaseOrderDetail;
+  readonly isOffline: boolean;
+  readonly isReadOnlyTenant: boolean;
+  readonly writeActionsAllowed: boolean;
+  readonly canReceivePurchaseOrders: boolean;
+  readonly hasReceivableLines: boolean;
+}): string | null {
+  if (!canReceivePurchaseOrders) {
+    return 'Your tenant session does not include purchases.receive permission.';
+  }
+
+  if (isOffline) {
+    return 'Reconnect before receiving stock. Offline mode is read-only.';
+  }
+
+  if (isReadOnlyTenant) {
+    return 'This tenant is read-only. Operational purchasing writes are blocked.';
+  }
+
+  if (!writeActionsAllowed) {
+    return 'Purchase receiving is blocked by the current tenant session.';
+  }
+
+  if (purchaseOrder.status !== 'ordered' && purchaseOrder.status !== 'partially_received') {
+    return 'Only ordered or partially received purchase orders can receive stock.';
+  }
+
+  if (!hasReceivableLines) {
+    return 'There are no remaining purchase order lines available to receive.';
+  }
+
+  return null;
+}
+
+function validateReceivingForm({
+  purchaseOrder,
+  receivedAt,
+  paymentMethod,
+  paymentReference,
+  lineDrafts,
+}: {
+  readonly purchaseOrder: PurchaseOrderDetail;
+  readonly receivedAt: string;
+  readonly paymentMethod: PurchasePaymentMethod;
+  readonly paymentReference: string;
+  readonly lineDrafts: readonly ReceivingLineDraft[];
+}): {
+  readonly input: PurchaseOrderReceiveInput | null;
+  readonly errors: Readonly<Record<string, string>>;
+  readonly message: string;
+} {
+  const errors: Record<string, string> = {};
+  const receivedAtIso = toReceivedAtIso(receivedAt);
+
+  if (receivedAtIso === null) {
+    errors.received_at = 'Receiving timestamp is required.';
+  }
+
+  if (purchaseOrder.payment_terms === 'cash' && paymentMethod.length === 0) {
+    errors.payment_method = 'Payment method is required for cash purchases.';
+  }
+
+  const lines = lineDrafts
+    .map((lineDraft, index) => {
+      const lineItem = purchaseOrder.line_items.find(
+        (candidate) => candidate.id === lineDraft.lineId,
+      );
+      const receivedQuantity = parseDecimal(lineDraft.receivedQuantity);
+      const receivedUnitCost = parseDecimal(lineDraft.receivedUnitCost);
+      const remainingQuantity = lineItem === undefined ? null : getRemainingQuantity(lineItem);
+
+      if (lineItem === undefined || isSyntheticLineId(lineItem.id)) {
+        return null;
+      }
+
+      if (receivedQuantity === null || receivedQuantity === 0) {
+        return null;
+      }
+
+      if (receivedQuantity < 0) {
+        errors[`lines.${index}.received_quantity`] = 'Received quantity must be greater than zero.';
+        return null;
+      }
+
+      if (remainingQuantity === null || receivedQuantity > remainingQuantity) {
+        errors[`lines.${index}.received_quantity`] =
+          'Received quantity cannot exceed remaining ordered quantity.';
+        return null;
+      }
+
+      if (receivedUnitCost === null || receivedUnitCost < 0) {
+        errors[`lines.${index}.received_unit_cost`] = 'Received unit cost must be zero or greater.';
+        return null;
+      }
+
+      return {
+        purchase_order_line_id: lineItem.id,
+        received_quantity: formatDecimalForApi(receivedQuantity, 3),
+        received_unit_cost: formatDecimalForApi(receivedUnitCost, 2),
+      };
+    })
+    .filter((line): line is PurchaseOrderReceiveInput['lines'][number] => line !== null);
+
+  if (lines.length === 0) {
+    errors.lines = 'At least one receiving line with quantity greater than zero is required.';
+  }
+
+  if (Object.keys(errors).length > 0 || receivedAtIso === null) {
+    return {
+      input: null,
+      errors,
+      message: errors.lines ?? 'Review the receiving form before submitting.',
+    };
+  }
+
+  const input: PurchaseOrderReceiveInput = {
+    received_at: receivedAtIso,
+    lines,
+  };
+
+  if (purchaseOrder.payment_terms === 'cash') {
+    const cleanedPaymentReference = paymentReference.trim();
+
+    return {
+      input: {
+        ...input,
+        payment_method: paymentMethod,
+        ...(cleanedPaymentReference.length > 0
+          ? { payment_reference: cleanedPaymentReference }
+          : {}),
+      },
+      errors,
+      message: 'Ready to receive stock.',
+    };
+  }
+
+  return {
+    input,
+    errors,
+    message: 'Ready to receive stock.',
+  };
+}
+
+function buildReceivingLineDrafts(
+  lineItems: readonly PurchaseOrderLineItem[],
+): readonly ReceivingLineDraft[] {
+  return lineItems.map((lineItem) => {
+    const remainingQuantity = getRemainingQuantity(lineItem);
+
+    return {
+      lineId: lineItem.id,
+      receivedQuantity:
+        remainingQuantity === null || remainingQuantity <= 0
+          ? ''
+          : formatDecimalForApi(remainingQuantity, 3),
+      receivedUnitCost: lineItem.unit_cost ?? '0.00',
+    };
+  });
+}
+
+function getRemainingQuantity(lineItem: PurchaseOrderLineItem): number | null {
+  const orderedQuantity = parseDecimal(lineItem.ordered_quantity);
+  const receivedQuantity = parseDecimal(lineItem.received_quantity) ?? 0;
+
+  if (orderedQuantity === null) {
+    return null;
+  }
+
+  return Math.max(orderedQuantity - receivedQuantity, 0);
+}
+
+function isSyntheticLineId(lineId: string): boolean {
+  return lineId.startsWith('line-');
+}
+
+function parseDecimal(value: string | null): number | null {
+  if (value === null || value.trim().length === 0) {
+    return null;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatDecimalForApi(value: number, fractionDigits: number): string {
+  return value.toFixed(fractionDigits);
+}
+
+function toReceivedAtIso(value: string): string | null {
+  if (value.length === 0) {
+    return null;
+  }
+
+  const parsed = new Date(value);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return parsed.toISOString();
+}
+
+function toLocalDateTimeInputValue(value: Date): string {
+  const localDate = new Date(value.getTime() - value.getTimezoneOffset() * 60_000);
+  return localDate.toISOString().slice(0, 16);
+}
+
+function generateIdempotencyKey(prefix: string): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `${prefix}-${crypto.randomUUID()}`;
+  }
+
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 function getErrorTitle(code: string | null): string {

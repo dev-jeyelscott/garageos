@@ -1,4 +1,8 @@
-import { getAccessTokenOrRefresh, getAuthJsonEnvelope } from '../auth/actions/login.action';
+import {
+  getAccessTokenOrRefresh,
+  getAuthJsonEnvelope,
+  postAuthJson,
+} from '../auth/actions/login.action';
 import { type ApiClientError, type ApiPaginationMeta } from '../../lib/api-envelope';
 
 import { purchaseOrderListPageSize } from './purchase-order.defaults';
@@ -8,6 +12,7 @@ import type {
   PurchaseOrderListFilters,
   PurchaseOrderListItem,
   PurchaseOrderListResult,
+  PurchaseOrderReceiveInput,
   PurchaseOrderStatus,
   PurchaseOrderSummaryField,
   PurchasePaymentTerms,
@@ -75,6 +80,25 @@ export async function getPurchaseOrder(purchaseOrderId: string): Promise<Purchas
     requestId: readMetaString(envelope.meta.request_id),
     correlationId: readMetaString(envelope.meta.correlation_id),
   });
+}
+
+export async function receivePurchaseOrder({
+  purchaseOrderId,
+  input,
+  idempotencyKey,
+}: {
+  readonly purchaseOrderId: string;
+  readonly input: PurchaseOrderReceiveInput;
+  readonly idempotencyKey: string;
+}): Promise<void> {
+  await postAuthJson<unknown>(
+    `/purchase-orders/${encodeURIComponent(purchaseOrderId)}/receivings`,
+    input,
+    {
+      idempotencyKey,
+      requiresAuth: true,
+    },
+  );
 }
 
 export function normalizePurchaseOrderListPayload(

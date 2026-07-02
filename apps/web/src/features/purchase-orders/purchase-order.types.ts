@@ -12,6 +12,15 @@ export type PurchaseOrderStatusFilter = 'all' | PurchaseOrderStatus;
 
 export type PurchasePaymentTerms = 'cash' | 'credit';
 
+export type PurchasePaymentMethod =
+  | 'cash'
+  | 'gcash'
+  | 'maya'
+  | 'bank_transfer'
+  | 'credit_card'
+  | 'check'
+  | 'other';
+
 export type PurchaseOrderBranchFilter = 'all' | string;
 
 export interface PurchaseOrderListFilters {
@@ -50,6 +59,19 @@ export interface PurchaseOrderLineItem {
   readonly unit_cost: string | null;
   readonly line_total: string | null;
   readonly notes: string | null;
+}
+
+export interface PurchaseOrderReceiveLineInput {
+  readonly purchase_order_line_id: string;
+  readonly received_quantity: string;
+  readonly received_unit_cost: string;
+}
+
+export interface PurchaseOrderReceiveInput {
+  readonly received_at: string;
+  readonly payment_method?: PurchasePaymentMethod;
+  readonly payment_reference?: string;
+  readonly lines: readonly PurchaseOrderReceiveLineInput[];
 }
 
 export interface PurchaseOrderSummaryField {
