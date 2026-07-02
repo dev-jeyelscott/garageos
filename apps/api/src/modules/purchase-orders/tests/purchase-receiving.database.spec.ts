@@ -9,6 +9,9 @@ import {
   PURCHASE_ORDER_STATUSES,
   PURCHASE_PAYMENT_TERMS,
 } from '../application/purchase-order.records';
+import type { PurchaseOrderDraftService } from '../application/purchase-order-draft.service';
+import type { PurchaseOrderLifecycleService } from '../application/purchase-order-lifecycle.service';
+import type { PurchaseOrderQueryService } from '../application/purchase-order-query.service';
 import { ReceivePurchaseOrderService } from '../application/receive-purchase-order.service';
 import { PostgresPurchaseOrderRepository } from '../persistence/postgres-purchase-order.repository';
 import { AuditService } from '../../../shared/audit/audit.service';
@@ -195,8 +198,26 @@ class PurchaseReceivingDatabaseHarness {
       }),
     } as unknown as AuthService;
 
+    const purchaseOrderQueryService = {
+      listPurchaseOrders: async () => {
+        throw new Error(
+          'Purchase order query service should not be used by receiving database tests.',
+        );
+      },
+      getPurchaseOrder: async () => {
+        throw new Error(
+          'Purchase order query service should not be used by receiving database tests.',
+        );
+      },
+    } as unknown as PurchaseOrderQueryService;
+    const purchaseOrderDraftService = {} as unknown as PurchaseOrderDraftService;
+    const purchaseOrderLifecycleService = {} as unknown as PurchaseOrderLifecycleService;
+
     return new PurchaseOrdersController(
       authService,
+      purchaseOrderQueryService,
+      purchaseOrderDraftService,
+      purchaseOrderLifecycleService,
       receivePurchaseOrderService,
       idempotencyService,
     );

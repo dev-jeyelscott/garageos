@@ -1,4 +1,15 @@
-import { Body, Controller, Headers, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Inject,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 
 import { ZodValidationPipe } from '../../../shared/api/zod-validation.pipe';
 import { IdempotencyService } from '../../../shared/idempotency/idempotency.service';
@@ -12,8 +23,13 @@ import {
   updatePurchaseOrderRequestSchema,
   type UpdatePurchaseOrderRequest,
 } from './purchase-order-draft.schemas';
+import {
+  purchaseOrderListQuerySchema,
+  type PurchaseOrderListQuery,
+} from './purchase-order-query.schemas';
 import { PurchaseOrderDraftService } from '../application/purchase-order-draft.service';
 import { PurchaseOrderLifecycleService } from '../application/purchase-order-lifecycle.service';
+import { PurchaseOrderQueryService } from '../application/purchase-order-query.service';
 import {
   cancelPurchaseOrderRequestSchema,
   type CancelPurchaseOrderRequest,
@@ -28,12 +44,43 @@ import {
 @Controller('purchase-orders')
 export class PurchaseOrdersController {
   constructor(
+    @Inject(AuthService)
     private readonly authService: AuthService,
+    @Inject(PurchaseOrderQueryService)
+    private readonly purchaseOrderQueryService: PurchaseOrderQueryService,
+    @Inject(PurchaseOrderDraftService)
+    private readonly purchaseOrderDraftService: PurchaseOrderDraftService,
+    @Inject(PurchaseOrderLifecycleService)
+    private readonly purchaseOrderLifecycleService: PurchaseOrderLifecycleService,
+    @Inject(ReceivePurchaseOrderService)
     private readonly receivePurchaseOrderService: ReceivePurchaseOrderService,
+    @Inject(IdempotencyService)
     private readonly idempotencyService: IdempotencyService,
-    private readonly purchaseOrderDraftService?: PurchaseOrderDraftService,
-    private readonly purchaseOrderLifecycleService?: PurchaseOrderLifecycleService,
   ) {}
+
+  @Get()
+  async listPurchaseOrders(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Query(new ZodValidationPipe(purchaseOrderListQuerySchema)) query: PurchaseOrderListQuery,
+  ): ReturnType<PurchaseOrderQueryService['listPurchaseOrders']> {
+    const session = await this.authService.getAuthenticatedRouteSession(authorizationHeader);
+
+    return this.purchaseOrderQueryService.listPurchaseOrders(query, session.tenantContextSession);
+  }
+
+  @Get(':purchase_order_id')
+  async getPurchaseOrder(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param(new ZodValidationPipe(purchaseOrderIdParamsSchema))
+    params: PurchaseOrderIdParams,
+  ): ReturnType<PurchaseOrderQueryService['getPurchaseOrder']> {
+    const session = await this.authService.getAuthenticatedRouteSession(authorizationHeader);
+
+    return this.purchaseOrderQueryService.getPurchaseOrder(
+      params.purchase_order_id,
+      session.tenantContextSession,
+    );
+  }
 
   @Post()
   async createPurchaseOrder(
@@ -43,7 +90,6 @@ export class PurchaseOrdersController {
     request: CreatePurchaseOrderRequest,
   ): ReturnType<PurchaseOrderDraftService['createPurchaseOrder']> {
     const session = await this.authService.getAuthenticatedRouteSession(authorizationHeader);
-    const service = this.getPurchaseOrderDraftService();
     const now = new Date();
 
     const idempotency = await this.idempotencyService.begin({
@@ -53,7 +99,7 @@ export class PurchaseOrdersController {
       idempotencyKey,
       requestIntent: request,
       now,
-      expiresAt: service.getIdempotencyExpiresAt(now),
+      expiresAt: this.purchaseOrderDraftService.getIdempotencyExpiresAt(now),
     });
 
     if (idempotency.type === 'replayed') {
@@ -63,7 +109,10 @@ export class PurchaseOrdersController {
     }
 
     try {
-      const response = await service.createPurchaseOrder(request, session.tenantContextSession);
+      const response = await this.purchaseOrderDraftService.createPurchaseOrder(
+        request,
+        session.tenantContextSession,
+      );
 
       await this.idempotencyService.completeSucceeded({
         id: idempotency.record.id,
@@ -93,7 +142,7 @@ export class PurchaseOrdersController {
   ): ReturnType<PurchaseOrderDraftService['updatePurchaseOrder']> {
     const session = await this.authService.getAuthenticatedRouteSession(authorizationHeader);
 
-    return this.getPurchaseOrderDraftService().updatePurchaseOrder(
+    return this.purchaseOrderDraftService.updatePurchaseOrder(
       params.purchase_order_id,
       request,
       session.tenantContextSession,
@@ -108,7 +157,6 @@ export class PurchaseOrdersController {
     params: PurchaseOrderIdParams,
   ): ReturnType<PurchaseOrderLifecycleService['orderPurchaseOrder']> {
     const session = await this.authService.getAuthenticatedRouteSession(authorizationHeader);
-    const service = this.getPurchaseOrderLifecycleService();
     const now = new Date();
     const requestIntent = {
       purchase_order_id: params.purchase_order_id,
@@ -121,7 +169,7 @@ export class PurchaseOrdersController {
       idempotencyKey,
       requestIntent,
       now,
-      expiresAt: service.getIdempotencyExpiresAt(now),
+      expiresAt: this.purchaseOrderLifecycleService.getIdempotencyExpiresAt(now),
     });
 
     if (idempotency.type === 'replayed') {
@@ -131,7 +179,7 @@ export class PurchaseOrdersController {
     }
 
     try {
-      const response = await service.orderPurchaseOrder(
+      const response = await this.purchaseOrderLifecycleService.orderPurchaseOrder(
         params.purchase_order_id,
         session.tenantContextSession,
       );
@@ -164,7 +212,6 @@ export class PurchaseOrdersController {
     request: CancelPurchaseOrderRequest,
   ): ReturnType<PurchaseOrderLifecycleService['cancelPurchaseOrder']> {
     const session = await this.authService.getAuthenticatedRouteSession(authorizationHeader);
-    const service = this.getPurchaseOrderLifecycleService();
     const now = new Date();
     const requestIntent = {
       purchase_order_id: params.purchase_order_id,
@@ -178,7 +225,7 @@ export class PurchaseOrdersController {
       idempotencyKey,
       requestIntent,
       now,
-      expiresAt: service.getIdempotencyExpiresAt(now),
+      expiresAt: this.purchaseOrderLifecycleService.getIdempotencyExpiresAt(now),
     });
 
     if (idempotency.type === 'replayed') {
@@ -188,7 +235,7 @@ export class PurchaseOrdersController {
     }
 
     try {
-      const response = await service.cancelPurchaseOrder(
+      const response = await this.purchaseOrderLifecycleService.cancelPurchaseOrder(
         params.purchase_order_id,
         request,
         session.tenantContextSession,
@@ -220,7 +267,6 @@ export class PurchaseOrdersController {
     params: PurchaseOrderIdParams,
   ): ReturnType<PurchaseOrderLifecycleService['closePurchaseOrder']> {
     const session = await this.authService.getAuthenticatedRouteSession(authorizationHeader);
-    const service = this.getPurchaseOrderLifecycleService();
     const now = new Date();
     const requestIntent = {
       purchase_order_id: params.purchase_order_id,
@@ -233,7 +279,7 @@ export class PurchaseOrdersController {
       idempotencyKey,
       requestIntent,
       now,
-      expiresAt: service.getIdempotencyExpiresAt(now),
+      expiresAt: this.purchaseOrderLifecycleService.getIdempotencyExpiresAt(now),
     });
 
     if (idempotency.type === 'replayed') {
@@ -243,7 +289,7 @@ export class PurchaseOrdersController {
     }
 
     try {
-      const response = await service.closePurchaseOrder(
+      const response = await this.purchaseOrderLifecycleService.closePurchaseOrder(
         params.purchase_order_id,
         session.tenantContextSession,
       );
@@ -320,21 +366,5 @@ export class PurchaseOrdersController {
 
       throw error;
     }
-  }
-
-  private getPurchaseOrderDraftService(): PurchaseOrderDraftService {
-    if (this.purchaseOrderDraftService === undefined) {
-      throw new Error('Purchase order draft service is not configured.');
-    }
-
-    return this.purchaseOrderDraftService;
-  }
-
-  private getPurchaseOrderLifecycleService(): PurchaseOrderLifecycleService {
-    if (this.purchaseOrderLifecycleService === undefined) {
-      throw new Error('Purchase order lifecycle service is not configured.');
-    }
-
-    return this.purchaseOrderLifecycleService;
   }
 }

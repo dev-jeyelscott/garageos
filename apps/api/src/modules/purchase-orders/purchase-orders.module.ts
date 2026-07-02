@@ -11,6 +11,7 @@ import { SuppliersModule } from '../suppliers/suppliers.module';
 import { PurchaseOrdersController } from './api/purchase-orders.controller';
 import { PurchaseOrderDraftService } from './application/purchase-order-draft.service';
 import { PurchaseOrderLifecycleService } from './application/purchase-order-lifecycle.service';
+import { PurchaseOrderQueryService } from './application/purchase-order-query.service';
 import { ReceivePurchaseOrderService } from './application/receive-purchase-order.service';
 import { PURCHASE_ORDER_PROVIDERS } from './purchase-order.providers';
 
@@ -29,12 +30,14 @@ import { PURCHASE_ORDER_PROVIDERS } from './purchase-order.providers';
   providers: [
     PurchaseOrderDraftService,
     PurchaseOrderLifecycleService,
+    PurchaseOrderQueryService,
     ReceivePurchaseOrderService,
     ...PURCHASE_ORDER_PROVIDERS,
   ],
   exports: [
     PurchaseOrderDraftService,
     PurchaseOrderLifecycleService,
+    PurchaseOrderQueryService,
     ReceivePurchaseOrderService,
     ...PURCHASE_ORDER_PROVIDERS,
   ],

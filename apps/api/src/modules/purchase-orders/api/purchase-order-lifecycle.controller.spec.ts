@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { IdempotencyService } from '../../../shared/idempotency/idempotency.service';
 import type { AuthService } from '../../auth/application/auth.service';
@@ -9,12 +9,18 @@ import type {
 import type { PurchaseOrderLifecycleService } from '../application/purchase-order-lifecycle.service';
 import type { ReceivePurchaseOrderService } from '../application/receive-purchase-order.service';
 import { PurchaseOrdersController } from './purchase-orders.controller';
+import type { PurchaseOrderQueryService } from '../application/purchase-order-query.service';
 
 const TENANT_ID = '11111111-1111-4111-8111-111111111111';
 const USER_ID = '22222222-2222-4222-8222-222222222222';
 const PURCHASE_ORDER_ID = '55555555-5555-4555-8555-555555555555';
 const BRANCH_ID = '33333333-3333-4333-8333-333333333333';
 const SUPPLIER_ID = '44444444-4444-4444-8444-444444444444';
+
+const purchaseOrderQueryService = {
+  listPurchaseOrders: vi.fn(),
+  getPurchaseOrder: vi.fn(),
+} as unknown as PurchaseOrderQueryService;
 
 function buildSession() {
   return {
@@ -171,17 +177,20 @@ function buildController(options: {
   const authService = {
     getAuthenticatedRouteSession: async () => buildSession(),
   } as unknown as AuthService;
+
   const receivePurchaseOrderService = {
     getIdempotencyExpiresAt: getExpiresAt,
   } as unknown as ReceivePurchaseOrderService;
+
   const purchaseOrderDraftService = {} as unknown as PurchaseOrderDraftService;
 
   return new PurchaseOrdersController(
     authService,
-    receivePurchaseOrderService,
-    options.idempotencyService,
+    purchaseOrderQueryService,
     purchaseOrderDraftService,
     options.lifecycleService,
+    receivePurchaseOrderService,
+    options.idempotencyService,
   );
 }
 

@@ -384,7 +384,10 @@ export class PostgresAccountsPayableRepository extends AccountsPayableStore {
           on ct.branch_id = source.branch_id
          and ct.supplier_id = source.supplier_id
         where ($2::uuid is null or s.id = $2::uuid)
-          and ${input.includeZero ? 'true' : `(coalesce(pt.credit_purchase_received_total, 0) - coalesce(ct.supplier_credit_total, 0)) <> 0`}
+          and (
+            $3::boolean = true
+            or (coalesce(pt.credit_purchase_received_total, 0) - coalesce(ct.supplier_credit_total, 0)) <> 0
+          )
           ${sourceBranchPredicate}
         order by last_activity_at desc, b.id desc, s.id desc
       `,

@@ -73,8 +73,8 @@ const SUPPLIER_COLUMNS = `
   lock_version,
   created_at,
   updated_at,
-  deactivated_at,
-  reactivated_at
+  null::timestamptz as deactivated_at,
+  null::timestamptz as reactivated_at
 `;
 
 @Injectable()
@@ -288,10 +288,6 @@ export class PostgresSupplierRepository extends SupplierStore {
     input: ChangeSupplierStatusInput,
     client: DatabaseQueryClient,
   ): Promise<SupplierRecord | null> {
-    const timestampColumn =
-      input.toStatus === 'active'
-        ? 'reactivated_at = $7, deactivated_at = null'
-        : 'deactivated_at = $7';
     const lockPredicate = input.expectedLockVersion === null ? '' : 'and lock_version = $6';
     const result = await client.query<SupplierRow>(
       `
@@ -299,7 +295,6 @@ export class PostgresSupplierRepository extends SupplierStore {
         set
           status = $4,
           updated_by_user_id = $5,
-          ${timestampColumn},
           updated_at = $7,
           lock_version = lock_version + 1
         where tenant_id = $1

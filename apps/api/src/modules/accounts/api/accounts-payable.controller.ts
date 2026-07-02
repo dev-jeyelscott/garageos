@@ -1,4 +1,4 @@
-import { Controller, Get, Headers, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Headers, Inject, Query, UseGuards } from '@nestjs/common';
 
 import { ZodValidationPipe } from '../../../shared/api/zod-validation.pipe';
 import { AccessTokenAuthGuard } from '../../auth/api/access-token-auth.guard';
@@ -15,7 +15,9 @@ import {
 @Controller('accounts')
 export class AccountsPayableController {
   constructor(
+    @Inject(AuthService)
     private readonly authService: AuthService,
+    @Inject(AccountsPayableService)
     private readonly accountsPayableService: AccountsPayableService,
   ) {}
 

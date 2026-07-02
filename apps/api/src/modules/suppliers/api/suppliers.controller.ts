@@ -4,6 +4,7 @@ import {
   Get,
   Headers,
   HttpCode,
+  Inject,
   Param,
   Patch,
   Post,
@@ -33,8 +34,11 @@ import {
 @Controller('suppliers')
 export class SuppliersController {
   constructor(
+    @Inject(AuthService)
     private readonly authService: AuthService,
+    @Inject(SupplierService)
     private readonly supplierService: SupplierService,
+    @Inject(IdempotencyService)
     private readonly idempotencyService: IdempotencyService,
   ) {}
 

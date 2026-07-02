@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { GarageOsApiException } from '../../../shared/api/api-exception';
 import type { IdempotencyService } from '../../../shared/idempotency/idempotency.service';
@@ -7,6 +7,8 @@ import type {
   PurchaseOrderDraftService,
   PurchaseOrderMutationResponse,
 } from '../application/purchase-order-draft.service';
+import type { PurchaseOrderLifecycleService } from '../application/purchase-order-lifecycle.service';
+import type { PurchaseOrderQueryService } from '../application/purchase-order-query.service';
 import type {
   PurchaseReceivingResponse,
   ReceivePurchaseOrderService,
@@ -20,6 +22,15 @@ const BRANCH_ID = '33333333-3333-4333-8333-333333333333';
 const SUPPLIER_ID = '44444444-4444-4444-8444-444444444444';
 const PRODUCT_ID = '77777777-7777-4777-8777-777777777777';
 const LINE_ID = '66666666-6666-4666-8666-666666666666';
+
+const purchaseOrderQueryService = {
+  listPurchaseOrders: vi.fn(),
+  getPurchaseOrder: vi.fn(),
+} as unknown as PurchaseOrderQueryService;
+
+const purchaseOrderLifecycleService = {
+  getIdempotencyExpiresAt: getExpiresAt,
+} as unknown as PurchaseOrderLifecycleService;
 
 function buildSession() {
   return {
@@ -92,7 +103,7 @@ describe('PurchaseOrdersController', () => {
 
     const receivePurchaseOrderService = buildReceivePurchaseOrderService();
     const purchaseOrderDraftService = {
-      getIdempotencyExpiresAt: (now: Date) => new Date(now.getTime() + 24 * 60 * 60 * 1000),
+      getIdempotencyExpiresAt: getExpiresAt,
       createPurchaseOrder: async () => {
         calls.push('create');
 
@@ -117,9 +128,11 @@ describe('PurchaseOrdersController', () => {
 
     const controller = new PurchaseOrdersController(
       authService,
+      purchaseOrderQueryService,
+      purchaseOrderDraftService,
+      purchaseOrderLifecycleService,
       receivePurchaseOrderService,
       idempotencyService,
-      purchaseOrderDraftService,
     );
 
     await expect(
@@ -165,9 +178,11 @@ describe('PurchaseOrdersController', () => {
 
     const controller = new PurchaseOrdersController(
       authService,
+      purchaseOrderQueryService,
+      purchaseOrderDraftService,
+      purchaseOrderLifecycleService,
       buildReceivePurchaseOrderService(),
       idempotencyService,
-      purchaseOrderDraftService,
     );
 
     await expect(
@@ -203,7 +218,7 @@ describe('PurchaseOrdersController', () => {
     } as unknown as AuthService;
 
     const receivePurchaseOrderService = {
-      getIdempotencyExpiresAt: (now: Date) => new Date(now.getTime() + 24 * 60 * 60 * 1000),
+      getIdempotencyExpiresAt: getExpiresAt,
       receive: async () => {
         calls.push('receive');
 
@@ -228,6 +243,9 @@ describe('PurchaseOrdersController', () => {
 
     const controller = new PurchaseOrdersController(
       authService,
+      purchaseOrderQueryService,
+      {} as unknown as PurchaseOrderDraftService,
+      purchaseOrderLifecycleService,
       receivePurchaseOrderService,
       idempotencyService,
     );
@@ -258,7 +276,7 @@ describe('PurchaseOrdersController', () => {
     } as unknown as AuthService;
 
     const receivePurchaseOrderService = {
-      getIdempotencyExpiresAt: (now: Date) => new Date(now.getTime() + 24 * 60 * 60 * 1000),
+      getIdempotencyExpiresAt: getExpiresAt,
       receive: async () => {
         throw new Error('receive should not run for replayed idempotency responses.');
       },
@@ -277,6 +295,9 @@ describe('PurchaseOrdersController', () => {
 
     const controller = new PurchaseOrdersController(
       authService,
+      purchaseOrderQueryService,
+      {} as unknown as PurchaseOrderDraftService,
+      purchaseOrderLifecycleService,
       receivePurchaseOrderService,
       idempotencyService,
     );
@@ -307,7 +328,7 @@ describe('PurchaseOrdersController', () => {
     } as unknown as AuthService;
 
     const receivePurchaseOrderService = {
-      getIdempotencyExpiresAt: (now: Date) => new Date(now.getTime() + 24 * 60 * 60 * 1000),
+      getIdempotencyExpiresAt: getExpiresAt,
       receive: async () => {
         calls.push('receive');
 
@@ -323,6 +344,9 @@ describe('PurchaseOrdersController', () => {
 
     const controller = new PurchaseOrdersController(
       authService,
+      purchaseOrderQueryService,
+      {} as unknown as PurchaseOrderDraftService,
+      purchaseOrderLifecycleService,
       receivePurchaseOrderService,
       idempotencyService,
     );
@@ -352,7 +376,11 @@ describe('PurchaseOrdersController', () => {
 
 function buildReceivePurchaseOrderService(): ReceivePurchaseOrderService {
   return {
-    getIdempotencyExpiresAt: (now: Date) => new Date(now.getTime() + 24 * 60 * 60 * 1000),
+    getIdempotencyExpiresAt: getExpiresAt,
     receive: async () => receivingResponse,
   } as unknown as ReceivePurchaseOrderService;
+}
+
+function getExpiresAt(now: Date): Date {
+  return new Date(now.getTime() + 24 * 60 * 60 * 1000);
 }
