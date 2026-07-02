@@ -23,6 +23,12 @@ import {
 } from '../../../shared/tenant-context/tenant-context';
 import type { CreateDraftInvoiceRequest, ListInvoicesQuery } from '../api/invoice.schemas';
 import {
+  calculateInvoice,
+  InvoiceCalculationError,
+  type CalculateInvoiceInput,
+  type InvoiceLevelDiscountInput,
+} from '../domain/invoice-calculation.service';
+import {
   BILLING_ALLOCATION_STATUSES,
   type InvoiceLineType,
   type InvoiceRecord,
@@ -32,8 +38,10 @@ import {
 import {
   InvoiceStore,
   type BillingAllocationTotalRecord,
+  type CreateInvoiceLineInput,
   type InvoiceDraftJobOrderLineRecord,
   type InvoiceDraftJobOrderRecord,
+  type InvoiceSettingsRecord,
 } from './invoice.store';
 
 const IDEMPOTENCY_RETENTION_HOURS = 24;
@@ -332,24 +340,28 @@ export class InvoicesService {
         latestInvoiceNumber,
       );
       const invoiceId = randomUUID();
-      const invoiceLines = lines.map((line, index) => {
-        const allocationTotal = allocationTotalsByLineId.get(line.id);
-        const remainingQuantity = subtractQuantity(
-          line.quantity,
-          allocationTotal?.allocatedQuantity ?? '0.000',
-        );
-
-        return buildInvoiceLineInput(
-          line,
-          remainingQuantity,
-          index,
-          invoiceSettings.vatRate,
-          invoiceSettings.taxMode,
-        );
+      const calculation = calculateDraftInvoice({
+        lines,
+        allocationTotalsByLineId,
+        invoiceSettings,
+        invoiceLevelDiscount: request.invoice_level_discount ?? null,
       });
-      const subtotalAmount = sumMoneyStrings(invoiceLines.map((line) => line.taxableBaseAmount));
-      const taxAmount = sumMoneyStrings(invoiceLines.map((line) => line.taxAmount));
-      const totalAmount = sumMoneyStrings(invoiceLines.map((line) => line.lineTotal));
+      const invoiceLines: CreateInvoiceLineInput[] = calculation.lines.map((line) => ({
+        id: randomUUID(),
+        originatingJobOrderLineId: line.originatingJobOrderLineId,
+        lineType: line.lineType,
+        productId: line.productId,
+        serviceId: line.serviceId,
+        description: line.description,
+        quantity: line.quantity,
+        unitPrice: line.unitPrice,
+        lineDiscountAmount: line.lineDiscountAmount,
+        allocatedInvoiceDiscountAmount: line.allocatedInvoiceDiscountAmount,
+        taxableBaseAmount: line.taxableBaseAmount,
+        taxAmount: line.taxAmount,
+        lineTotal: line.lineTotal,
+        lineOrder: line.lineOrder,
+      }));
 
       const invoice = await this.invoiceStore.createDraftInvoice(
         {
@@ -363,12 +375,12 @@ export class InvoicesService {
           taxProfile: invoiceSettings.taxProfile,
           taxMode: invoiceSettings.taxMode,
           vatRate: invoiceSettings.vatRate,
-          subtotalAmount,
-          discountAmount: '0.00',
-          taxAmount,
-          totalAmount,
-          remainingCollectibleBalance: totalAmount,
-          discountReason: null,
+          subtotalAmount: calculation.totals.subtotalAmount,
+          discountAmount: calculation.totals.discountAmount,
+          taxAmount: calculation.totals.taxAmount,
+          totalAmount: calculation.totals.totalAmount,
+          remainingCollectibleBalance: calculation.totals.remainingCollectibleBalance,
+          discountReason: calculation.totals.discountReason,
           createdByUserId: context.actorUserId,
           createdAt,
         },
@@ -610,51 +622,81 @@ function assertSingleValue(
   throw GarageOsApiException.validationFailed([detail]);
 }
 
-function buildInvoiceLineInput(
-  line: InvoiceDraftJobOrderLineRecord,
-  remainingQuantity: string,
-  lineOrder: number,
-  vatRate: string,
-  taxMode: InvoiceRecord['taxMode'],
-) {
-  const netAmount = multiplyMoneyByQuantity(line.unitPrice, remainingQuantity);
-  const taxAmount = taxMode === 'no_tax' ? '0.00' : calculateTaxAmount(netAmount, vatRate, taxMode);
-  const lineTotal =
-    taxMode === 'tax_inclusive' ? netAmount : sumMoneyStrings([netAmount, taxAmount]);
-
-  return {
-    id: randomUUID(),
-    originatingJobOrderLineId: line.id,
-    lineType: line.lineType,
-    productId: line.productId,
-    serviceId: line.serviceId,
-    description: line.description,
-    quantity: remainingQuantity,
-    unitPrice: line.unitPrice,
-    lineDiscountAmount: '0.00',
-    allocatedInvoiceDiscountAmount: '0.00',
-    taxableBaseAmount:
-      taxMode === 'tax_inclusive' ? subtractMoney(lineTotal, taxAmount) : netAmount,
-    taxAmount,
-    lineTotal,
-    lineOrder,
-  };
-}
-
-function calculateTaxAmount(
-  amount: string,
-  vatRate: string,
-  taxMode: InvoiceRecord['taxMode'],
-): string {
-  const amountCents = parseMoneyCents(amount);
-  const vatBasisPoints = BigInt(Math.round(Number(vatRate) * 10000));
-
-  if (taxMode === 'tax_inclusive') {
-    const divisor = 10000n + vatBasisPoints;
-    return formatMoneyCents((amountCents * vatBasisPoints + divisor / 2n) / divisor);
+function normalizeInvoiceLevelDiscount(
+  discount: CreateDraftInvoiceRequest['invoice_level_discount'] | null | undefined,
+): InvoiceLevelDiscountInput | null {
+  if (discount == null) {
+    return null;
   }
 
-  return formatMoneyCents((amountCents * vatBasisPoints + 5000n) / 10000n);
+  if (discount.type === 'fixed') {
+    return discount.reason === undefined
+      ? {
+          type: 'fixed',
+          amount: discount.amount,
+        }
+      : {
+          type: 'fixed',
+          amount: discount.amount,
+          reason: discount.reason,
+        };
+  }
+
+  return discount.reason === undefined
+    ? {
+        type: 'percentage',
+        percentage: discount.percentage,
+      }
+    : {
+        type: 'percentage',
+        percentage: discount.percentage,
+        reason: discount.reason,
+      };
+}
+
+function calculateDraftInvoice(input: {
+  readonly lines: readonly InvoiceDraftJobOrderLineRecord[];
+  readonly allocationTotalsByLineId: ReadonlyMap<string, BillingAllocationTotalRecord>;
+  readonly invoiceSettings: InvoiceSettingsRecord;
+  readonly invoiceLevelDiscount: CreateDraftInvoiceRequest['invoice_level_discount'] | null;
+}): ReturnType<typeof calculateInvoice> {
+  const calculationInput: CalculateInvoiceInput = {
+    taxSettings: {
+      taxProfile: input.invoiceSettings.taxProfile,
+      taxMode: input.invoiceSettings.taxMode,
+      vatRate: input.invoiceSettings.vatRate,
+    },
+    invoiceLevelDiscount: normalizeInvoiceLevelDiscount(input.invoiceLevelDiscount),
+    lines: input.lines.map((line, index) => {
+      const allocationTotal = input.allocationTotalsByLineId.get(line.id);
+      const remainingQuantity = subtractQuantity(
+        line.quantity,
+        allocationTotal?.allocatedQuantity ?? '0.000',
+      );
+
+      return {
+        originatingJobOrderLineId: line.id,
+        lineType: line.lineType as InvoiceLineType,
+        productId: line.productId,
+        serviceId: line.serviceId,
+        description: line.description,
+        quantity: remainingQuantity,
+        unitPrice: line.unitPrice,
+        lineDiscountAmount: '0.00',
+        lineOrder: index,
+      };
+    }),
+  };
+
+  try {
+    return calculateInvoice(calculationInput);
+  } catch (error) {
+    if (error instanceof InvoiceCalculationError) {
+      throw GarageOsApiException.validationFailed([...error.details]);
+    }
+
+    throw error;
+  }
 }
 
 function addDays(value: Date, days: number): Date {
@@ -730,21 +772,6 @@ function uniqueIds(ids: readonly string[]): readonly string[] {
   return [...new Set(ids.map((id) => id.trim()))];
 }
 
-function multiplyMoneyByQuantity(money: string, quantity: string): string {
-  const cents = parseMoneyCents(money);
-  const thousandths = parseQuantityThousandths(quantity);
-
-  return formatMoneyCents((cents * thousandths + 500n) / 1000n);
-}
-
-function sumMoneyStrings(values: readonly string[]): string {
-  return formatMoneyCents(values.reduce((total, value) => total + parseMoneyCents(value), 0n));
-}
-
-function subtractMoney(left: string, right: string): string {
-  return formatMoneyCents(parseMoneyCents(left) - parseMoneyCents(right));
-}
-
 function subtractQuantity(left: string, right: string): string {
   const difference = parseQuantityThousandths(left) - parseQuantityThousandths(right);
   const wholePart = difference / 1000n;
@@ -753,23 +780,9 @@ function subtractQuantity(left: string, right: string): string {
   return `${wholePart.toString()}.${fractionalPart.toString().padStart(3, '0')}`;
 }
 
-function parseMoneyCents(value: string): bigint {
-  const [wholePart = '0', fractionalPart = ''] = value.split('.');
-  const normalizedFractionalPart = fractionalPart.padEnd(2, '0').slice(0, 2);
-
-  return BigInt(wholePart) * 100n + BigInt(normalizedFractionalPart);
-}
-
 function parseQuantityThousandths(value: string): bigint {
   const [wholePart = '0', fractionalPart = ''] = value.split('.');
   const normalizedFractionalPart = fractionalPart.padEnd(3, '0').slice(0, 3);
 
   return BigInt(wholePart) * 1000n + BigInt(normalizedFractionalPart);
-}
-
-function formatMoneyCents(value: bigint): string {
-  const wholePart = value / 100n;
-  const fractionalPart = value % 100n;
-
-  return `${wholePart.toString()}.${fractionalPart.toString().padStart(2, '0')}`;
 }

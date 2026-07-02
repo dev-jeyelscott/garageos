@@ -3,6 +3,32 @@ import { z } from 'zod';
 import { INVOICE_STATUS_VALUES } from '../application/invoice.records';
 
 const uuidSchema = z.string().uuid();
+const moneyAmountSchema = z.string().regex(/^\d+(\.\d{2})$/, {
+  message: 'Money amount must use exactly 2 decimal places.',
+});
+const percentageSchema = z
+  .string()
+  .regex(/^\d+(\.\d{1,4})?$/, {
+    message: 'Percentage must use up to 4 decimal places.',
+  })
+  .refine((value) => Number(value) > 0 && Number(value) <= 100, {
+    message: 'Percentage discount must be greater than 0 and less than or equal to 100.',
+  });
+
+const invoiceLevelDiscountSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('fixed'),
+    amount: moneyAmountSchema.refine((value) => Number(value) > 0, {
+      message: 'Fixed invoice discount amount must be greater than zero.',
+    }),
+    reason: z.string().trim().min(1).max(255).optional().nullable(),
+  }),
+  z.object({
+    type: z.literal('percentage'),
+    percentage: percentageSchema,
+    reason: z.string().trim().min(1).max(255).optional().nullable(),
+  }),
+]);
 
 export const listInvoicesQuerySchema = z.object({
   branch_id: uuidSchema.optional(),
@@ -19,6 +45,7 @@ export const createDraftInvoiceRequestSchema = z
     job_order_line_ids: z.array(uuidSchema).min(1).max(250).optional(),
     invoice_date: z.coerce.date().optional(),
     due_date: z.coerce.date().optional().nullable(),
+    invoice_level_discount: invoiceLevelDiscountSchema.optional(),
   })
   .superRefine((value, context) => {
     if (

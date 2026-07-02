@@ -56,6 +56,7 @@ describe('InvoicesService', () => {
       invoice_number: 'INV-20260702-000001',
       status: 'draft',
       subtotal_amount: '1000.00',
+      discount_amount: '0.00',
       tax_amount: '120.00',
       total_amount: '1120.00',
       remaining_collectible_balance: '1120.00',
@@ -69,6 +70,141 @@ describe('InvoicesService', () => {
     expect(store.statusEvents[0]).toMatchObject({
       toStatus: 'draft',
       reason: 'invoice_draft_created',
+    });
+  });
+
+  it('persists invoice-level fixed discount allocation and recalculated totals', async () => {
+    const store = new FakeInvoiceStore();
+    const service = createService(store);
+
+    const result = await service.createDraftInvoice(
+      {
+        job_order_ids: [jobOrderId],
+        invoice_date: createdAt,
+        invoice_level_discount: {
+          type: 'fixed',
+          amount: '100.00',
+          reason: 'Loyal customer discount.',
+        },
+      },
+      createSession(),
+    );
+
+    expect(result.invoice).toMatchObject({
+      subtotal_amount: '1000.00',
+      discount_amount: '100.00',
+      tax_amount: '108.00',
+      total_amount: '1008.00',
+      remaining_collectible_balance: '1008.00',
+      discount_reason: 'Loyal customer discount.',
+    });
+    expect(result.lines[0]).toMatchObject({
+      line_discount_amount: '0.00',
+      allocated_invoice_discount_amount: '100.00',
+      taxable_base_amount: '900.00',
+      tax_amount: '108.00',
+      line_total: '1008.00',
+    });
+  });
+
+  it('persists invoice-level percentage discount allocation and recalculated totals', async () => {
+    const store = new FakeInvoiceStore();
+    const service = createService(store);
+
+    const result = await service.createDraftInvoice(
+      {
+        job_order_ids: [jobOrderId],
+        invoice_date: createdAt,
+        invoice_level_discount: {
+          type: 'percentage',
+          percentage: '10',
+          reason: 'Promo discount.',
+        },
+      },
+      createSession(),
+    );
+
+    expect(result.invoice).toMatchObject({
+      subtotal_amount: '1000.00',
+      discount_amount: '100.00',
+      tax_amount: '108.00',
+      total_amount: '1008.00',
+      remaining_collectible_balance: '1008.00',
+      discount_reason: 'Promo discount.',
+    });
+    expect(result.lines[0]).toMatchObject({
+      allocated_invoice_discount_amount: '100.00',
+      taxable_base_amount: '900.00',
+      tax_amount: '108.00',
+      line_total: '1008.00',
+    });
+  });
+
+  it('calculates draft invoice totals using tax-inclusive tenant tax settings', async () => {
+    const store = new FakeInvoiceStore();
+    store.invoiceSettings = {
+      ...store.invoiceSettings,
+      taxMode: 'tax_inclusive',
+    };
+    store.jobOrderLines = [
+      {
+        ...createDefaultJobOrderLine(),
+        unitPrice: '1120.00',
+        authorizedAmount: '1120.00',
+      },
+    ];
+    const service = createService(store);
+
+    const result = await service.createDraftInvoice(
+      {
+        job_order_ids: [jobOrderId],
+        invoice_date: createdAt,
+      },
+      createSession(),
+    );
+
+    expect(result.invoice).toMatchObject({
+      subtotal_amount: '1120.00',
+      discount_amount: '0.00',
+      tax_amount: '120.00',
+      total_amount: '1120.00',
+      remaining_collectible_balance: '1120.00',
+    });
+    expect(result.lines[0]).toMatchObject({
+      taxable_base_amount: '1000.00',
+      tax_amount: '120.00',
+      line_total: '1120.00',
+    });
+  });
+
+  it('calculates draft invoice totals using no-tax tenant settings', async () => {
+    const store = new FakeInvoiceStore();
+    store.invoiceSettings = {
+      ...store.invoiceSettings,
+      taxProfile: 'non_vat',
+      taxMode: 'no_tax',
+    };
+    const service = createService(store);
+
+    const result = await service.createDraftInvoice(
+      {
+        job_order_ids: [jobOrderId],
+        invoice_date: createdAt,
+      },
+      createSession(),
+    );
+
+    expect(result.invoice).toMatchObject({
+      subtotal_amount: '1000.00',
+      discount_amount: '0.00',
+      tax_amount: '0.00',
+      total_amount: '1000.00',
+      remaining_collectible_balance: '1000.00',
+    });
+    expect(result.lines[0]).toMatchObject({
+      taxable_base_amount: '1000.00',
+      tax_amount: '0.00',
+      line_total: '1000.00',
     });
   });
 
@@ -93,6 +229,34 @@ describe('InvoicesService', () => {
       ),
     ).rejects.toMatchObject({
       code: 'invoice_overbilling_blocked',
+    });
+
+    expect(store.createdInvoice).toBeNull();
+  });
+
+  it('blocks draft creation when invoice-level discount exceeds eligible subtotal', async () => {
+    const store = new FakeInvoiceStore();
+    const service = createService(store);
+
+    await expect(
+      service.createDraftInvoice(
+        {
+          job_order_ids: [jobOrderId],
+          invoice_date: createdAt,
+          invoice_level_discount: {
+            type: 'fixed',
+            amount: '1000.01',
+          },
+        },
+        createSession(),
+      ),
+    ).rejects.toMatchObject({
+      code: 'validation_failed',
+      details: [
+        expect.objectContaining({
+          code: 'invoice_discount_exceeds_eligible_subtotal',
+        }),
+      ],
     });
 
     expect(store.createdInvoice).toBeNull();
@@ -154,6 +318,23 @@ function createSession(): TenantContextAuthenticatedSession {
   };
 }
 
+function createDefaultJobOrderLine(): InvoiceDraftJobOrderLineRecord {
+  return {
+    id: jobOrderLineId,
+    tenantId,
+    jobOrderId,
+    lineType: 'service',
+    serviceId: '77777777-7777-4777-8777-777777777777',
+    productId: null,
+    description: 'Tune up service',
+    quantity: '1.000',
+    unitPrice: '1000.00',
+    authorizedAmount: '1000.00',
+    status: 'completed',
+    lineOrder: 0,
+  };
+}
+
 class FakeInvoiceStore extends InvoiceStore {
   allocationTotals: readonly BillingAllocationTotalRecord[] = [];
   createdInvoice: InvoiceRecord | null = null;
@@ -161,6 +342,15 @@ class FakeInvoiceStore extends InvoiceStore {
   createdJobOrderLinks: readonly InvoiceJobOrderRecord[] = [];
   createdAllocations: readonly InvoiceBillingAllocationRecord[] = [];
   createBillingAllocationsResult: readonly InvoiceBillingAllocationRecord[] | null = null;
+  invoiceSettings: InvoiceSettingsRecord = {
+    invoicePrefix: 'INV-',
+    taxProfile: 'vat_registered',
+    taxMode: 'tax_exclusive',
+    vatRate: '0.1200',
+    defaultInvoiceDueDays: 7,
+    timezone: 'Asia/Manila',
+  };
+  jobOrderLines: readonly InvoiceDraftJobOrderLineRecord[] = [createDefaultJobOrderLine()];
   statusEvents: readonly InvoiceStatusEventRecord[] = [];
 
   async isActiveShopOwner(): Promise<boolean> {
@@ -168,14 +358,7 @@ class FakeInvoiceStore extends InvoiceStore {
   }
 
   async lockInvoiceSettingsForUpdate(): Promise<InvoiceSettingsRecord> {
-    return {
-      invoicePrefix: 'INV-',
-      taxProfile: 'vat_registered',
-      taxMode: 'tax_exclusive',
-      vatRate: '0.1200',
-      defaultInvoiceDueDays: 7,
-      timezone: 'Asia/Manila',
-    };
+    return this.invoiceSettings;
   }
 
   async findDraftJobOrdersForUpdate(): Promise<readonly InvoiceDraftJobOrderRecord[]> {
@@ -191,22 +374,7 @@ class FakeInvoiceStore extends InvoiceStore {
   }
 
   async findDraftJobOrderLinesForUpdate(): Promise<readonly InvoiceDraftJobOrderLineRecord[]> {
-    return [
-      {
-        id: jobOrderLineId,
-        tenantId,
-        jobOrderId,
-        lineType: 'service',
-        serviceId: '77777777-7777-4777-8777-777777777777',
-        productId: null,
-        description: 'Tune up service',
-        quantity: '1.000',
-        unitPrice: '1000.00',
-        authorizedAmount: '1000.00',
-        status: 'completed',
-        lineOrder: 0,
-      },
-    ];
+    return this.jobOrderLines;
   }
 
   async listOpenBillingAllocationTotals(): Promise<readonly BillingAllocationTotalRecord[]> {
