@@ -12,12 +12,11 @@ import type {
 } from '../../../shared/database/database-client';
 import { PostgresDatabaseTransactionRunner } from '../../../shared/database/postgres-database-transaction-runner';
 import type { TenantContextAuthenticatedSession } from '../../../shared/tenant-context/tenant-context';
-import { PostgresInvoiceStore } from '../persistence/postgres-invoice.store';
 import { InvoicesService } from '../application/invoices.service';
+import { PostgresInvoiceStore } from '../persistence/postgres-invoice.store';
 
-const databaseUrl =
-  process.env.DATABASE_URL ??
-  'postgresql://garageos:garageos_dev_password@localhost:5432/garageos_dev';
+const DATABASE_URL = process.env.DATABASE_URL;
+const describeDatabase = DATABASE_URL === undefined ? describe.skip : describe;
 
 const tenantId = '11111111-1111-4111-8111-111111111111';
 const branchId = '22222222-2222-4222-8222-222222222222';
@@ -32,20 +31,24 @@ const invoiceDate = new Date('2026-07-02T00:00:00.000Z');
 
 type DraftInvoiceResult = Awaited<ReturnType<InvoicesService['createDraftInvoice']>>;
 
-describe('Postgres invoice billing allocation concurrency', () => {
+describeDatabase('Postgres invoice billing allocation concurrency', () => {
   let adminPool: Pool | null = null;
   let database: SchemaScopedDatabase | null = null;
   let schemaName: string | null = null;
   let service: InvoicesService | null = null;
 
   beforeAll(async () => {
+    if (DATABASE_URL === undefined) {
+      throw new Error('DATABASE_URL is required for database-backed invoice concurrency tests.');
+    }
+
     schemaName = `invoice_concurrency_${randomUUID().replace(/-/g, '_')}`;
-    adminPool = new Pool({ connectionString: databaseUrl, max: 1 });
+    adminPool = new Pool({ connectionString: DATABASE_URL, max: 1 });
 
     await adminPool.query(`create schema ${quoteIdentifier(schemaName)}`);
     await createMinimalInvoiceSchema(adminPool, schemaName);
 
-    database = new SchemaScopedDatabase(databaseUrl, schemaName);
+    database = new SchemaScopedDatabase(DATABASE_URL, schemaName);
 
     const invoiceStore = new PostgresInvoiceStore(database);
     const transactionRunner = new PostgresDatabaseTransactionRunner(database);
@@ -172,7 +175,7 @@ class SchemaScopedDatabase implements DatabaseConnectionProvider {
 
     return {
       rows: result.rows,
-      rowCount: result.rowCount,
+      rowCount: result.rowCount ?? 0,
     };
   }
 
@@ -188,7 +191,7 @@ class SchemaScopedDatabase implements DatabaseConnectionProvider {
 
         return {
           rows: result.rows,
-          rowCount: result.rowCount,
+          rowCount: result.rowCount ?? 0,
         };
       },
       release: (): void => {
