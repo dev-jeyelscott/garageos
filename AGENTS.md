@@ -12,6 +12,57 @@ Do not use this file to introduce new product behavior. If this file conflicts w
 
 ---
 
+## Token Budget and Response Control
+
+Default to the smallest useful response that still preserves correctness, safety, and source alignment.
+
+### Default Output Behavior
+
+Use compact output by default for narrow tasks, including:
+
+- Small bug fixes.
+- Type errors.
+- Failing tests with clear output.
+- UI polish.
+- Commit messages.
+- Prompt revisions.
+- Minor documentation wording updates.
+- Single-file or small multi-file corrections.
+
+For compact tasks:
+
+- Do not restate GarageOS project background.
+- Do not summarize source documents unless a conflict or risk is material to the change.
+- Do not list unaffected architecture, database, API, UI, permission, or testing areas.
+- Do not provide a next-chat handoff prompt unless the user asks for one or the step materially benefits from it.
+- Do not output full files unless the file is small, the user requested full files, or a full replacement is safer than a targeted edit.
+- Prefer root cause, changed files, minimal changes, validation commands, and commit message.
+
+Use expanded output only when the task is high risk or explicitly asks for planning, architecture, or a full handoff.
+
+### Expanded Output Triggers
+
+Use expanded documentation-first output for:
+
+- New milestones.
+- New modules.
+- Schema or migration changes.
+- API contract changes.
+- Authentication, authorization, RBAC, permissions, branch access, or tenant lifecycle changes.
+- Financial workflows.
+- Inventory, FIFO, reservations, transfers, or stock-affecting workflows.
+- Supplier returns, payments, receipts, refunds, voids, exports, tenant deletion, or audit-sensitive workflows.
+- Security-sensitive changes.
+- Architecture decisions, ADRs, or cross-cutting refactors.
+- Production-readiness reviews.
+- Any task where missing context could create unsafe or undocumented behavior.
+
+### Documentation Use
+
+Always follow the approved documentation, but read and cite only the documentation that is relevant to the current task. Do not reload or restate every source document when the change is narrow and the applicable behavior is already clear.
+
+---
+
 ## Project Snapshot
 
 GarageOS is a TypeScript `pnpm` monorepo for a mobile-first motorcycle shop management SaaS.
@@ -420,16 +471,23 @@ A feature is not production-ready only because the happy path works.
 
 ### Before Handoff
 
-State:
+Use the minimum handoff detail appropriate to the task.
+
+For compact tasks, state only:
 
 - What changed.
 - Files changed.
-- What validation ran.
-- Whether validation passed.
-- What validation was not run.
-- Any residual risks.
+- Validation run or validation not run.
+- Residual risk, if any.
 - Suggested commit message.
-- Next recommended step or next-chat handoff prompt when applicable.
+
+For expanded tasks, also include:
+
+- Documentation alignment.
+- Relevant affected areas.
+- Risks and trade-offs.
+- Next recommended step.
+- Next-chat handoff prompt only when requested or clearly useful.
 
 Never claim validation passed unless it actually ran and passed.
 
@@ -437,11 +495,56 @@ Never claim validation passed unless it actually ran and passed.
 
 ## Execution Modes
 
-Use the mode that matches the task.
+Use the mode that matches the task. Prefer compact modes unless the task is high-risk, broad, or explicitly asks for planning.
+
+### Compact Fix Mode
+
+Use for small bug fixes, type errors, failed tests, UI adjustments, prompt revisions, and narrow implementation corrections.
+
+Required sections:
+
+```md
+## Root Cause
+
+## Files Changed
+
+## Minimal Fix
+
+## Validation
+
+## Commit Message
+```
+
+Rules:
+
+- Fix only the stated issue.
+- Do not redesign unrelated areas.
+- Do not restate project background.
+- Do not include full documentation summaries unless there is a conflict or material risk.
+- Do not include a next-chat handoff prompt unless requested.
+- Use targeted copy-paste blocks or a ZIP only when requested.
+
+### Compact Status Mode
+
+Use for quick progress checks, “what changed,” “what is next,” or “is this done?” questions.
+
+Required sections:
+
+```md
+## Current Status
+
+## Done
+
+## Pending
+
+## Next Step
+```
+
+Include risks or blockers only when they exist.
 
 ### Planning Mode
 
-Use for milestones, feature specs, implementation plans, or architectural decisions.
+Use for milestones, feature specs, implementation plans, high-risk workflow planning, or architectural decisions.
 
 Required sections:
 
@@ -463,7 +566,7 @@ Required sections:
 
 ### Coding Mode
 
-Use for implementation, refactoring, test additions, or file updates.
+Use for implementation, refactoring, test additions, or file updates that are not narrow enough for Compact Fix Mode.
 
 Required sections:
 
@@ -489,11 +592,11 @@ Required sections:
 ### Risks / Notes
 
 ### Commit Message
-
-### Next-Chat Handoff Prompt
 ```
 
-For code changes, prefer copy-paste-ready instructions:
+Add `### Next-Chat Handoff Prompt` only when the user asks for it or when the implementation step is large enough that a future chat needs structured continuity.
+
+For code changes, prefer copy-paste-ready instructions unless the user asks for a ZIP or patch:
 
 ````md
 ### File: path/to/file.ts
@@ -505,14 +608,12 @@ Find this code:
 ```ts
 old code
 ```
-````
 
 Replace it with:
 
 ```ts
 new code();
 ```
-
 ````
 
 Use exact file paths and complete code blocks. Do not provide partial code that cannot compile unless the task is explicitly explanatory.
@@ -521,7 +622,7 @@ Use exact file paths and complete code blocks. Do not provide partial code that 
 
 Use when the user provides an error, failed test, failing command, screenshot, stack trace, or broken behavior.
 
-Required sections:
+For narrow failures, use Compact Fix Mode. For broad failures, use:
 
 ```md
 ## Diagnosis
@@ -537,7 +638,7 @@ Required sections:
 ## Expected Result
 
 ## Risks / Notes
-````
+```
 
 ### Review Mode
 
@@ -570,23 +671,20 @@ Classify findings as:
 
 Stop at required fixes if the implementation is not production-ready.
 
-### Status Mode
+---
 
-Use for progress checks, milestone done/pending summaries, or completion ledgers.
+## Delivery Format Defaults
 
-Required sections:
+Use the lightest delivery format that matches the request.
 
-```md
-## Current Status
+Default delivery order:
 
-## Done
+1. Minimal copy-paste blocks for small code changes.
+2. Full-file replacement only when the file is small or targeted edits would be confusing.
+3. ZIP file when the user explicitly asks for drag-and-drop delivery or updated files.
+4. Patch files only when the user explicitly asks for a patch.
 
-## Pending
-
-## Risks / Blockers
-
-## Recommended Next Step
-```
+Do not provide patch commands, patch downloads, or `git apply` instructions unless a patch is requested.
 
 ---
 
@@ -741,28 +839,30 @@ Do not commit for the user unless explicitly asked and tool access permits local
 
 ## Next-Chat Handoff Prompt Rule
 
-After a completed implementation step, provide a copy-paste next-chat handoff prompt when useful.
+Do not provide a next-chat handoff prompt by default for compact tasks.
 
-The handoff prompt should include:
+Provide a copy-paste next-chat handoff prompt only when:
 
-1. Project context.
-2. Repository URL.
-3. Current milestone.
-4. Last completed step.
-5. Current or next step.
-6. Known validation status.
-7. Known repository caveats.
-8. Files changed or likely affected.
-9. Summary of changes.
-10. Exact validation commands.
-11. Any unresolved issue or failing output.
-12. Suggested commit message.
-13. Instruction to inspect available repository context before coding.
-14. Instruction to ask for files/output if repository access is unavailable.
-15. Instruction not to redo completed work unless repository verification shows it is missing or broken.
-16. Reminder that GitHub remote writes are not allowed unless explicitly requested.
+- The user asks for one.
+- A completed implementation step is broad enough that continuity would otherwise be risky.
+- The next task depends on specific validation output, repository caveats, or affected files.
+- Work is moving between chats, agents, or tools.
 
-Keep the handoff concise but complete enough for a new chat to continue safely.
+When provided, keep the handoff concise and include only the details needed to continue safely:
+
+1. Current milestone.
+2. Last completed step.
+3. Current or next step.
+4. Known validation status.
+5. Files changed or likely affected.
+6. Summary of changes.
+7. Exact validation commands.
+8. Any unresolved issue or failing output.
+9. Suggested commit message.
+10. Instruction not to redo completed work unless repository verification shows it is missing or broken.
+11. Reminder that GitHub remote writes are not allowed unless explicitly requested.
+
+Avoid repeating full project background, full source-of-truth lists, or unrelated roadmap context.
 
 ---
 
