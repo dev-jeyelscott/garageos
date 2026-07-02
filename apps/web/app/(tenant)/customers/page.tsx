@@ -1,5 +1,5 @@
-import { TenantPlannedRouteScreen } from '../../../src/features/app-shell/components/authenticated-shell.client';
+import { CustomerManagementScreen } from '../../../src/features/customers/customer-management.screen';
 
 export default function CustomersPage() {
-  return <TenantPlannedRouteScreen route="customers" />;
+  return <CustomerManagementScreen />;
 }

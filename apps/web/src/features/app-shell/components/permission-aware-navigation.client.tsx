@@ -10,29 +10,39 @@ import type { NavigationItem } from '../types/navigation-item';
 
 export function PermissionAwareNavigation({
   permissions,
+  variant = 'responsive',
 }: {
   readonly permissions: readonly string[];
+  readonly variant?: 'responsive' | 'static';
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const pathname = usePathname();
   const visibleItems = tenantNavigationItems.filter((item) => canViewItem(item, permissions));
+  const isStatic = variant === 'static';
 
   return (
-    <nav aria-label="Tenant navigation" className="md:sticky md:top-24">
-      <div className="md:hidden">
-        <Button
-          aria-controls="tenant-mobile-navigation"
-          aria-expanded={isOpen}
-          className="w-full justify-between"
-          onClick={() => setIsOpen((current) => !current)}
-          variant="secondary"
-        >
-          Menu
-        </Button>
-      </div>
+    <nav aria-label="Tenant navigation" className={cn(!isStatic && 'md:sticky md:top-24')}>
+      {!isStatic ? (
+        <div className="md:hidden">
+          <Button
+            aria-controls="tenant-mobile-navigation"
+            aria-expanded={isOpen}
+            className="w-full justify-between"
+            onClick={() => setIsOpen((current) => !current)}
+            variant="secondary"
+          >
+            Menu
+          </Button>
+        </div>
+      ) : null}
+
       <div
         id="tenant-mobile-navigation"
-        className={cn('mt-2 grid gap-1 md:mt-0 md:grid', !isOpen && 'hidden md:grid')}
+        className={cn(
+          'grid gap-2',
+          !isStatic && 'mt-2 md:mt-0',
+          !isStatic && !isOpen && 'hidden md:grid',
+        )}
       >
         {visibleItems.map((item) => {
           const isCurrent = pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -43,7 +53,7 @@ export function PermissionAwareNavigation({
               <span
                 key={item.href}
                 aria-disabled="true"
-                className="rounded-xl px-3 py-2 text-sm font-semibold text-muted-foreground opacity-60"
+                className="flex min-h-11 cursor-not-allowed items-center rounded-2xl border border-border bg-muted px-4 text-sm font-semibold text-muted-foreground opacity-75"
               >
                 {item.label}
               </span>
@@ -55,8 +65,10 @@ export function PermissionAwareNavigation({
               key={item.href}
               aria-current={isCurrent ? 'page' : undefined}
               className={cn(
-                'rounded-xl px-3 py-2 text-sm font-semibold text-muted-foreground hover:bg-secondary hover:text-foreground',
-                isCurrent && 'bg-accent text-accent-foreground',
+                'flex min-h-11 items-center rounded-2xl border px-4 text-sm font-semibold no-underline transition',
+                isCurrent
+                  ? 'border-primary/30 bg-primary text-primary-foreground shadow-sm'
+                  : 'border-transparent text-muted-foreground hover:border-primary/20 hover:bg-accent hover:text-accent-foreground',
               )}
               href={item.href}
               onClick={() => setIsOpen(false)}
