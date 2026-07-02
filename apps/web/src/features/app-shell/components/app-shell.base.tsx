@@ -41,9 +41,6 @@ export function AppShellBase({
                   <p className="truncate text-sm font-black uppercase tracking-[0.18em] text-muted-foreground">
                     Tenant Workspace
                   </p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {session.tenant?.business_name ?? 'GarageOS tenant'}
-                  </p>
                 </div>
               </div>
 
@@ -138,9 +135,6 @@ function TenantBrandLink({ session }: { readonly session: AppShellSession }) {
             priority
             className="h-auto w-[118px] object-contain md:w-[136px]"
           />
-        </span>
-        <span className="mt-2 block max-w-48 truncate text-xs text-muted-foreground">
-          {session.tenant?.business_name ?? 'Tenant workspace'}
         </span>
       </span>
     </Link>
