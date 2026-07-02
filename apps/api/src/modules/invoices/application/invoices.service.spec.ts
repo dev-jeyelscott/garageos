@@ -246,6 +246,7 @@ describe('InvoicesService', () => {
           invoice_level_discount: {
             type: 'fixed',
             amount: '1000.01',
+            reason: 'Invalid discount test.',
           },
         },
         createSession(),

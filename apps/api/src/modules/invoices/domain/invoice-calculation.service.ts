@@ -262,10 +262,22 @@ function allocateInvoiceLevelDiscount(input: {
     allocatedCents += allocation;
   }
 
+  const reason = normalizeReason(input.discount.reason ?? null);
+
+  if (totalDiscountCents > 0n && reason === null) {
+    throw new InvoiceCalculationError([
+      {
+        field: 'invoice_level_discount.reason',
+        code: 'invoice_discount_reason_required',
+        message: 'Discount reason is required when a discount is applied.',
+      },
+    ]);
+  }
+
   return {
     allocations,
     totalDiscountCents,
-    reason: normalizeReason(input.discount.reason ?? null),
+    reason,
   };
 }
 

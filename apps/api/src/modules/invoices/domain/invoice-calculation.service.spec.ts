@@ -186,6 +186,7 @@ describe('calculateInvoice', () => {
       invoiceLevelDiscount: {
         type: 'fixed',
         amount: '0.01',
+        reason: 'Rounding test discount.',
       },
       lines: [
         {
@@ -227,6 +228,7 @@ describe('calculateInvoice', () => {
         invoiceLevelDiscount: {
           type: 'fixed',
           amount: '1000.01',
+          reason: 'Invalid discount test.',
         },
       }),
     ).toThrowError(InvoiceCalculationError);
@@ -274,6 +276,34 @@ describe('calculateInvoice', () => {
       expect(error).toBeInstanceOf(InvoiceCalculationError);
       expect((error as InvoiceCalculationError).details[0]).toMatchObject({
         code: 'invoice_line_discount_exceeds_subtotal',
+      });
+    }
+  });
+
+  it('blocks invoice-level discounts without a reason', () => {
+    expect(() =>
+      calculateInvoice({
+        ...baseInput,
+        invoiceLevelDiscount: {
+          type: 'fixed',
+          amount: '10.00',
+        },
+      }),
+    ).toThrowError(InvoiceCalculationError);
+
+    try {
+      calculateInvoice({
+        ...baseInput,
+        invoiceLevelDiscount: {
+          type: 'fixed',
+          amount: '10.00',
+        },
+      });
+    } catch (error) {
+      expect(error).toBeInstanceOf(InvoiceCalculationError);
+      expect((error as InvoiceCalculationError).details[0]).toMatchObject({
+        field: 'invoice_level_discount.reason',
+        code: 'invoice_discount_reason_required',
       });
     }
   });

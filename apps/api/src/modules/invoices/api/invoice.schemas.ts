@@ -15,18 +15,24 @@ const percentageSchema = z
     message: 'Percentage discount must be greater than 0 and less than or equal to 100.',
   });
 
+const discountReasonSchema = z
+  .string()
+  .trim()
+  .min(1, { message: 'Discount reason is required when a discount is applied.' })
+  .max(255);
+
 const invoiceLevelDiscountSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('fixed'),
     amount: moneyAmountSchema.refine((value) => Number(value) > 0, {
       message: 'Fixed invoice discount amount must be greater than zero.',
     }),
-    reason: z.string().trim().min(1).max(255).optional().nullable(),
+    reason: discountReasonSchema,
   }),
   z.object({
     type: z.literal('percentage'),
     percentage: percentageSchema,
-    reason: z.string().trim().min(1).max(255).optional().nullable(),
+    reason: discountReasonSchema,
   }),
 ]);
 
