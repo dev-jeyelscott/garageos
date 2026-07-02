@@ -1,0 +1,579 @@
+import { Inject, Injectable } from '@nestjs/common';
+
+import {
+  API_DATABASE_CLIENT,
+  type DatabaseQueryClient,
+  type DatabaseQueryResult,
+  type DatabaseRow,
+} from '../../../shared/database/database-client';
+import {
+  type CreateDraftInvoiceInput,
+  type CreateInvoiceBillingAllocationsInput,
+  type CreateInvoiceJobOrderLinksInput,
+  type CreateInvoiceLinesInput,
+  type FindInvoiceWithDetailsInput,
+  type FindLatestInvoiceNumberForDateInput,
+  type InsertInvoiceStatusEventInput,
+  InvoiceStore,
+  type ListInvoicesInput,
+  type LockInvoiceWithDetailsForUpdateInput,
+  type ReplaceDraftInvoiceLinesInput,
+} from '../application/invoice.store';
+import type {
+  InvoiceBillingAllocationRecord,
+  InvoiceJobOrderRecord,
+  InvoiceLineRecord,
+  InvoiceRecord,
+  InvoiceStatusEventRecord,
+  InvoiceWithDetailsRecord,
+} from '../application/invoice.records';
+import {
+  type InvoiceBillingAllocationRow,
+  type InvoiceJobOrderRow,
+  type InvoiceLineRow,
+  type InvoiceRow,
+  type InvoiceStatusEventRow,
+  mapInvoiceBillingAllocationRow,
+  mapInvoiceJobOrderRow,
+  mapInvoiceLineRow,
+  mapInvoiceRow,
+  mapInvoiceStatusEventRow,
+} from '../application/invoice.mappers';
+import {
+  INVOICE_BILLING_ALLOCATION_COLUMNS,
+  INVOICE_COLUMNS,
+  INVOICE_JOB_ORDER_COLUMNS,
+  INVOICE_LINE_COLUMNS,
+  INVOICE_STATUS_EVENT_COLUMNS,
+} from './postgres-invoice.sql';
+
+@Injectable()
+export class PostgresInvoiceStore extends InvoiceStore {
+  constructor(
+    @Inject(API_DATABASE_CLIENT)
+    private readonly database: DatabaseQueryClient,
+  ) {
+    super();
+  }
+
+  async createDraftInvoice(
+    input: CreateDraftInvoiceInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<InvoiceRecord> {
+    const result = await client.query<InvoiceRow>(
+      `
+        insert into invoices (
+          id,
+          tenant_id,
+          branch_id,
+          customer_id,
+          invoice_number,
+          invoice_date,
+          due_date,
+          status,
+          tax_profile,
+          tax_mode,
+          vat_rate,
+          subtotal_amount,
+          discount_amount,
+          tax_amount,
+          total_amount,
+          remaining_collectible_balance,
+          discount_reason,
+          created_by_user_id,
+          created_at,
+          updated_at
+        )
+        values (
+          $1::uuid,
+          $2::uuid,
+          $3::uuid,
+          $4::uuid,
+          $5,
+          $6::date,
+          $7::date,
+          'draft',
+          $8,
+          $9,
+          $10::numeric(5,4),
+          $11::numeric(14,2),
+          $12::numeric(14,2),
+          $13::numeric(14,2),
+          $14::numeric(14,2),
+          $15::numeric(14,2),
+          $16,
+          $17::uuid,
+          $18::timestamptz,
+          $18::timestamptz
+        )
+        returning ${INVOICE_COLUMNS}
+      `,
+      [
+        input.id,
+        input.tenantId,
+        input.branchId,
+        input.customerId,
+        input.invoiceNumber,
+        input.invoiceDate,
+        input.dueDate,
+        input.taxProfile,
+        input.taxMode,
+        input.vatRate,
+        input.subtotalAmount,
+        input.discountAmount,
+        input.taxAmount,
+        input.totalAmount,
+        input.remainingCollectibleBalance,
+        input.discountReason,
+        input.createdByUserId,
+        input.createdAt,
+      ],
+    );
+
+    return mapInvoiceRow(getRequiredRow(result, 'create draft invoice'));
+  }
+
+  async createInvoiceJobOrderLinks(
+    input: CreateInvoiceJobOrderLinksInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<readonly InvoiceJobOrderRecord[]> {
+    if (input.jobOrders.length === 0) {
+      return [];
+    }
+
+    const values: unknown[] = [];
+    const placeholders = input.jobOrders.map((jobOrder, index) => {
+      const offset = index * 5;
+      values.push(
+        jobOrder.id,
+        input.tenantId,
+        input.invoiceId,
+        jobOrder.jobOrderId,
+        jobOrder.createdAt,
+      );
+
+      return `(
+        $${offset + 1}::uuid,
+        $${offset + 2}::uuid,
+        $${offset + 3}::uuid,
+        $${offset + 4}::uuid,
+        $${offset + 5}::timestamptz
+      )`;
+    });
+
+    const result = await client.query<InvoiceJobOrderRow>(
+      `
+        insert into invoice_job_orders (
+          id,
+          tenant_id,
+          invoice_id,
+          job_order_id,
+          created_at
+        )
+        values ${placeholders.join(', ')}
+        returning ${INVOICE_JOB_ORDER_COLUMNS}
+      `,
+      values,
+    );
+
+    return result.rows.map(mapInvoiceJobOrderRow);
+  }
+
+  async createInvoiceLines(
+    input: CreateInvoiceLinesInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<readonly InvoiceLineRecord[]> {
+    if (input.lines.length === 0) {
+      return [];
+    }
+
+    const values: unknown[] = [];
+    const placeholders = input.lines.map((line, index) => {
+      const offset = index * 16;
+      values.push(
+        line.id,
+        input.tenantId,
+        input.invoiceId,
+        line.originatingJobOrderLineId,
+        line.lineType,
+        line.productId,
+        line.serviceId,
+        line.description,
+        line.quantity,
+        line.unitPrice,
+        line.lineDiscountAmount,
+        line.allocatedInvoiceDiscountAmount,
+        line.taxableBaseAmount,
+        line.taxAmount,
+        line.lineTotal,
+        line.lineOrder,
+      );
+
+      return `(
+        $${offset + 1}::uuid,
+        $${offset + 2}::uuid,
+        $${offset + 3}::uuid,
+        $${offset + 4}::uuid,
+        $${offset + 5},
+        $${offset + 6}::uuid,
+        $${offset + 7}::uuid,
+        $${offset + 8},
+        $${offset + 9}::numeric(14,3),
+        $${offset + 10}::numeric(14,2),
+        $${offset + 11}::numeric(14,2),
+        $${offset + 12}::numeric(14,2),
+        $${offset + 13}::numeric(14,2),
+        $${offset + 14}::numeric(14,2),
+        $${offset + 15}::numeric(14,2),
+        $${offset + 16}::integer
+      )`;
+    });
+
+    const result = await client.query<InvoiceLineRow>(
+      `
+        insert into invoice_lines (
+          id,
+          tenant_id,
+          invoice_id,
+          originating_job_order_line_id,
+          line_type,
+          product_id,
+          service_id,
+          description,
+          quantity,
+          unit_price,
+          line_discount_amount,
+          allocated_invoice_discount_amount,
+          taxable_base_amount,
+          tax_amount,
+          line_total,
+          line_order
+        )
+        values ${placeholders.join(', ')}
+        returning ${INVOICE_LINE_COLUMNS}
+      `,
+      values,
+    );
+
+    return result.rows.map(mapInvoiceLineRow);
+  }
+
+  async createBillingAllocations(
+    input: CreateInvoiceBillingAllocationsInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<readonly InvoiceBillingAllocationRecord[]> {
+    if (input.allocations.length === 0) {
+      return [];
+    }
+
+    const values: unknown[] = [];
+    const placeholders = input.allocations.map((allocation, index) => {
+      const offset = index * 9;
+      values.push(
+        allocation.id,
+        input.tenantId,
+        input.invoiceId,
+        allocation.invoiceLineId,
+        allocation.jobOrderLineId,
+        allocation.allocatedQuantity,
+        allocation.allocatedAmount,
+        allocation.status,
+        allocation.createdAt,
+      );
+
+      return `(
+        $${offset + 1}::uuid,
+        $${offset + 2}::uuid,
+        $${offset + 3}::uuid,
+        $${offset + 4}::uuid,
+        $${offset + 5}::uuid,
+        $${offset + 6}::numeric(14,3),
+        $${offset + 7}::numeric(14,2),
+        $${offset + 8},
+        $${offset + 9}::timestamptz,
+        $${offset + 9}::timestamptz
+      )`;
+    });
+
+    const result = await client.query<InvoiceBillingAllocationRow>(
+      `
+        insert into invoice_billing_allocations (
+          id,
+          tenant_id,
+          invoice_id,
+          invoice_line_id,
+          job_order_line_id,
+          allocated_quantity,
+          allocated_amount,
+          status,
+          created_at,
+          updated_at
+        )
+        values ${placeholders.join(', ')}
+        returning ${INVOICE_BILLING_ALLOCATION_COLUMNS}
+      `,
+      values,
+    );
+
+    return result.rows.map(mapInvoiceBillingAllocationRow);
+  }
+
+  async replaceDraftInvoiceLines(
+    input: ReplaceDraftInvoiceLinesInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<readonly InvoiceLineRecord[]> {
+    const draftResult = await client.query(
+      `
+        select 1 as value
+        from invoices
+        where tenant_id = $1::uuid
+          and id = $2::uuid
+          and status = 'draft'
+      `,
+      [input.tenantId, input.invoiceId],
+    );
+
+    if (draftResult.rows[0] === undefined) {
+      return [];
+    }
+
+    await client.query(
+      `
+        delete from invoice_billing_allocations
+        where tenant_id = $1::uuid
+          and invoice_id = $2::uuid
+      `,
+      [input.tenantId, input.invoiceId],
+    );
+
+    await client.query(
+      `
+        delete from invoice_lines
+        where tenant_id = $1::uuid
+          and invoice_id = $2::uuid
+      `,
+      [input.tenantId, input.invoiceId],
+    );
+
+    return this.createInvoiceLines(input, client);
+  }
+
+  async findInvoiceWithDetails(
+    input: FindInvoiceWithDetailsInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<InvoiceWithDetailsRecord | null> {
+    const invoice = await this.findInvoice(input, client, false);
+    if (invoice === null) {
+      return null;
+    }
+
+    return this.attachDetails(invoice, client);
+  }
+
+  async lockInvoiceWithDetailsForUpdate(
+    input: LockInvoiceWithDetailsForUpdateInput,
+    client: DatabaseQueryClient,
+  ): Promise<InvoiceWithDetailsRecord | null> {
+    const invoice = await this.findInvoice(input, client, true);
+    if (invoice === null) {
+      return null;
+    }
+
+    return this.attachDetails(invoice, client);
+  }
+
+  async insertStatusEvent(
+    input: InsertInvoiceStatusEventInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<InvoiceStatusEventRecord> {
+    const result = await client.query<InvoiceStatusEventRow>(
+      `
+        insert into invoice_status_events (
+          id,
+          tenant_id,
+          invoice_id,
+          from_status,
+          to_status,
+          reason,
+          created_by_user_id,
+          created_at
+        )
+        values (
+          $1::uuid,
+          $2::uuid,
+          $3::uuid,
+          $4,
+          $5,
+          $6,
+          $7::uuid,
+          $8::timestamptz
+        )
+        returning ${INVOICE_STATUS_EVENT_COLUMNS}
+      `,
+      [
+        input.id,
+        input.tenantId,
+        input.invoiceId,
+        input.fromStatus,
+        input.toStatus,
+        input.reason,
+        input.createdByUserId,
+        input.createdAt,
+      ],
+    );
+
+    return mapInvoiceStatusEventRow(getRequiredRow(result, 'insert invoice status event'));
+  }
+
+  async listInvoices(
+    input: ListInvoicesInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<readonly InvoiceRecord[]> {
+    const result = await client.query<InvoiceRow>(
+      `
+        select ${INVOICE_COLUMNS}
+        from invoices
+        where tenant_id = $1::uuid
+          and ($2::uuid is null or branch_id = $2::uuid)
+          and ($3::text is null or status = $3::text)
+          and ($4::uuid is null or customer_id = $4::uuid)
+          and ($5::date is null or invoice_date >= $5::date)
+          and ($6::date is null or invoice_date <= $6::date)
+        order by invoice_date desc, created_at desc, id desc
+        limit $7
+      `,
+      [
+        input.tenantId,
+        input.branchId ?? null,
+        input.status ?? null,
+        input.customerId ?? null,
+        input.fromDate ?? null,
+        input.toDate ?? null,
+        input.limit,
+      ],
+    );
+
+    return result.rows.map(mapInvoiceRow);
+  }
+
+  async findLatestInvoiceNumberForDate(
+    input: FindLatestInvoiceNumberForDateInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<string | null> {
+    const result = await client.query<{ invoice_number: string }>(
+      `
+        select invoice_number
+        from invoices
+        where tenant_id = $1::uuid
+          and invoice_number like $2
+        order by invoice_number desc
+        limit 1
+      `,
+      [input.tenantId, `${input.datePrefix}-%`],
+    );
+
+    return result.rows[0]?.invoice_number ?? null;
+  }
+
+  private async findInvoice(
+    input: FindInvoiceWithDetailsInput,
+    client: DatabaseQueryClient,
+    lock: boolean,
+  ): Promise<InvoiceRecord | null> {
+    const result = await client.query<InvoiceRow>(
+      `
+        select ${INVOICE_COLUMNS}
+        from invoices
+        where tenant_id = $1::uuid
+          and id = $2::uuid
+        ${lock ? 'for update' : ''}
+      `,
+      [input.tenantId, input.invoiceId],
+    );
+
+    const row = result.rows[0];
+    return row === undefined ? null : mapInvoiceRow(row);
+  }
+
+  private async attachDetails(
+    invoice: InvoiceRecord,
+    client: DatabaseQueryClient,
+  ): Promise<InvoiceWithDetailsRecord> {
+    return {
+      invoice,
+      jobOrders: await this.listJobOrderLinks(invoice.tenantId, invoice.id, client),
+      lines: await this.listLines(invoice.tenantId, invoice.id, client),
+      billingAllocations: await this.listBillingAllocations(invoice.tenantId, invoice.id, client),
+    };
+  }
+
+  private async listJobOrderLinks(
+    tenantId: string,
+    invoiceId: string,
+    client: DatabaseQueryClient,
+  ): Promise<readonly InvoiceJobOrderRecord[]> {
+    const result = await client.query<InvoiceJobOrderRow>(
+      `
+        select ${INVOICE_JOB_ORDER_COLUMNS}
+        from invoice_job_orders
+        where tenant_id = $1::uuid
+          and invoice_id = $2::uuid
+        order by created_at asc, id asc
+      `,
+      [tenantId, invoiceId],
+    );
+
+    return result.rows.map(mapInvoiceJobOrderRow);
+  }
+
+  private async listLines(
+    tenantId: string,
+    invoiceId: string,
+    client: DatabaseQueryClient,
+  ): Promise<readonly InvoiceLineRecord[]> {
+    const result = await client.query<InvoiceLineRow>(
+      `
+        select ${INVOICE_LINE_COLUMNS}
+        from invoice_lines
+        where tenant_id = $1::uuid
+          and invoice_id = $2::uuid
+        order by line_order asc, id asc
+      `,
+      [tenantId, invoiceId],
+    );
+
+    return result.rows.map(mapInvoiceLineRow);
+  }
+
+  private async listBillingAllocations(
+    tenantId: string,
+    invoiceId: string,
+    client: DatabaseQueryClient,
+  ): Promise<readonly InvoiceBillingAllocationRecord[]> {
+    const result = await client.query<InvoiceBillingAllocationRow>(
+      `
+        select ${INVOICE_BILLING_ALLOCATION_COLUMNS}
+        from invoice_billing_allocations
+        where tenant_id = $1::uuid
+          and invoice_id = $2::uuid
+        order by created_at asc, id asc
+      `,
+      [tenantId, invoiceId],
+    );
+
+    return result.rows.map(mapInvoiceBillingAllocationRow);
+  }
+}
+
+function getRequiredRow<Row extends DatabaseRow>(
+  result: DatabaseQueryResult<Row>,
+  operation: string,
+): Row {
+  const row = result.rows[0];
+
+  if (row === undefined) {
+    throw new Error(`Invoice store failed to ${operation}.`);
+  }
+
+  return row;
+}

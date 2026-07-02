@@ -19,6 +19,7 @@ import { AuditModule } from './shared/audit/audit.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { InventoryAdjustmentsModule } from './modules/inventory-adjustments/inventory-adjustments.module';
 import { InventoryTransfersModule } from './modules/inventory-transfers/inventory-transfers.module';
+import { InvoicesModule } from './modules/invoices/invoices.module';
 import { PurchaseOrdersModule } from './modules/purchase-orders/purchase-orders.module';
 import { SupplierReturnsModule } from './modules/supplier-returns/supplier-returns.module';
 import { SuppliersModule } from './modules/suppliers/suppliers.module';
@@ -52,6 +53,7 @@ export class HealthController {
     InventoryModule,
     InventoryAdjustmentsModule,
     InventoryTransfersModule,
+    InvoicesModule,
     PurchaseOrdersModule,
     SupplierReturnsModule,
     SuppliersModule,
