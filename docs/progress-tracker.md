@@ -242,8 +242,8 @@
 - [x] Implement invoice calculations
 - [x] Implement invoice-level discount allocation
 - [x] Implement tax calculation from tenant tax settings
-- [ ] Implement invoice issuance
-- [ ] Implement invoice cancel and void rules
+- [x] Implement invoice issuance
+- [x] Implement invoice cancel and void rules
 - [ ] Implement payment creation
 - [ ] Implement immutable receipt generation
 - [ ] Implement partial and split payments
@@ -254,6 +254,13 @@
 - [ ] Implement AR balances/report basis
 - [ ] Implement financial immutability protections
 - [ ] Implement cashier mobile flows
+
+Completion notes:
+
+- 2026-07-03: Completed M9.06 invoice issue/cancel/void backend workflow. Verified existing API/service/store implementation for idempotent issue, cancel, and void actions; allocation final/release status transitions; status event writes; audit writes; and paid-invoice void blocking until payments are refunded.
+- Validation: `pnpm.cmd --filter @garageos/api test -- invoice` passed; `pnpm.cmd --filter @garageos/api typecheck` passed.
+- Files verified/changed: `apps/api/src/modules/invoices/api/invoices.controller.ts`, `apps/api/src/modules/invoices/api/invoice.schemas.ts`, `apps/api/src/modules/invoices/application/invoices.service.ts`, `apps/api/src/modules/invoices/application/invoices.service.spec.ts`, `apps/api/src/modules/invoices/persistence/postgres-invoice.store.ts`, `docs/progress-tracker.md`.
+- Next recommended task: M9.07 payment creation and overpayment blocking.
 
 ## Milestone 10 — Expenses, Reminders, Notifications, Integrations
 
