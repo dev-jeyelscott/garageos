@@ -22,6 +22,11 @@ export const tenantNavigationItems: readonly NavigationItem[] = [
     requiredPermissions: ['purchases.read'],
   },
   {
+    label: 'Accounts Payable',
+    href: '/accounts-payable',
+    anyRequiredPermissions: ['supplier_payments.read', 'reports.view_basic'],
+  },
+  {
     label: 'Branches',
     href: '/branches',
     requiredPermissions: ['branches.read'],

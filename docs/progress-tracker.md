@@ -230,9 +230,9 @@
 - [x] Implement supplier payment workflow
 - [x] Implement supplier credit workflow
 - [x] Implement supplier return workflow
-- [ ] Implement supplier return valuation
-- [ ] Implement AP balances/report basis
-- [ ] Complete purchasing/AP mobile screens beyond existing supplier and purchase order pages
+- [x] Implement supplier return valuation
+- [x] Implement AP balances/report basis
+- [x] Complete purchasing/AP mobile screens beyond existing supplier and purchase order pages
 
 ## Milestone 9 — Invoicing, Payments, Receipts, Refunds, AR
 

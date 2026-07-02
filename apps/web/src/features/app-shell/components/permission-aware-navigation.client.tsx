@@ -71,9 +71,15 @@ export function PermissionAwareNavigation({
 }
 
 function canViewItem(item: NavigationItem, permissions: readonly string[]): boolean {
-  if (item.requiredPermissions === undefined || item.requiredPermissions.length === 0) {
-    return true;
-  }
+  const hasRequiredPermissions =
+    item.requiredPermissions === undefined ||
+    item.requiredPermissions.length === 0 ||
+    item.requiredPermissions.every((permission) => permissions.includes(permission));
 
-  return item.requiredPermissions.every((permission) => permissions.includes(permission));
+  const hasAnyRequiredPermission =
+    item.anyRequiredPermissions === undefined ||
+    item.anyRequiredPermissions.length === 0 ||
+    item.anyRequiredPermissions.some((permission) => permissions.includes(permission));
+
+  return hasRequiredPermissions && hasAnyRequiredPermission;
 }
