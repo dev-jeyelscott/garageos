@@ -21,7 +21,13 @@ import {
   type ResolvedTenantContext,
   type TenantContextAuthenticatedSession,
 } from '../../../shared/tenant-context/tenant-context';
-import type { CreateDraftInvoiceRequest, ListInvoicesQuery } from '../api/invoice.schemas';
+import type {
+  CancelInvoiceRequest,
+  CreateDraftInvoiceRequest,
+  IssueInvoiceRequest,
+  ListInvoicesQuery,
+  VoidInvoiceRequest,
+} from '../api/invoice.schemas';
 import {
   calculateInvoice,
   InvoiceCalculationError,
@@ -30,8 +36,11 @@ import {
 } from '../domain/invoice-calculation.service';
 import {
   BILLING_ALLOCATION_STATUSES,
+  INVOICE_STATUSES,
+  type BillingAllocationStatus,
   type InvoiceLineType,
   type InvoiceRecord,
+  type InvoiceStatus,
   type InvoiceStatusEventRecord,
   type InvoiceWithDetailsRecord,
 } from './invoice.records';
@@ -432,7 +441,7 @@ export class InvoicesService {
           tenantId: context.tenantId,
           invoiceId,
           fromStatus: null,
-          toStatus: 'draft',
+          toStatus: INVOICE_STATUSES.DRAFT,
           reason: 'invoice_draft_created',
           createdByUserId: context.actorUserId,
           createdAt,
@@ -473,6 +482,248 @@ export class InvoicesService {
           billingAllocations: created.billingAllocations,
         }),
       };
+    });
+  }
+
+  async issueInvoice(
+    invoiceId: string,
+    _request: IssueInvoiceRequest,
+    session: TenantContextAuthenticatedSession,
+  ): Promise<InvoiceMutationResponse> {
+    const context = resolveTenantContextFromAuthenticatedSession(session);
+    const isShopOwner = await this.invoiceStore.isActiveShopOwner({
+      tenantId: context.tenantId,
+      userId: context.actorUserId,
+    });
+
+    assertTenantLifecycleAccess({
+      context,
+      isShopOwner,
+      action: TENANT_ACCESS_ACTIONS.OPERATIONAL_WRITE,
+    });
+    assertInvoicePermission(context, isShopOwner, 'invoices.issue');
+
+    return this.transitionInvoiceWorkflow({
+      context,
+      invoiceId,
+      allowedStatuses: [INVOICE_STATUSES.DRAFT],
+      toStatus: INVOICE_STATUSES.PENDING,
+      reason: 'invoice_issued',
+      auditAction: 'invoices.issued',
+      allocationTransition: {
+        fromStatuses: [BILLING_ALLOCATION_STATUSES.RESERVED],
+        toStatus: BILLING_ALLOCATION_STATUSES.FINAL,
+      },
+      timestampField: 'issuedAt',
+      validate: (invoice) => {
+        if (invoice.lines.length === 0) {
+          throw GarageOsApiException.workflowTransitionBlocked(
+            'Invoice cannot be issued without invoice lines.',
+            [
+              {
+                field: 'invoice_id',
+                code: 'invoice_requires_lines_before_issue',
+                message: 'Invoice cannot be issued without invoice lines.',
+              },
+            ],
+          );
+        }
+      },
+    });
+  }
+
+  async cancelInvoice(
+    invoiceId: string,
+    request: CancelInvoiceRequest,
+    session: TenantContextAuthenticatedSession,
+  ): Promise<InvoiceMutationResponse> {
+    const context = resolveTenantContextFromAuthenticatedSession(session);
+    const isShopOwner = await this.invoiceStore.isActiveShopOwner({
+      tenantId: context.tenantId,
+      userId: context.actorUserId,
+    });
+
+    assertTenantLifecycleAccess({
+      context,
+      isShopOwner,
+      action: TENANT_ACCESS_ACTIONS.OPERATIONAL_WRITE,
+    });
+    assertInvoicePermission(context, isShopOwner, 'invoices.cancel');
+
+    return this.transitionInvoiceWorkflow({
+      context,
+      invoiceId,
+      allowedStatuses: [INVOICE_STATUSES.DRAFT, INVOICE_STATUSES.PENDING],
+      toStatus: INVOICE_STATUSES.CANCELLED,
+      reason: request.reason,
+      auditAction: 'invoices.cancelled',
+      allocationTransition: {
+        fromStatuses: [BILLING_ALLOCATION_STATUSES.RESERVED, BILLING_ALLOCATION_STATUSES.FINAL],
+        toStatus: BILLING_ALLOCATION_STATUSES.RELEASED,
+      },
+      timestampField: 'cancelledAt',
+      validate: (invoice) => {
+        assertInvoiceHasNoPaymentsOrRefunds(invoice.invoice, 'cancel');
+      },
+    });
+  }
+
+  async voidInvoice(
+    invoiceId: string,
+    request: VoidInvoiceRequest,
+    session: TenantContextAuthenticatedSession,
+  ): Promise<InvoiceMutationResponse> {
+    const context = resolveTenantContextFromAuthenticatedSession(session);
+    const isShopOwner = await this.invoiceStore.isActiveShopOwner({
+      tenantId: context.tenantId,
+      userId: context.actorUserId,
+    });
+
+    assertTenantLifecycleAccess({
+      context,
+      isShopOwner,
+      action: TENANT_ACCESS_ACTIONS.OPERATIONAL_WRITE,
+    });
+    assertInvoicePermission(context, isShopOwner, 'invoices.void');
+
+    return this.transitionInvoiceWorkflow({
+      context,
+      invoiceId,
+      allowedStatuses: [
+        INVOICE_STATUSES.PENDING,
+        INVOICE_STATUSES.OVERDUE,
+        INVOICE_STATUSES.PARTIALLY_PAID,
+        INVOICE_STATUSES.PAID,
+      ],
+      toStatus: INVOICE_STATUSES.VOIDED,
+      reason: request.reason,
+      auditAction: 'invoices.voided',
+      allocationTransition: {
+        fromStatuses: [BILLING_ALLOCATION_STATUSES.RESERVED, BILLING_ALLOCATION_STATUSES.FINAL],
+        toStatus: BILLING_ALLOCATION_STATUSES.RELEASED,
+      },
+      timestampField: 'voidedAt',
+      validate: (invoice) => {
+        assertInvoicePaymentsRefundedBeforeVoid(invoice.invoice);
+      },
+    });
+  }
+
+  private async transitionInvoiceWorkflow(input: {
+    readonly context: ResolvedTenantContext;
+    readonly invoiceId: string;
+    readonly allowedStatuses: readonly InvoiceStatus[];
+    readonly toStatus: InvoiceStatus;
+    readonly reason: string;
+    readonly auditAction: string;
+    readonly allocationTransition: {
+      readonly fromStatuses: readonly BillingAllocationStatus[];
+      readonly toStatus: BillingAllocationStatus;
+    };
+    readonly timestampField: 'issuedAt' | 'cancelledAt' | 'voidedAt';
+    readonly validate?: (invoice: InvoiceWithDetailsRecord) => void;
+  }): Promise<InvoiceMutationResponse> {
+    return this.transactionRunner.runInTransaction(async (transaction) => {
+      const current = await this.invoiceStore.lockInvoiceWithDetailsForUpdate(
+        {
+          tenantId: input.context.tenantId,
+          invoiceId: input.invoiceId.trim(),
+        },
+        transaction,
+      );
+
+      if (current === null) {
+        throw GarageOsApiException.resourceNotFound('Invoice was not found.');
+      }
+
+      assertBranchAccessAllowed({
+        context: input.context,
+        branchId: current.invoice.branchId,
+      });
+      assertInvoiceCurrentStatusAllowed(current.invoice, input.allowedStatuses, input.toStatus);
+
+      input.validate?.(current);
+
+      const changedAt = new Date();
+      const updatedInvoice = await this.invoiceStore.updateInvoiceWorkflowStatus(
+        {
+          tenantId: input.context.tenantId,
+          invoiceId: current.invoice.id,
+          fromStatus: current.invoice.status,
+          toStatus: input.toStatus,
+          changedAt,
+          ...(input.timestampField === 'issuedAt' ? { issuedAt: changedAt } : {}),
+          ...(input.timestampField === 'cancelledAt' ? { cancelledAt: changedAt } : {}),
+          ...(input.timestampField === 'voidedAt' ? { voidedAt: changedAt } : {}),
+        },
+        transaction,
+      );
+
+      if (updatedInvoice === null) {
+        throw GarageOsApiException.workflowTransitionBlocked(
+          'Invoice status changed before this workflow action could complete.',
+          [
+            {
+              field: 'invoice_id',
+              code: 'invoice_status_conflict',
+              message: 'Reload the invoice and retry this workflow action.',
+            },
+          ],
+        );
+      }
+
+      await this.invoiceStore.updateBillingAllocationStatuses(
+        {
+          tenantId: input.context.tenantId,
+          invoiceId: updatedInvoice.id,
+          fromStatuses: input.allocationTransition.fromStatuses,
+          toStatus: input.allocationTransition.toStatus,
+          changedAt,
+        },
+        transaction,
+      );
+
+      await this.invoiceStore.insertStatusEvent(
+        {
+          id: randomUUID(),
+          tenantId: input.context.tenantId,
+          invoiceId: updatedInvoice.id,
+          fromStatus: current.invoice.status,
+          toStatus: updatedInvoice.status,
+          reason: input.reason,
+          createdByUserId: input.context.actorUserId,
+          createdAt: changedAt,
+        },
+        transaction,
+      );
+
+      const updated = await this.invoiceStore.findInvoiceWithDetails(
+        {
+          tenantId: input.context.tenantId,
+          invoiceId: updatedInvoice.id,
+        },
+        transaction,
+      );
+
+      if (updated === null) {
+        throw new Error('Invoice was not readable after workflow transition.');
+      }
+
+      await this.auditService.record({
+        tenantId: input.context.tenantId,
+        actorUserId: input.context.actorUserId,
+        actorType: AUDIT_ACTOR_TYPES.TENANT_USER,
+        action: input.auditAction,
+        entityType: 'invoice',
+        entityId: updatedInvoice.id,
+        branchId: updatedInvoice.branchId,
+        beforeJson: toInvoiceDetailResponse(current),
+        afterJson: toInvoiceDetailResponse(updated),
+        reason: input.reason,
+        client: transaction,
+      });
+
+      return toInvoiceDetailResponse(updated);
     });
   }
 }
@@ -607,6 +858,64 @@ function throwOverbillingBlocked(): never {
         'Draft invoice creation cannot reserve more than the remaining billable line quantity or amount.',
     },
   ]);
+}
+
+function assertInvoiceCurrentStatusAllowed(
+  invoice: InvoiceRecord,
+  allowedStatuses: readonly InvoiceStatus[],
+  toStatus: InvoiceStatus,
+): void {
+  if (allowedStatuses.includes(invoice.status)) {
+    return;
+  }
+
+  throw GarageOsApiException.workflowTransitionBlocked(
+    `Invoice cannot transition from ${invoice.status} to ${toStatus}.`,
+    [
+      {
+        field: 'invoice_id',
+        code: 'invoice_status_not_eligible',
+        message: `Invoice cannot transition from ${invoice.status} to ${toStatus}.`,
+      },
+    ],
+  );
+}
+
+function assertInvoiceHasNoPaymentsOrRefunds(invoice: InvoiceRecord, action: string): void {
+  if (
+    parseMoneyCents(invoice.amountPaid) === 0n &&
+    parseMoneyCents(invoice.amountRefunded) === 0n
+  ) {
+    return;
+  }
+
+  throw GarageOsApiException.workflowTransitionBlocked(
+    `Invoice cannot be ${action}led after payment or refund activity.`,
+    [
+      {
+        field: 'invoice_id',
+        code: `invoice_${action}_blocked_by_payment_activity`,
+        message: 'Payment or refund activity exists for this invoice.',
+      },
+    ],
+  );
+}
+
+function assertInvoicePaymentsRefundedBeforeVoid(invoice: InvoiceRecord): void {
+  if (parseMoneyCents(invoice.amountPaid) <= parseMoneyCents(invoice.amountRefunded)) {
+    return;
+  }
+
+  throw GarageOsApiException.workflowTransitionBlocked(
+    'Paid invoices cannot be voided until all payments are refunded.',
+    [
+      {
+        field: 'invoice_id',
+        code: 'invoice_void_blocked_by_unrefunded_payments',
+        message: 'Refund all payments before voiding this invoice.',
+      },
+    ],
+  );
 }
 
 function assertSingleValue(
@@ -785,4 +1094,11 @@ function parseQuantityThousandths(value: string): bigint {
   const normalizedFractionalPart = fractionalPart.padEnd(3, '0').slice(0, 3);
 
   return BigInt(wholePart) * 1000n + BigInt(normalizedFractionalPart);
+}
+
+function parseMoneyCents(value: string): bigint {
+  const [wholePart = '0', fractionalPart = ''] = value.split('.');
+  const normalizedFractionalPart = fractionalPart.padEnd(2, '0').slice(0, 2);
+
+  return BigInt(wholePart) * 100n + BigInt(normalizedFractionalPart);
 }

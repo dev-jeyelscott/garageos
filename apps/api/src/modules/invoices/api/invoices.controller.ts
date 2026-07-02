@@ -1,15 +1,32 @@
-import { Body, Controller, Get, Headers, Param, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  HttpCode,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 
 import { ZodValidationPipe } from '../../../shared/api/zod-validation.pipe';
 import { IdempotencyService } from '../../../shared/idempotency/idempotency.service';
+import type { TenantContextAuthenticatedSession } from '../../../shared/tenant-context/tenant-context';
 import { AccessTokenAuthGuard } from '../../auth/api/access-token-auth.guard';
 import { AuthService } from '../../auth/application/auth.service';
 import { InvoicesService } from '../application/invoices.service';
 import {
+  cancelInvoiceRequestSchema,
+  type CancelInvoiceRequest,
   createDraftInvoiceRequestSchema,
   type CreateDraftInvoiceRequest,
+  issueInvoiceRequestSchema,
+  type IssueInvoiceRequest,
   listInvoicesQuerySchema,
   type ListInvoicesQuery,
+  voidInvoiceRequestSchema,
+  type VoidInvoiceRequest,
 } from './invoice.schemas';
 
 @UseGuards(AccessTokenAuthGuard)
@@ -39,47 +56,14 @@ export class InvoicesController {
     @Body(new ZodValidationPipe(createDraftInvoiceRequestSchema))
     request: CreateDraftInvoiceRequest,
   ): ReturnType<InvoicesService['createDraftInvoice']> {
-    const session = await this.authService.getAuthenticatedRouteSession(authorizationHeader);
-    const now = new Date();
-
-    const idempotency = await this.idempotencyService.begin({
-      tenantId: session.tenantContextSession.actor.tenant_id,
-      userId: session.tenantContextSession.actor.user_id,
-      endpoint: 'POST /api/v1/invoices',
+    return this.runIdempotentWorkflow({
+      authorizationHeader,
       idempotencyKey,
-      requestIntent: request,
-      now,
-      expiresAt: this.invoicesService.getIdempotencyExpiresAt(now),
+      endpoint: 'POST /api/v1/invoices',
+      request,
+      responseStatusCode: 201,
+      handler: (session) => this.invoicesService.createDraftInvoice(request, session),
     });
-
-    if (idempotency.type === 'replayed') {
-      return idempotency.responseBodyJson as Awaited<
-        ReturnType<InvoicesService['createDraftInvoice']>
-      >;
-    }
-
-    try {
-      const response = await this.invoicesService.createDraftInvoice(
-        request,
-        session.tenantContextSession,
-      );
-
-      await this.idempotencyService.completeSucceeded({
-        id: idempotency.record.id,
-        responseStatusCode: 201,
-        responseBodyJson: response,
-        now: new Date(),
-      });
-
-      return response;
-    } catch (error) {
-      await this.idempotencyService.completeFailed({
-        id: idempotency.record.id,
-        now: new Date(),
-      });
-
-      throw error;
-    }
   }
 
   @Get(':invoice_id')
@@ -100,5 +84,108 @@ export class InvoicesController {
     const session = await this.authService.getAuthenticatedRouteSession(authorizationHeader);
 
     return this.invoicesService.listStatusEvents(invoiceId, session.tenantContextSession);
+  }
+
+  @Post(':invoice_id/issue')
+  @HttpCode(200)
+  async issueInvoice(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Param('invoice_id') invoiceId: string,
+    @Body(new ZodValidationPipe(issueInvoiceRequestSchema))
+    request: IssueInvoiceRequest,
+  ): ReturnType<InvoicesService['issueInvoice']> {
+    return this.runIdempotentWorkflow({
+      authorizationHeader,
+      idempotencyKey,
+      endpoint: 'POST /api/v1/invoices/{invoice_id}/issue',
+      request: { invoice_id: invoiceId, ...request },
+      responseStatusCode: 200,
+      handler: (session) => this.invoicesService.issueInvoice(invoiceId, request, session),
+    });
+  }
+
+  @Post(':invoice_id/cancel')
+  @HttpCode(200)
+  async cancelInvoice(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Param('invoice_id') invoiceId: string,
+    @Body(new ZodValidationPipe(cancelInvoiceRequestSchema))
+    request: CancelInvoiceRequest,
+  ): ReturnType<InvoicesService['cancelInvoice']> {
+    return this.runIdempotentWorkflow({
+      authorizationHeader,
+      idempotencyKey,
+      endpoint: 'POST /api/v1/invoices/{invoice_id}/cancel',
+      request: { invoice_id: invoiceId, ...request },
+      responseStatusCode: 200,
+      handler: (session) => this.invoicesService.cancelInvoice(invoiceId, request, session),
+    });
+  }
+
+  @Post(':invoice_id/void')
+  @HttpCode(200)
+  async voidInvoice(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Param('invoice_id') invoiceId: string,
+    @Body(new ZodValidationPipe(voidInvoiceRequestSchema))
+    request: VoidInvoiceRequest,
+  ): ReturnType<InvoicesService['voidInvoice']> {
+    return this.runIdempotentWorkflow({
+      authorizationHeader,
+      idempotencyKey,
+      endpoint: 'POST /api/v1/invoices/{invoice_id}/void',
+      request: { invoice_id: invoiceId, ...request },
+      responseStatusCode: 200,
+      handler: (session) => this.invoicesService.voidInvoice(invoiceId, request, session),
+    });
+  }
+
+  private async runIdempotentWorkflow<Response>(input: {
+    readonly authorizationHeader: string | undefined;
+    readonly idempotencyKey: string | undefined;
+    readonly endpoint: string;
+    readonly request: unknown;
+    readonly responseStatusCode: number;
+    readonly handler: (session: TenantContextAuthenticatedSession) => Promise<Response>;
+  }): Promise<Response> {
+    const session = await this.authService.getAuthenticatedRouteSession(input.authorizationHeader);
+    const now = new Date();
+
+    const idempotency = await this.idempotencyService.begin({
+      tenantId: session.tenantContextSession.actor.tenant_id,
+      userId: session.tenantContextSession.actor.user_id,
+      endpoint: input.endpoint,
+      idempotencyKey: input.idempotencyKey,
+      requestIntent: input.request,
+      now,
+      expiresAt: this.invoicesService.getIdempotencyExpiresAt(now),
+    });
+
+    if (idempotency.type === 'replayed') {
+      return idempotency.responseBodyJson as Response;
+    }
+
+    try {
+      const response = await input.handler(session.tenantContextSession);
+
+      await this.idempotencyService.completeSucceeded({
+        id: idempotency.record.id,
+        responseStatusCode: input.responseStatusCode,
+        responseBodyJson: response,
+        now: new Date(),
+      });
+
+      return response;
+    } catch (error) {
+      await this.idempotencyService.completeFailed({
+        id: idempotency.record.id,
+        now: new Date(),
+      });
+
+      throw error;
+    }
   }
 }

@@ -163,6 +163,25 @@ export interface FindLatestInvoiceNumberForDateInput {
   readonly datePrefix: string;
 }
 
+export interface UpdateInvoiceWorkflowStatusInput {
+  readonly tenantId: string;
+  readonly invoiceId: string;
+  readonly fromStatus: InvoiceStatus;
+  readonly toStatus: InvoiceStatus;
+  readonly changedAt: Date;
+  readonly issuedAt?: Date;
+  readonly cancelledAt?: Date;
+  readonly voidedAt?: Date;
+}
+
+export interface UpdateBillingAllocationStatusesInput {
+  readonly tenantId: string;
+  readonly invoiceId: string;
+  readonly fromStatuses: readonly BillingAllocationStatus[];
+  readonly toStatus: BillingAllocationStatus;
+  readonly changedAt: Date;
+}
+
 export abstract class InvoiceStore {
   abstract isActiveShopOwner(input: {
     readonly tenantId: string;
@@ -227,6 +246,16 @@ export abstract class InvoiceStore {
     input: LockInvoiceWithDetailsForUpdateInput,
     client: DatabaseQueryClient,
   ): Promise<InvoiceWithDetailsRecord | null>;
+
+  abstract updateInvoiceWorkflowStatus(
+    input: UpdateInvoiceWorkflowStatusInput,
+    client?: DatabaseQueryClient,
+  ): Promise<InvoiceRecord | null>;
+
+  abstract updateBillingAllocationStatuses(
+    input: UpdateBillingAllocationStatusesInput,
+    client?: DatabaseQueryClient,
+  ): Promise<readonly InvoiceBillingAllocationRecord[]>;
 
   abstract insertStatusEvent(
     input: InsertInvoiceStatusEventInput,

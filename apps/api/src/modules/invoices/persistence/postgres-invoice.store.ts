@@ -22,6 +22,8 @@ import {
   type ListInvoicesInput,
   type LockInvoiceWithDetailsForUpdateInput,
   type ReplaceDraftInvoiceLinesInput,
+  type UpdateBillingAllocationStatusesInput,
+  type UpdateInvoiceWorkflowStatusInput,
 } from '../application/invoice.store';
 import type {
   InvoiceBillingAllocationRecord,
@@ -673,6 +675,67 @@ export class PostgresInvoiceStore extends InvoiceStore {
     }
 
     return this.attachDetails(invoice, client);
+  }
+
+  async updateInvoiceWorkflowStatus(
+    input: UpdateInvoiceWorkflowStatusInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<InvoiceRecord | null> {
+    const result = await client.query<InvoiceRow>(
+      `
+        update invoices
+        set
+          status = $4,
+          issued_at = coalesce($5::timestamptz, issued_at),
+          cancelled_at = coalesce($6::timestamptz, cancelled_at),
+          voided_at = coalesce($7::timestamptz, voided_at),
+          updated_at = $8::timestamptz,
+          lock_version = lock_version + 1
+        where tenant_id = $1::uuid
+          and id = $2::uuid
+          and status = $3
+        returning ${INVOICE_COLUMNS}
+      `,
+      [
+        input.tenantId,
+        input.invoiceId,
+        input.fromStatus,
+        input.toStatus,
+        input.issuedAt ?? null,
+        input.cancelledAt ?? null,
+        input.voidedAt ?? null,
+        input.changedAt,
+      ],
+    );
+
+    const row = result.rows[0];
+
+    return row === undefined ? null : mapInvoiceRow(row);
+  }
+
+  async updateBillingAllocationStatuses(
+    input: UpdateBillingAllocationStatusesInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<readonly InvoiceBillingAllocationRecord[]> {
+    if (input.fromStatuses.length === 0) {
+      return [];
+    }
+
+    const result = await client.query<InvoiceBillingAllocationRow>(
+      `
+        update invoice_billing_allocations
+        set
+          status = $4,
+          updated_at = $5::timestamptz
+        where tenant_id = $1::uuid
+          and invoice_id = $2::uuid
+          and status = any($3::text[])
+        returning ${INVOICE_BILLING_ALLOCATION_COLUMNS}
+      `,
+      [input.tenantId, input.invoiceId, input.fromStatuses, input.toStatus, input.changedAt],
+    );
+
+    return result.rows.map(mapInvoiceBillingAllocationRow);
   }
 
   async insertStatusEvent(

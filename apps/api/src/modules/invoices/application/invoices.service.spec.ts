@@ -26,6 +26,8 @@ import {
   type InvoiceDraftJobOrderRecord,
   type InvoiceSettingsRecord,
   type ListInvoicesInput,
+  type UpdateBillingAllocationStatusesInput,
+  type UpdateInvoiceWorkflowStatusInput,
 } from './invoice.store';
 import { InvoicesService } from './invoices.service';
 
@@ -280,6 +282,127 @@ describe('InvoicesService', () => {
       code: 'invoice_overbilling_blocked',
     });
   });
+
+  it('issues a draft invoice and finalizes reserved billing allocations', async () => {
+    const store = new FakeInvoiceStore();
+    const service = createService(store);
+    const draft = await service.createDraftInvoice(
+      {
+        job_order_ids: [jobOrderId],
+        invoice_date: createdAt,
+      },
+      createSession(),
+    );
+
+    const issued = await service.issueInvoice(draft.invoice.id, {}, createSession());
+
+    expect(issued.invoice.status).toBe('pending');
+    expect(store.createdInvoice).toMatchObject({
+      status: 'pending',
+      issuedAt: expect.any(Date),
+    });
+    expect(store.createdAllocations[0]?.status).toBe(BILLING_ALLOCATION_STATUSES.FINAL);
+    expect(store.statusEvents.at(-1)).toMatchObject({
+      fromStatus: 'draft',
+      toStatus: 'pending',
+      reason: 'invoice_issued',
+    });
+  });
+
+  it('cancels a draft invoice and releases billing allocations with a reason', async () => {
+    const store = new FakeInvoiceStore();
+    const service = createService(store);
+    const draft = await service.createDraftInvoice(
+      {
+        job_order_ids: [jobOrderId],
+        invoice_date: createdAt,
+      },
+      createSession(),
+    );
+
+    const cancelled = await service.cancelInvoice(
+      draft.invoice.id,
+      { reason: 'Customer cancelled the service billing.' },
+      createSession(),
+    );
+
+    expect(cancelled.invoice.status).toBe('cancelled');
+    expect(store.createdInvoice).toMatchObject({
+      status: 'cancelled',
+      cancelledAt: expect.any(Date),
+    });
+    expect(store.createdAllocations[0]?.status).toBe(BILLING_ALLOCATION_STATUSES.RELEASED);
+    expect(store.statusEvents.at(-1)).toMatchObject({
+      fromStatus: 'draft',
+      toStatus: 'cancelled',
+      reason: 'Customer cancelled the service billing.',
+    });
+  });
+
+  it('voids an issued unpaid invoice and releases finalized billing allocations', async () => {
+    const store = new FakeInvoiceStore();
+    const service = createService(store);
+    const draft = await service.createDraftInvoice(
+      {
+        job_order_ids: [jobOrderId],
+        invoice_date: createdAt,
+      },
+      createSession(),
+    );
+    await service.issueInvoice(draft.invoice.id, {}, createSession());
+
+    const voided = await service.voidInvoice(
+      draft.invoice.id,
+      { reason: 'Invoice issued in error.' },
+      createSession(),
+    );
+
+    expect(voided.invoice.status).toBe('voided');
+    expect(store.createdInvoice).toMatchObject({
+      status: 'voided',
+      voidedAt: expect.any(Date),
+    });
+    expect(store.createdAllocations[0]?.status).toBe(BILLING_ALLOCATION_STATUSES.RELEASED);
+    expect(store.statusEvents.at(-1)).toMatchObject({
+      fromStatus: 'pending',
+      toStatus: 'voided',
+      reason: 'Invoice issued in error.',
+    });
+  });
+
+  it('blocks voiding when invoice payments are not fully refunded', async () => {
+    const store = new FakeInvoiceStore();
+    const service = createService(store);
+    const draft = await service.createDraftInvoice(
+      {
+        job_order_ids: [jobOrderId],
+        invoice_date: createdAt,
+      },
+      createSession(),
+    );
+    await service.issueInvoice(draft.invoice.id, {}, createSession());
+    store.setPaymentSnapshot({
+      amountPaid: '500.00',
+      amountRefunded: '0.00',
+    });
+
+    await expect(
+      service.voidInvoice(
+        draft.invoice.id,
+        { reason: 'Attempt void with active payment.' },
+        createSession(),
+      ),
+    ).rejects.toMatchObject({
+      code: 'workflow_transition_blocked',
+      details: [
+        expect.objectContaining({
+          code: 'invoice_void_blocked_by_unrefunded_payments',
+        }),
+      ],
+    });
+
+    expect(store.createdInvoice?.status).toBe('pending');
+  });
 });
 
 function createService(store: FakeInvoiceStore): InvoicesService {
@@ -298,7 +421,15 @@ function createService(store: FakeInvoiceStore): InvoicesService {
   );
 }
 
-function createSession(): TenantContextAuthenticatedSession {
+function createSession(
+  permissions: readonly string[] = [
+    'invoices.create',
+    'invoices.read',
+    'invoices.issue',
+    'invoices.cancel',
+    'invoices.void',
+  ],
+): TenantContextAuthenticatedSession {
   return {
     actor: {
       user_id: userId,
@@ -312,7 +443,7 @@ function createSession(): TenantContextAuthenticatedSession {
       id: tenantId,
       status: 'active',
     },
-    effective_permissions: ['invoices.create', 'invoices.read'],
+    effective_permissions: [...permissions],
     branches: [{ id: branchId }],
     tenant_wide_branch_access: false,
     subscription_status_source: 'system_computed',
@@ -493,6 +624,51 @@ class FakeInvoiceStore extends InvoiceStore {
     return this.findInvoiceWithDetails();
   }
 
+  async updateInvoiceWorkflowStatus(
+    input: UpdateInvoiceWorkflowStatusInput,
+  ): Promise<InvoiceRecord | null> {
+    if (this.createdInvoice === null || this.createdInvoice.status !== input.fromStatus) {
+      return null;
+    }
+
+    this.createdInvoice = {
+      ...this.createdInvoice,
+      status: input.toStatus,
+      issuedAt: input.issuedAt ?? this.createdInvoice.issuedAt,
+      cancelledAt: input.cancelledAt ?? this.createdInvoice.cancelledAt,
+      voidedAt: input.voidedAt ?? this.createdInvoice.voidedAt,
+      updatedAt: input.changedAt,
+      lockVersion: this.createdInvoice.lockVersion + 1,
+    };
+
+    return this.createdInvoice;
+  }
+
+  async updateBillingAllocationStatuses(
+    input: UpdateBillingAllocationStatusesInput,
+  ): Promise<readonly InvoiceBillingAllocationRecord[]> {
+    const fromStatuses = new Set<InvoiceBillingAllocationRecord['status']>(input.fromStatuses);
+    const changed: InvoiceBillingAllocationRecord[] = [];
+
+    this.createdAllocations = this.createdAllocations.map((allocation) => {
+      if (!fromStatuses.has(allocation.status)) {
+        return allocation;
+      }
+
+      const updated = {
+        ...allocation,
+        status: input.toStatus,
+        updatedAt: input.changedAt,
+      };
+
+      changed.push(updated);
+
+      return updated;
+    });
+
+    return changed;
+  }
+
   async insertStatusEvent(input: InsertInvoiceStatusEventInput): Promise<InvoiceStatusEventRecord> {
     const event = {
       id: input.id,
@@ -505,7 +681,7 @@ class FakeInvoiceStore extends InvoiceStore {
       createdAt: input.createdAt,
     };
 
-    this.statusEvents = [event];
+    this.statusEvents = [...this.statusEvents, event];
 
     return event;
   }
@@ -520,5 +696,17 @@ class FakeInvoiceStore extends InvoiceStore {
 
   async findLatestInvoiceNumberForDate(_input: FindLatestInvoiceNumberForDateInput): Promise<null> {
     return null;
+  }
+
+  setPaymentSnapshot(input: { amountPaid: string; amountRefunded: string }): void {
+    if (this.createdInvoice === null) {
+      throw new Error('Cannot set payment snapshot without a created invoice.');
+    }
+
+    this.createdInvoice = {
+      ...this.createdInvoice,
+      amountPaid: input.amountPaid,
+      amountRefunded: input.amountRefunded,
+    };
   }
 }

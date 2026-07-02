@@ -21,6 +21,12 @@ const discountReasonSchema = z
   .min(1, { message: 'Discount reason is required when a discount is applied.' })
   .max(255);
 
+const workflowReasonSchema = z
+  .string()
+  .trim()
+  .min(1, { message: 'A reason is required for this invoice workflow action.' })
+  .max(500);
+
 const invoiceLevelDiscountSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('fixed'),
@@ -87,5 +93,18 @@ export const createDraftInvoiceRequestSchema = z
     }
   });
 
+export const issueInvoiceRequestSchema = z.object({}).default({});
+
+export const cancelInvoiceRequestSchema = z.object({
+  reason: workflowReasonSchema,
+});
+
+export const voidInvoiceRequestSchema = z.object({
+  reason: workflowReasonSchema,
+});
+
 export type ListInvoicesQuery = z.infer<typeof listInvoicesQuerySchema>;
 export type CreateDraftInvoiceRequest = z.infer<typeof createDraftInvoiceRequestSchema>;
+export type IssueInvoiceRequest = z.infer<typeof issueInvoiceRequestSchema>;
+export type CancelInvoiceRequest = z.infer<typeof cancelInvoiceRequestSchema>;
+export type VoidInvoiceRequest = z.infer<typeof voidInvoiceRequestSchema>;
