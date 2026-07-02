@@ -7,12 +7,16 @@ import {
   type DatabaseRow,
 } from '../../../shared/database/database-client';
 import {
+  type BillingAllocationTotalRecord,
   type CreateDraftInvoiceInput,
   type CreateInvoiceBillingAllocationsInput,
   type CreateInvoiceJobOrderLinksInput,
   type CreateInvoiceLinesInput,
   type FindInvoiceWithDetailsInput,
   type FindLatestInvoiceNumberForDateInput,
+  type InvoiceDraftJobOrderLineRecord,
+  type InvoiceDraftJobOrderRecord,
+  type InvoiceSettingsRecord,
   type InsertInvoiceStatusEventInput,
   InvoiceStore,
   type ListInvoicesInput,
@@ -54,6 +58,204 @@ export class PostgresInvoiceStore extends InvoiceStore {
     private readonly database: DatabaseQueryClient,
   ) {
     super();
+  }
+
+  async isActiveShopOwner(input: { tenantId: string; userId: string }): Promise<boolean> {
+    const result = await this.database.query<{ value: number }>(
+      `
+        select 1 as value
+        from user_roles ur
+        join roles r on r.tenant_id = ur.tenant_id and r.id = ur.role_id
+        where ur.tenant_id = $1::uuid
+          and ur.user_id = $2::uuid
+          and ur.removed_at is null
+          and r.status = 'active'
+          and r.role_type = 'shop_owner'
+        limit 1
+      `,
+      [input.tenantId, input.userId],
+    );
+
+    return result.rows[0] !== undefined;
+  }
+
+  async lockInvoiceSettingsForUpdate(
+    tenantId: string,
+    client: DatabaseQueryClient,
+  ): Promise<InvoiceSettingsRecord | null> {
+    const result = await client.query<{
+      invoice_prefix: string;
+      tax_profile: InvoiceSettingsRecord['taxProfile'];
+      tax_mode: InvoiceSettingsRecord['taxMode'];
+      vat_rate: string;
+      default_invoice_due_days: number;
+      timezone: string;
+    }>(
+      `
+        select
+          sp.invoice_prefix,
+          sp.tax_profile,
+          sp.tax_mode,
+          sp.vat_rate::text,
+          sp.default_invoice_due_days,
+          t.timezone
+        from shop_profiles sp
+        join tenants t on t.id = sp.tenant_id
+        where sp.tenant_id = $1::uuid
+        for update of sp
+      `,
+      [tenantId],
+    );
+
+    const row = result.rows[0];
+
+    if (row === undefined) {
+      return null;
+    }
+
+    return {
+      invoicePrefix: row.invoice_prefix,
+      taxProfile: row.tax_profile,
+      taxMode: row.tax_mode,
+      vatRate: row.vat_rate,
+      defaultInvoiceDueDays: row.default_invoice_due_days,
+      timezone: row.timezone,
+    };
+  }
+
+  async findDraftJobOrdersForUpdate(
+    tenantId: string,
+    jobOrderIds: readonly string[],
+    client: DatabaseQueryClient,
+  ): Promise<readonly InvoiceDraftJobOrderRecord[]> {
+    if (jobOrderIds.length === 0) {
+      return [];
+    }
+
+    const result = await client.query<{
+      id: string;
+      tenant_id: string;
+      branch_id: string;
+      customer_id: string;
+      status: InvoiceDraftJobOrderRecord['status'];
+    }>(
+      `
+        select id, tenant_id, branch_id, customer_id, status
+        from job_orders
+        where tenant_id = $1::uuid
+          and id = any($2::uuid[])
+        for update
+      `,
+      [tenantId, jobOrderIds],
+    );
+
+    return result.rows.map((row) => ({
+      id: row.id,
+      tenantId: row.tenant_id,
+      branchId: row.branch_id,
+      customerId: row.customer_id,
+      status: row.status,
+    }));
+  }
+
+  async findDraftJobOrderLinesForUpdate(
+    tenantId: string,
+    jobOrderLineIds: readonly string[] | null,
+    jobOrderIds: readonly string[],
+    client: DatabaseQueryClient,
+  ): Promise<readonly InvoiceDraftJobOrderLineRecord[]> {
+    if (jobOrderIds.length === 0) {
+      return [];
+    }
+
+    const result = await client.query<{
+      id: string;
+      tenant_id: string;
+      job_order_id: string;
+      line_type: InvoiceDraftJobOrderLineRecord['lineType'];
+      service_id: string | null;
+      product_id: string | null;
+      description: string;
+      quantity: string;
+      unit_price: string;
+      authorized_amount: string;
+      status: InvoiceDraftJobOrderLineRecord['status'];
+      line_order: number;
+    }>(
+      `
+        select
+          id,
+          tenant_id,
+          job_order_id,
+          line_type,
+          service_id,
+          product_id,
+          description,
+          quantity::text,
+          unit_price::text,
+          authorized_amount::text,
+          status,
+          line_order
+        from job_order_lines
+        where tenant_id = $1::uuid
+          and job_order_id = any($2::uuid[])
+          and ($3::uuid[] is null or id = any($3::uuid[]))
+          and ($3::uuid[] is not null or status <> 'cancelled')
+        order by job_order_id, line_order, id
+        for update
+      `,
+      [tenantId, jobOrderIds, jobOrderLineIds],
+    );
+
+    return result.rows.map((row) => ({
+      id: row.id,
+      tenantId: row.tenant_id,
+      jobOrderId: row.job_order_id,
+      lineType: row.line_type,
+      serviceId: row.service_id,
+      productId: row.product_id,
+      description: row.description,
+      quantity: row.quantity,
+      unitPrice: row.unit_price,
+      authorizedAmount: row.authorized_amount,
+      status: row.status,
+      lineOrder: row.line_order,
+    }));
+  }
+
+  async listOpenBillingAllocationTotals(
+    tenantId: string,
+    jobOrderLineIds: readonly string[],
+    client: DatabaseQueryClient,
+  ): Promise<readonly BillingAllocationTotalRecord[]> {
+    if (jobOrderLineIds.length === 0) {
+      return [];
+    }
+
+    const result = await client.query<{
+      job_order_line_id: string;
+      allocated_quantity: string;
+      allocated_amount: string;
+    }>(
+      `
+        select
+          job_order_line_id,
+          coalesce(sum(allocated_quantity), 0)::text as allocated_quantity,
+          coalesce(sum(allocated_amount), 0)::text as allocated_amount
+        from invoice_billing_allocations
+        where tenant_id = $1::uuid
+          and job_order_line_id = any($2::uuid[])
+          and status in ('reserved', 'final')
+        group by job_order_line_id
+      `,
+      [tenantId, jobOrderLineIds],
+    );
+
+    return result.rows.map((row) => ({
+      jobOrderLineId: row.job_order_line_id,
+      allocatedQuantity: row.allocated_quantity,
+      allocatedAmount: row.allocated_amount,
+    }));
   }
 
   async createDraftInvoice(
@@ -423,6 +625,24 @@ export class PostgresInvoiceStore extends InvoiceStore {
     );
 
     return mapInvoiceStatusEventRow(getRequiredRow(result, 'insert invoice status event'));
+  }
+
+  async listStatusEvents(
+    input: FindInvoiceWithDetailsInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<readonly InvoiceStatusEventRecord[]> {
+    const result = await client.query<InvoiceStatusEventRow>(
+      `
+        select ${INVOICE_STATUS_EVENT_COLUMNS}
+        from invoice_status_events
+        where tenant_id = $1::uuid
+          and invoice_id = $2::uuid
+        order by created_at desc, id desc
+      `,
+      [input.tenantId, input.invoiceId],
+    );
+
+    return result.rows.map(mapInvoiceStatusEventRow);
   }
 
   async listInvoices(

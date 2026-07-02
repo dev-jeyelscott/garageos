@@ -1,5 +1,10 @@
 import type { DatabaseQueryClient } from '../../../shared/database/database-client';
 import type {
+  JobOrderLineStatus,
+  JobOrderLineType,
+  JobOrderStatus,
+} from '../../job-orders/application/job-order.store';
+import type {
   BillingAllocationStatus,
   InvoiceBillingAllocationRecord,
   InvoiceJobOrderRecord,
@@ -12,6 +17,44 @@ import type {
   TaxMode,
   TaxProfile,
 } from './invoice.records';
+
+export interface InvoiceSettingsRecord {
+  readonly invoicePrefix: string;
+  readonly taxProfile: TaxProfile;
+  readonly taxMode: TaxMode;
+  readonly vatRate: string;
+  readonly defaultInvoiceDueDays: number;
+  readonly timezone: string;
+}
+
+export interface InvoiceDraftJobOrderRecord {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly branchId: string;
+  readonly customerId: string;
+  readonly status: JobOrderStatus;
+}
+
+export interface InvoiceDraftJobOrderLineRecord {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly jobOrderId: string;
+  readonly lineType: JobOrderLineType;
+  readonly serviceId: string | null;
+  readonly productId: string | null;
+  readonly description: string;
+  readonly quantity: string;
+  readonly unitPrice: string;
+  readonly authorizedAmount: string;
+  readonly status: JobOrderLineStatus;
+  readonly lineOrder: number;
+}
+
+export interface BillingAllocationTotalRecord {
+  readonly jobOrderLineId: string;
+  readonly allocatedQuantity: string;
+  readonly allocatedAmount: string;
+}
 
 export interface CreateDraftInvoiceInput {
   readonly id: string;
@@ -121,6 +164,35 @@ export interface FindLatestInvoiceNumberForDateInput {
 }
 
 export abstract class InvoiceStore {
+  abstract isActiveShopOwner(input: {
+    readonly tenantId: string;
+    readonly userId: string;
+  }): Promise<boolean>;
+
+  abstract lockInvoiceSettingsForUpdate(
+    tenantId: string,
+    client: DatabaseQueryClient,
+  ): Promise<InvoiceSettingsRecord | null>;
+
+  abstract findDraftJobOrdersForUpdate(
+    tenantId: string,
+    jobOrderIds: readonly string[],
+    client: DatabaseQueryClient,
+  ): Promise<readonly InvoiceDraftJobOrderRecord[]>;
+
+  abstract findDraftJobOrderLinesForUpdate(
+    tenantId: string,
+    jobOrderLineIds: readonly string[] | null,
+    jobOrderIds: readonly string[],
+    client: DatabaseQueryClient,
+  ): Promise<readonly InvoiceDraftJobOrderLineRecord[]>;
+
+  abstract listOpenBillingAllocationTotals(
+    tenantId: string,
+    jobOrderLineIds: readonly string[],
+    client: DatabaseQueryClient,
+  ): Promise<readonly BillingAllocationTotalRecord[]>;
+
   abstract createDraftInvoice(
     input: CreateDraftInvoiceInput,
     client?: DatabaseQueryClient,
@@ -160,6 +232,11 @@ export abstract class InvoiceStore {
     input: InsertInvoiceStatusEventInput,
     client?: DatabaseQueryClient,
   ): Promise<InvoiceStatusEventRecord>;
+
+  abstract listStatusEvents(
+    input: FindInvoiceWithDetailsInput,
+    client?: DatabaseQueryClient,
+  ): Promise<readonly InvoiceStatusEventRecord[]>;
 
   abstract listInvoices(
     input: ListInvoicesInput,

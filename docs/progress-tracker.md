@@ -237,7 +237,7 @@
 
 ## Milestone 9 — Invoicing, Payments, Receipts, Refunds, AR
 
-- [ ] Implement invoice draft from job orders
+- [x] Implement invoice draft from job orders
 - [ ] Implement billing allocation service
 - [ ] Implement invoice calculations
 - [ ] Implement invoice-level discount allocation

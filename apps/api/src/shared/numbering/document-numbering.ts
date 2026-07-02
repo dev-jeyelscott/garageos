@@ -20,6 +20,18 @@ export function buildNextJobOrderNumber(
   return `JO-${datePart}-${String(nextSequence).padStart(6, '0')}`;
 }
 
+export function buildNextInvoiceNumber(
+  invoicePrefix: string,
+  datePart: string,
+  latestInvoiceNumber: string | null,
+): string {
+  const normalizedPrefix = invoicePrefix.trim();
+  const datePrefix = `${normalizedPrefix}${datePart}`;
+  const nextSequence = latestInvoiceNumber === null ? 1 : Number(latestInvoiceNumber.slice(-6)) + 1;
+
+  return `${datePrefix}-${String(nextSequence).padStart(6, '0')}`;
+}
+
 export function buildPurchaseOrderNumber(datePart: string, sequence: number): string {
   if (!Number.isSafeInteger(sequence) || sequence < 1) {
     throw new Error('Purchase order sequence must be a positive safe integer.');
