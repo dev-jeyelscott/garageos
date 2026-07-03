@@ -20,6 +20,8 @@ import {
 import { InvoiceStore } from '../application/invoice.store';
 import { INVOICE_PROVIDERS } from '../invoice.providers';
 import { PostgresInvoiceStore } from '../persistence/postgres-invoice.store';
+import { AccountsReceivableStore } from '../application/accounts-receivable.store';
+import { PostgresAccountsReceivableStore } from '../persistence/postgres-accounts-receivable.store';
 
 const tenantId = '11111111-1111-4111-8111-111111111111';
 const branchId = '22222222-2222-4222-8222-222222222222';
@@ -34,11 +36,15 @@ const createdAt = new Date('2026-07-02T01:00:00.000Z');
 const invoiceDate = new Date('2026-07-02T00:00:00.000Z');
 
 describe('Invoice provider registration', () => {
-  it('binds the invoice store to the Postgres implementation', () => {
+  it('binds invoice stores to their Postgres implementations', () => {
     expect(INVOICE_PROVIDERS).toEqual([
       {
         provide: InvoiceStore,
         useClass: PostgresInvoiceStore,
+      },
+      {
+        provide: AccountsReceivableStore,
+        useClass: PostgresAccountsReceivableStore,
       },
     ]);
   });

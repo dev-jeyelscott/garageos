@@ -5,18 +5,25 @@ import { AuditModule } from '../../shared/audit/audit.module';
 import { DatabaseModule } from '../../shared/database/database.module';
 import { IdempotencyModule } from '../../shared/idempotency/idempotency.module';
 import { InventoryModule } from '../inventory/inventory.module';
+import { AccountsReceivableController } from './api/accounts-receivable.controller';
 import {
   InvoicesController,
   PaymentsRefundsController,
   ReceiptsController,
 } from './api/invoices.controller';
+import { AccountsReceivableService } from './application/accounts-receivable.service';
 import { INVOICE_PROVIDERS } from './invoice.providers';
 import { InvoicesService } from './application/invoices.service';
 
 @Module({
   imports: [AuthModule, AuditModule, DatabaseModule, IdempotencyModule, InventoryModule],
-  controllers: [InvoicesController, PaymentsRefundsController, ReceiptsController],
-  providers: [InvoicesService, ...INVOICE_PROVIDERS],
+  controllers: [
+    AccountsReceivableController,
+    InvoicesController,
+    PaymentsRefundsController,
+    ReceiptsController,
+  ],
+  providers: [AccountsReceivableService, InvoicesService, ...INVOICE_PROVIDERS],
   exports: [...INVOICE_PROVIDERS],
 })
 export class InvoicesModule {}
