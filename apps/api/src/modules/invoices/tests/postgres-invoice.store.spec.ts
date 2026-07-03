@@ -15,6 +15,7 @@ import {
   type InvoiceStatusEventRow,
   mapInvoiceLineRow,
   mapInvoiceRow,
+  mapInvoiceRefundRow,
 } from '../application/invoice.mappers';
 import { InvoiceStore } from '../application/invoice.store';
 import { INVOICE_PROVIDERS } from '../invoice.providers';
@@ -68,6 +69,21 @@ describe('invoice mappers', () => {
   it('rejects undocumented invoice line types', () => {
     expect(() => mapInvoiceLineRow(createInvoiceLineRow({ line_type: 'package' }))).toThrow(
       'Unknown invoice line type: package.',
+    );
+  });
+
+  it('maps documented refund statuses', () => {
+    expect(mapInvoiceRefundRow(createRefundRow({ status: 'posted' }))).toMatchObject({
+      status: 'posted',
+    });
+    expect(mapInvoiceRefundRow(createRefundRow({ status: 'voided' }))).toMatchObject({
+      status: 'voided',
+    });
+  });
+
+  it('rejects undocumented refund statuses', () => {
+    expect(() => mapInvoiceRefundRow(createRefundRow({ status: 'processing' }))).toThrow(
+      'Unknown refund status: processing.',
     );
   });
 });

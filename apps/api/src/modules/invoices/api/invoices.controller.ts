@@ -204,12 +204,20 @@ export class InvoicesController {
 
       return response;
     } catch (error) {
-      await this.idempotencyService.completeFailed({
-        id: idempotency.record.id,
-        now: new Date(),
-      });
+      await this.markIdempotencyFailed(idempotency.record.id);
 
       throw error;
+    }
+  }
+
+  private async markIdempotencyFailed(idempotencyRecordId: string): Promise<void> {
+    try {
+      await this.idempotencyService.completeFailed({
+        id: idempotencyRecordId,
+        now: new Date(),
+      });
+    } catch {
+      // Preserve the original workflow error; idempotency cleanup failures are operational noise.
     }
   }
 }
@@ -271,45 +279,67 @@ export class PaymentsRefundsController {
     @Body(new ZodValidationPipe(createInvoiceRefundRequestSchema))
     request: CreateInvoiceRefundRequest,
   ): ReturnType<InvoicesService['recordRefund']> {
-    const session = await this.authService.getAuthenticatedRouteSession(authorizationHeader);
+    return this.runIdempotentWorkflow({
+      authorizationHeader,
+      idempotencyKey,
+      endpoint: 'POST /api/v1/payments/{payment_id}/refunds',
+      request: { payment_id: paymentId, ...request },
+      responseStatusCode: 201,
+      handler: (session) => this.invoicesService.recordRefund(paymentId, request, session),
+    });
+  }
+
+  private async runIdempotentWorkflow<Response>(input: {
+    readonly authorizationHeader: string | undefined;
+    readonly idempotencyKey: string | undefined;
+    readonly endpoint: string;
+    readonly request: unknown;
+    readonly responseStatusCode: number;
+    readonly handler: (session: TenantContextAuthenticatedSession) => Promise<Response>;
+  }): Promise<Response> {
+    const session = await this.authService.getAuthenticatedRouteSession(input.authorizationHeader);
     const now = new Date();
 
     const idempotency = await this.idempotencyService.begin({
       tenantId: session.tenantContextSession.actor.tenant_id,
       userId: session.tenantContextSession.actor.user_id,
-      endpoint: 'POST /api/v1/payments/{payment_id}/refunds',
-      idempotencyKey,
-      requestIntent: { payment_id: paymentId, ...request },
+      endpoint: input.endpoint,
+      idempotencyKey: input.idempotencyKey,
+      requestIntent: input.request,
       now,
       expiresAt: this.invoicesService.getIdempotencyExpiresAt(now),
     });
 
     if (idempotency.type === 'replayed') {
-      return idempotency.responseBodyJson as ReturnType<InvoicesService['recordRefund']>;
+      return idempotency.responseBodyJson as Response;
     }
 
     try {
-      const response = await this.invoicesService.recordRefund(
-        paymentId,
-        request,
-        session.tenantContextSession,
-      );
+      const response = await input.handler(session.tenantContextSession);
 
       await this.idempotencyService.completeSucceeded({
         id: idempotency.record.id,
-        responseStatusCode: 201,
+        responseStatusCode: input.responseStatusCode,
         responseBodyJson: response,
         now: new Date(),
       });
 
       return response;
     } catch (error) {
-      await this.idempotencyService.completeFailed({
-        id: idempotency.record.id,
-        now: new Date(),
-      });
+      await this.markIdempotencyFailed(idempotency.record.id);
 
       throw error;
+    }
+  }
+
+  private async markIdempotencyFailed(idempotencyRecordId: string): Promise<void> {
+    try {
+      await this.idempotencyService.completeFailed({
+        id: idempotencyRecordId,
+        now: new Date(),
+      });
+    } catch {
+      // Preserve the original workflow error; idempotency cleanup failures are operational noise.
     }
   }
 }

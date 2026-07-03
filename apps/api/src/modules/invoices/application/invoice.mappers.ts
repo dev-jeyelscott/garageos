@@ -2,6 +2,7 @@ import type { DatabaseRow } from '../../../shared/database/database-client';
 import {
   BILLING_ALLOCATION_STATUS_VALUES,
   INVOICE_LINE_TYPE_VALUES,
+  INVOICE_REFUND_STATUS_VALUES,
   INVOICE_STATUS_VALUES,
   PAYMENT_METHOD_VALUES,
   TAX_MODE_VALUES,
@@ -14,6 +15,7 @@ import {
   type InvoicePaymentRecord,
   type InvoiceReceiptRecord,
   type InvoiceRefundRecord,
+  type InvoiceRefundStatus,
   type InvoiceRecord,
   type InvoiceStatus,
   type InvoiceStatusEventRecord,
@@ -268,10 +270,6 @@ export function mapInvoiceReceiptRow(row: InvoiceReceiptRow): InvoiceReceiptReco
 }
 
 export function mapInvoiceRefundRow(row: InvoiceRefundRow): InvoiceRefundRecord {
-  if (row.status !== 'posted') {
-    throw new Error(`Unknown refund status: ${row.status}.`);
-  }
-
   return {
     id: row.id,
     tenantId: row.tenant_id,
@@ -282,7 +280,7 @@ export function mapInvoiceRefundRow(row: InvoiceRefundRow): InvoiceRefundRecord 
     collectionShouldContinue: row.collection_should_continue,
     closeInvoiceAfterRefund: row.close_invoice_after_refund,
     inventoryReversalSelected: row.inventory_reversal_selected,
-    status: row.status,
+    status: mapInvoiceRefundStatus(row.status),
     createdByUserId: row.created_by_user_id,
     createdAt: toDate(row.created_at),
   };
@@ -334,6 +332,14 @@ function mapPaymentMethod(paymentMethod: string): PaymentMethod {
   }
 
   throw new Error(`Unknown invoice payment method: ${paymentMethod}.`);
+}
+
+function mapInvoiceRefundStatus(status: string): InvoiceRefundStatus {
+  if ((INVOICE_REFUND_STATUS_VALUES as readonly string[]).includes(status)) {
+    return status as InvoiceRefundStatus;
+  }
+
+  throw new Error(`Unknown refund status: ${status}.`);
 }
 
 function toDate(value: Date | string): Date {

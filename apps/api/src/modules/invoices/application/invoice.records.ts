@@ -70,6 +70,16 @@ export const PAYMENT_METHOD_VALUES = Object.values(PAYMENT_METHODS);
 
 export type PaymentMethod = (typeof PAYMENT_METHODS)[keyof typeof PAYMENT_METHODS];
 
+export const INVOICE_REFUND_STATUSES = {
+  POSTED: 'posted',
+  VOIDED: 'voided',
+} as const;
+
+export const INVOICE_REFUND_STATUS_VALUES = Object.values(INVOICE_REFUND_STATUSES);
+
+export type InvoiceRefundStatus =
+  (typeof INVOICE_REFUND_STATUSES)[keyof typeof INVOICE_REFUND_STATUSES];
+
 export interface InvoiceRecord {
   readonly id: string;
   readonly tenantId: string;
@@ -187,7 +197,7 @@ export interface InvoiceRefundRecord {
   readonly collectionShouldContinue: boolean;
   readonly closeInvoiceAfterRefund: boolean;
   readonly inventoryReversalSelected: boolean;
-  readonly status: 'posted';
+  readonly status: InvoiceRefundStatus;
   readonly createdByUserId: string | null;
   readonly createdAt: Date;
 }
