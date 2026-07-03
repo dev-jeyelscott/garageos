@@ -254,23 +254,23 @@ export function buildInvoicePaymentInput({
   };
 }
 
-export function getInvoiceRefundBlockedReason({
+export function getInvoiceRefundFormBlockedReason({
   invoice,
   receipt,
   session,
   isOffline,
   writeActionsAllowed,
-  amount,
-  reason,
 }: {
   readonly invoice: InvoiceDetail;
-  readonly receipt: InvoiceReceipt;
+  readonly receipt: InvoiceReceipt | null;
   readonly session: AuthSessionResponseData | null;
   readonly isOffline: boolean;
   readonly writeActionsAllowed: boolean;
-  readonly amount: string;
-  readonly reason: string;
 }): string | null {
+  if (receipt === null) {
+    return 'No receipt-backed payment is available to refund.';
+  }
+
   if (session === null) {
     return null;
   }
@@ -291,8 +291,45 @@ export function getInvoiceRefundBlockedReason({
     return 'Refund recording is blocked by the current tenant session.';
   }
 
-  if (invoice.status === 'draft' || invoice.status === 'cancelled' || invoice.status === 'voided') {
+  if (
+    invoice.status === 'draft' ||
+    invoice.status === 'cancelled' ||
+    invoice.status === 'voided' ||
+    invoice.status === 'refunded'
+  ) {
     return 'Only issued invoices with refundable payments can receive refunds.';
+  }
+
+  return null;
+}
+
+export function getInvoiceRefundBlockedReason({
+  invoice,
+  receipt,
+  session,
+  isOffline,
+  writeActionsAllowed,
+  amount,
+  reason,
+}: {
+  readonly invoice: InvoiceDetail;
+  readonly receipt: InvoiceReceipt;
+  readonly session: AuthSessionResponseData | null;
+  readonly isOffline: boolean;
+  readonly writeActionsAllowed: boolean;
+  readonly amount: string;
+  readonly reason: string;
+}): string | null {
+  const formBlockedReason = getInvoiceRefundFormBlockedReason({
+    invoice,
+    receipt,
+    session,
+    isOffline,
+    writeActionsAllowed,
+  });
+
+  if (formBlockedReason !== null) {
+    return formBlockedReason;
   }
 
   if (reason.trim().length === 0) {

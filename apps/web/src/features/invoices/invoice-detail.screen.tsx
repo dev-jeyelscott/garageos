@@ -50,6 +50,7 @@ import {
   getApiErrorCode,
   getInvoicePaymentBlockedReason,
   getInvoiceRefundBlockedReason,
+  getInvoiceRefundFormBlockedReason,
   getReceiptRefundableEstimate,
   getInvoiceWorkflowBlockedReason,
   hasPermission,
@@ -830,8 +831,16 @@ function InvoiceRefundPanel({
     setAmount(estimatedRefundableAmount.toFixed(2));
   }, [estimatedRefundableAmount, selectedReceipt?.id]);
 
+  const formBlockedReason = getInvoiceRefundFormBlockedReason({
+    invoice,
+    receipt: selectedReceipt,
+    session,
+    isOffline,
+    writeActionsAllowed,
+  });
   const blockedReason =
-    selectedReceipt === null
+    formBlockedReason ??
+    (selectedReceipt === null
       ? 'No receipt-backed payment is available to refund.'
       : getInvoiceRefundBlockedReason({
           invoice,
@@ -841,8 +850,9 @@ function InvoiceRefundPanel({
           writeActionsAllowed,
           amount,
           reason,
-        });
+        }));
   const submitting = refundState.status === 'submitting';
+  const refundInputsDisabled = submitting || formBlockedReason !== null;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -933,7 +943,7 @@ function InvoiceRefundPanel({
               <select
                 value={selectedReceipt?.id ?? ''}
                 onChange={(event) => setSelectedReceiptId(event.currentTarget.value)}
-                disabled={submitting || receipts.length === 0}
+                disabled={refundInputsDisabled || receipts.length === 0}
                 className="min-h-11 rounded-xl border border-input bg-background px-3 py-2 text-base text-foreground shadow-sm outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {receipts.length === 0 ? <option value="">No receipts</option> : null}
@@ -956,7 +966,7 @@ function InvoiceRefundPanel({
                 step="0.01"
                 value={amount}
                 onChange={(event) => setAmount(event.currentTarget.value)}
-                disabled={submitting || selectedReceipt === null}
+                disabled={refundInputsDisabled}
               />
             </label>
             <label className="grid gap-2">
@@ -964,7 +974,7 @@ function InvoiceRefundPanel({
               <Input
                 value={reason}
                 onChange={(event) => setReason(event.currentTarget.value)}
-                disabled={submitting || selectedReceipt === null}
+                disabled={refundInputsDisabled}
               />
             </label>
           </div>
@@ -982,7 +992,7 @@ function InvoiceRefundPanel({
                     setCloseInvoiceAfterRefund(false);
                   }
                 }}
-                disabled={submitting || selectedReceipt === null}
+                disabled={refundInputsDisabled}
                 className="mt-1 h-4 w-4"
               />
               Continue collection after this refund.
@@ -999,7 +1009,7 @@ function InvoiceRefundPanel({
                     setCollectionShouldContinue(false);
                   }
                 }}
-                disabled={submitting || selectedReceipt === null}
+                disabled={refundInputsDisabled}
                 className="mt-1 h-4 w-4"
               />
               Close invoice after refund. Backend allows this only after all payment amounts are

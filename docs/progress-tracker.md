@@ -1,6 +1,6 @@
 # GarageOS Progress Tracker
 
-**Last Notion alignment:** 2026-07-03  
+**Last Notion alignment:** 2026-07-04  
 **Source of truth:** Notion database `GarageOS — Full Build Task Tracker`  
 **Repository path:** `docs/progress-tracker.md`
 
@@ -10,9 +10,9 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 
 | Status                  |   Cards |
 | ----------------------- | ------: |
-| Done                    |     173 |
+| Done                    |     174 |
 | In Progress             |       1 |
-| Backlog                 |     111 |
+| Backlog                 |     110 |
 | **Total tracked cards** | **285** |
 
 ## Milestone Status Summary
@@ -28,7 +28,7 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 | M6           | 16 Done                           | Complete                 |
 | M7           | 16 Done                           | Complete                 |
 | M8           | 14 Done                           | Complete                 |
-| M9           | 22 Done, 1 In Progress, 2 Backlog | Current active milestone |
+| M9           | 23 Done, 1 In Progress, 1 Backlog | Current active milestone |
 | M10          | 16 Backlog                        | Not started              |
 | M11          | 18 Backlog                        | Not started              |
 | M12          | 16 Backlog                        | Not started              |
@@ -38,7 +38,7 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 
 ## Current Focus
 
-- [ ] **Backlog** — M9.17 — Add Milestone 9 E2E, mobile, permission, and blocked-state coverage
+- [x] **In Progress** — M9.17 — Add Milestone 9 E2E, mobile, permission, and blocked-state coverage
 - [ ] **Backlog** — M9.18 — Final Milestone 9 regression, documentation, and handoff
 
 ---
@@ -237,8 +237,8 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - [x] **Done** — M9.13 — Add financial immutability protections and audit coverage
 - [x] **Done** — M9.14 — Implement invoice frontend list/detail/draft/issue flows
 - [x] **Done** — M9.15 — Implement payment and receipt frontend flows
-- [x] **In Progress** — M9.16 — Implement refund and void frontend flows
-- [ ] **Backlog** — M9.17 — Add Milestone 9 E2E, mobile, permission, and blocked-state coverage
+- [x] **Done** — M9.16 — Implement refund and void frontend flows
+- [x] **In Progress** — M9.17 — Add Milestone 9 E2E, mobile, permission, and blocked-state coverage
 - [ ] **Backlog** — M9.18 — Final Milestone 9 regression, documentation, and handoff
 - [x] **Done** — M9.BUG — Add database-backed billing allocation concurrency proof
 - [x] **Done** — M9.BUG — Add invoice workflow UI regression coverage
