@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { AuthSessionResponseData } from '../auth/types/auth-session';
 
 import {
+  buildInvoiceRefundInput,
   canEnterInvoiceCancelReason,
   getInvoiceRefundBlockedReason,
   getInvoiceRefundFormBlockedReason,
@@ -142,6 +143,43 @@ describe('invoice workflow action guards', () => {
     ).toBe('A reason is required for this invoice workflow action.');
   });
 
+  it('blocks voiding draft invoices even when a reason is present', () => {
+    expect(
+      getInvoiceWorkflowBlockedReason({
+        action: 'void',
+        invoice: buildInvoice({
+          status: 'draft',
+          amount_paid: '0.00',
+          amount_refunded: '0.00',
+        }),
+        session: workflowSession,
+        isOffline: false,
+        writeActionsAllowed: true,
+        reason: 'Draft was created by mistake.',
+      }),
+    ).toBe('Draft invoices cannot be voided.');
+  });
+
+  it.each<InvoiceStatus>(['cancelled', 'voided', 'refunded'])(
+    'blocks workflow actions for final %s invoices',
+    (status) => {
+      expect(
+        getInvoiceWorkflowBlockedReason({
+          action: 'void',
+          invoice: buildInvoice({
+            status,
+            amount_paid: '0.00',
+            amount_refunded: '0.00',
+          }),
+          session: workflowSession,
+          isOffline: false,
+          writeActionsAllowed: true,
+          reason: 'Correction.',
+        }),
+      ).toBe('Cancelled, voided, and refunded invoices cannot use workflow actions.');
+    },
+  );
+
   it('blocks voiding a paid invoice until payments are fully refunded', () => {
     expect(
       getInvoiceWorkflowBlockedReason({
@@ -240,6 +278,20 @@ describe('invoice refund guards', () => {
     ).toBe('Only issued invoices with refundable payments can receive refunds.');
   });
 
+  it.each(['0', '-1.00', 'not-a-number'])('blocks invalid refund amount %s', (amount) => {
+    expect(
+      getInvoiceRefundBlockedReason({
+        invoice: buildInvoice(),
+        receipt: refundReceipt,
+        session: refundSession,
+        isOffline: false,
+        writeActionsAllowed: true,
+        amount,
+        reason: 'Customer returned unused part.',
+      }),
+    ).toBe('Refund amount must be greater than zero.');
+  });
+
   it('blocks refund amounts above the available refundable amount', () => {
     expect(
       getInvoiceRefundBlockedReason({
@@ -252,5 +304,21 @@ describe('invoice refund guards', () => {
         reason: 'Customer returned unused part.',
       }),
     ).toBe('Refund amount cannot exceed the available refundable amount for this payment.');
+  });
+
+  it('builds correction-only refund input with trimmed reason and documented collection flags', () => {
+    expect(
+      buildInvoiceRefundInput({
+        amount: '100',
+        reason: '  Customer returned unused part.  ',
+        collectionShouldContinue: true,
+        closeInvoiceAfterRefund: false,
+      }),
+    ).toEqual({
+      amount: '100.00',
+      reason: 'Customer returned unused part.',
+      collection_should_continue: true,
+      close_invoice_after_refund: false,
+    });
   });
 });
