@@ -10,7 +10,7 @@ const DATABASE_URL = process.env.DATABASE_URL;
 
 const EXPECTED = {
   migrationCount: 28,
-  publicTableCount: 107,
+  publicTableCount: 109,
   subscriptionPlans: 3,
   subscriptionPlanLimits: 27,
   permissions: 128,
