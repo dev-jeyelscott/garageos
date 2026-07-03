@@ -6,6 +6,7 @@ import type { TenantContextAuthenticatedSession } from '../../../shared/tenant-c
 import { AuthService } from '../../auth/application/auth.service';
 import { InvoicesService } from '../application/invoices.service';
 import { InvoicesController, PaymentsRefundsController } from './invoices.controller';
+import { Logger } from '@nestjs/common';
 
 const TENANT_ID = '11111111-1111-4111-8111-111111111111';
 const USER_ID = '22222222-2222-4222-8222-222222222222';
@@ -119,24 +120,37 @@ describe('InvoicesController idempotency', () => {
   it('preserves the original workflow error when idempotency failure cleanup fails', async () => {
     const { invoicesController, invoicesService, idempotencyService } = createControllers();
     const workflowError = new Error('draft failed');
+    const warnSpy = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
 
     vi.mocked(invoicesService.createDraftInvoice).mockRejectedValueOnce(workflowError);
     vi.mocked(idempotencyService.completeFailed).mockRejectedValueOnce(new Error('cleanup failed'));
 
-    await expect(
-      invoicesController.createDraftInvoice(
-        'Bearer token',
-        'invoice-key',
-        {
-          job_order_ids: ['99999999-9999-4999-8999-999999999999'],
-        },
-        createHttpResponse(),
-      ),
-    ).rejects.toBe(workflowError);
+    try {
+      await expect(
+        invoicesController.createDraftInvoice(
+          'Bearer token',
+          'invoice-key',
+          {
+            job_order_ids: ['99999999-9999-4999-8999-999999999999'],
+          },
+          createHttpResponse(),
+        ),
+      ).rejects.toBe(workflowError);
 
-    expect(idempotencyService.completeFailed).toHaveBeenCalledWith(
-      expect.objectContaining({ id: IDEMPOTENCY_RECORD.id }),
-    );
+      expect(idempotencyService.completeFailed).toHaveBeenCalledWith(
+        expect.objectContaining({ id: IDEMPOTENCY_RECORD.id }),
+      );
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'invoice_idempotency_cleanup_failed',
+          idempotency_record_id: IDEMPOTENCY_RECORD.id,
+          error: 'cleanup failed',
+        }),
+        expect.any(String),
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 });
 

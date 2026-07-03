@@ -255,8 +255,6 @@
 - [ ] Implement financial immutability protections
 - [ ] Implement cashier mobile flows
 
-Completion note (2026-07-03): M9.11 implemented optional refund/void inventory reversal on the backend using documented `refund_inventory_reversal` and `void_inventory_reversal` ledger/FIFO transaction types. Added additive reversal tables, invoice store persistence, transactional stock/FIFO/ledger/reversal creation, focused service coverage for reversal and over-return blocking, and API type coverage. Validation run: `pnpm.cmd --filter @garageos/api test -- invoices.service` passed; `pnpm.cmd --filter @garageos/api typecheck` passed. Files changed: `apps/api/src/modules/invoices/*`, `packages/db/migrations/1783200000000_invoice-inventory-reversal-tables.js`, `docs/progress-tracker.md`.
-
 ## Milestone 10 — Expenses, Reminders, Notifications, Integrations
 
 - [ ] Implement expense categories and expense workflows

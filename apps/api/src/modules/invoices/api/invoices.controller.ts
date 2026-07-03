@@ -4,6 +4,7 @@ import {
   Get,
   Headers,
   HttpCode,
+  Logger,
   Param,
   Post,
   Query,
@@ -38,6 +39,8 @@ import {
 interface PassthroughHttpResponse {
   status(statusCode: number): unknown;
 }
+
+const invoiceIdempotencyLogger = new Logger('InvoiceIdempotencyWorkflow');
 
 @UseGuards(AccessTokenAuthGuard)
 @Controller('invoices')
@@ -330,7 +333,18 @@ async function markInvoiceIdempotencyFailed(
       id: idempotencyRecordId,
       now: new Date(),
     });
-  } catch {
-    // Preserve the original workflow error; idempotency cleanup failures must not mask it.
+  } catch (cleanupError) {
+    const errorMessage =
+      cleanupError instanceof Error ? cleanupError.message : 'Unknown idempotency cleanup failure';
+
+    invoiceIdempotencyLogger.warn(
+      {
+        message: 'Failed to mark invoice idempotency record as failed.',
+        action: 'invoice_idempotency_cleanup_failed',
+        idempotency_record_id: idempotencyRecordId,
+        error: errorMessage,
+      },
+      cleanupError instanceof Error ? cleanupError.stack : undefined,
+    );
   }
 }
