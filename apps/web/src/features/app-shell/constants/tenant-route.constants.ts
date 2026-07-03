@@ -184,14 +184,15 @@ export const tenantMoreMenuItems: readonly TenantMoreMenuItem[] = [
     title: 'Invoices, Payments, Receipts, and Refunds',
     group: 'Cashier workflows',
     description:
-      'Documented financial workflow group for invoices, manual payments, immutable receipts, refunds, voids, and accounts receivable.',
+      'Source-aligned invoice list, detail, draft creation, issue, cancel, and void routes. Payment, receipt, refund, and accounts receivable screens remain separate documented slices.',
     routePath: '/invoices',
-    routeExists: false,
-    requiredPermissions: ['invoices.read', 'payments.read', 'receipts.read'],
+    routeExists: true,
+    requiredPermissions: ['invoices.read'],
     plannedScope: [
-      'Invoice list and detail',
-      'Manual payment recording',
-      'Receipt viewing and refund workflows',
+      'Invoice list and detail viewing',
+      'Draft invoice creation from job orders',
+      'Issue, cancel, and void workflow actions',
+      'Payment, receipt, refund, and AR UI remain planned',
     ],
   },
   {

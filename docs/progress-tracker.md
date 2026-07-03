@@ -254,6 +254,8 @@
 - [x] Implement AR balances/report basis
 - [x] Implement financial immutability protections
 - [ ] Implement cashier mobile flows
+  - [x] M9.14 invoice frontend list/detail/draft/issue/cancel/void flows completed on 2026-07-03. Files changed: `apps/web/app/(tenant)/invoices/page.tsx`, `apps/web/app/(tenant)/invoices/new/page.tsx`, `apps/web/app/(tenant)/invoices/[invoice_id]/page.tsx`, `apps/web/src/features/invoices/*`, `apps/web/src/features/app-shell/constants/tenant-route.constants.ts`. Validation passed: `pnpm.cmd --filter @garageos/web typecheck`; `pnpm.cmd --filter @garageos/web test`; `pnpm.cmd --filter @garageos/web lint`. Payment, receipt, refund, and AR UI remain follow-up slices.
+  - [ ] Next recommended task: M9.15 payment and receipt frontend flows.
 
 ## Milestone 10 — Expenses, Reminders, Notifications, Integrations
 
