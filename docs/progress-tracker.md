@@ -28,7 +28,7 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 | M6           | 16 Done                           | Complete                 |
 | M7           | 16 Done                           | Complete                 |
 | M8           | 14 Done                           | Complete                 |
-| M9           | 23 Done, 1 In Progress, 1 Backlog | Current active milestone |
+| M9           | 24 Done, 1 In Progress, 1 Backlog | Current active milestone |
 | M10          | 16 Backlog                        | Not started              |
 | M11          | 18 Backlog                        | Not started              |
 | M12          | 16 Backlog                        | Not started              |
@@ -240,7 +240,7 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - [x] **Done** — M9.15 — Implement payment and receipt frontend flows
 - [x] **Done** — M9.16 — Implement refund and void frontend flows
 - [x] **Done** — M9.17 — Add Milestone 9 E2E, mobile, permission, and blocked-state coverage
-- [x] **In Progress** — M9.18 — Final Milestone 9 regression, documentation, and handoff
+- [x] **Done** — M9.18 — Final Milestone 9 regression, documentation, and handoff
 - [x] **Done** — M9.BUG — Add database-backed billing allocation concurrency proof
 - [x] **Done** — M9.BUG — Add invoice workflow UI regression coverage
 - [x] **Done** — M9.BUG — Disabled New invoice link remains navigable
