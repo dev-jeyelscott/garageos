@@ -12,6 +12,7 @@ import {
   API_TRANSACTION_RUNNER,
   type DatabaseTransactionRunner,
 } from '../../../shared/database/database-transaction';
+import type { DatabaseQueryClient } from '../../../shared/database/database-client';
 import {
   buildNextInvoiceNumber,
   formatTenantBusinessDate,
@@ -31,6 +32,10 @@ import type {
   ListReceiptsQuery,
   VoidInvoiceRequest,
 } from '../api/invoice.schemas';
+import { FifoLayerService } from '../../inventory/application/fifo-layer.service';
+import { INVENTORY_TRANSACTION_TYPES } from '../../inventory/application/inventory-ledger.store';
+import { InventoryLedgerService } from '../../inventory/application/inventory-ledger.service';
+import { InventoryStockBalancesService } from '../../inventory/application/inventory-stock-balances.service';
 import {
   calculateInvoice,
   InvoiceCalculationError,
@@ -41,6 +46,7 @@ import {
   BILLING_ALLOCATION_STATUSES,
   INVOICE_STATUSES,
   type BillingAllocationStatus,
+  type InvoiceInventoryReversalRecord,
   type InvoiceLineType,
   type InvoicePaymentRecord,
   type InvoiceReceiptRecord,
@@ -60,6 +66,8 @@ import {
 } from './invoice.store';
 
 const IDEMPOTENCY_RETENTION_HOURS = 24;
+const ZERO_QUANTITY = '0.000';
+const REVERSAL_SOURCE_TYPE = 'invoice_inventory_reversal';
 
 export interface InvoiceLineResponse {
   readonly id: string;
@@ -163,6 +171,16 @@ export interface InvoiceRefundResponse {
   readonly created_at: string;
 }
 
+export interface InvoiceInventoryReversalResponse {
+  readonly id: string;
+  readonly job_order_line_id: string;
+  readonly product_id: string;
+  readonly quantity_returned: string;
+  readonly inventory_ledger_entry_id: string;
+  readonly fifo_layer_id: string;
+  readonly created_at: string;
+}
+
 export interface InvoicePaymentMutationResponse {
   readonly payment: InvoicePaymentResponse;
   readonly receipt: InvoiceReceiptResponse;
@@ -173,6 +191,7 @@ export interface InvoiceRefundMutationResponse {
   readonly refund: InvoiceRefundResponse;
   readonly payment: InvoicePaymentResponse;
   readonly invoice: InvoiceResponse;
+  readonly inventory_reversals: readonly InvoiceInventoryReversalResponse[];
 }
 
 export interface InvoiceReceiptListResponse {
@@ -196,6 +215,12 @@ export class InvoicesService {
     private readonly transactionRunner: DatabaseTransactionRunner,
     @Inject(AuditService)
     private readonly auditService: AuditService,
+    @Inject(InventoryStockBalancesService)
+    private readonly stockBalancesService: InventoryStockBalancesService,
+    @Inject(FifoLayerService)
+    private readonly fifoLayerService: FifoLayerService,
+    @Inject(InventoryLedgerService)
+    private readonly inventoryLedgerService: InventoryLedgerService,
   ) {}
 
   getIdempotencyExpiresAt(now: Date): Date {
@@ -721,6 +746,18 @@ export class InvoicesService {
       validate: (invoice) => {
         assertInvoicePaymentsRefundedBeforeVoid(invoice.invoice);
       },
+      afterTransition: async ({ current, updatedInvoice, changedAt, transaction }) =>
+        this.createInventoryReversals({
+          context,
+          isShopOwner,
+          sourceType: 'void',
+          sourceId: updatedInvoice.id,
+          invoice: current,
+          reversal: request.inventory_reversal ?? null,
+          transactionType: INVENTORY_TRANSACTION_TYPES.VOID_INVENTORY_REVERSAL,
+          createdAt: changedAt,
+          transaction,
+        }),
     });
   }
 
@@ -879,7 +916,6 @@ export class InvoicesService {
       action: TENANT_ACCESS_ACTIONS.OPERATIONAL_WRITE,
     });
     assertAnyInvoicePermission(context, isShopOwner, ['payments.refund', 'invoices.refund']);
-    assertInventoryReversalDeferred(request);
 
     return this.transactionRunner.runInTransaction(async (transaction) => {
       const current = await this.invoiceStore.lockPaymentWithInvoiceForUpdate(
@@ -899,6 +935,18 @@ export class InvoicesService {
       assertRefundDoesNotExceedRefundable(request.amount, current.payment.refundableAmount);
 
       const createdAt = new Date();
+      const currentInvoiceDetails = await this.invoiceStore.findInvoiceWithDetails(
+        {
+          tenantId: context.tenantId,
+          invoiceId: current.invoice.id,
+        },
+        transaction,
+      );
+
+      if (currentInvoiceDetails === null) {
+        throw GarageOsApiException.resourceNotFound('Invoice was not found.');
+      }
+
       const nextPaymentRefundableAmount = subtractMoney(
         current.payment.refundableAmount,
         request.amount,
@@ -934,6 +982,17 @@ export class InvoicesService {
         },
         transaction,
       );
+      const inventoryReversals = await this.createInventoryReversals({
+        context,
+        isShopOwner,
+        sourceType: 'refund',
+        sourceId: refund.id,
+        invoice: currentInvoiceDetails,
+        reversal: request.inventory_reversal ?? null,
+        transactionType: INVENTORY_TRANSACTION_TYPES.REFUND_INVENTORY_REVERSAL,
+        createdAt,
+        transaction,
+      });
       const payment = await this.invoiceStore.updatePaymentRefundableAmount(
         {
           tenantId: context.tenantId,
@@ -991,6 +1050,7 @@ export class InvoicesService {
         refund: toInvoiceRefundResponse(refund),
         payment: toInvoicePaymentResponse(payment),
         invoice: toInvoiceResponse(updatedInvoice),
+        inventory_reversals: inventoryReversals.map(toInvoiceInventoryReversalResponse),
       };
 
       await this.auditService.record({
@@ -1058,6 +1118,12 @@ export class InvoicesService {
     };
     readonly timestampField: 'issuedAt' | 'cancelledAt' | 'voidedAt';
     readonly validate?: (invoice: InvoiceWithDetailsRecord) => void;
+    readonly afterTransition?: (input: {
+      readonly current: InvoiceWithDetailsRecord;
+      readonly updatedInvoice: InvoiceRecord;
+      readonly changedAt: Date;
+      readonly transaction: DatabaseQueryClient;
+    }) => Promise<readonly InvoiceInventoryReversalRecord[]>;
   }): Promise<InvoiceMutationResponse> {
     return this.transactionRunner.runInTransaction(async (transaction) => {
       const current = await this.invoiceStore.lockInvoiceWithDetailsForUpdate(
@@ -1119,6 +1185,14 @@ export class InvoicesService {
         transaction,
       );
 
+      const inventoryReversals =
+        (await input.afterTransition?.({
+          current,
+          updatedInvoice,
+          changedAt,
+          transaction,
+        })) ?? [];
+
       await this.invoiceStore.insertStatusEvent(
         {
           id: randomUUID(),
@@ -1154,13 +1228,212 @@ export class InvoicesService {
         entityId: updatedInvoice.id,
         branchId: updatedInvoice.branchId,
         beforeJson: toInvoiceDetailResponse(current),
-        afterJson: toInvoiceDetailResponse(updated),
+        afterJson: {
+          ...toInvoiceDetailResponse(updated),
+          inventory_reversals: inventoryReversals.map(toInvoiceInventoryReversalResponse),
+        },
         reason: input.reason,
         client: transaction,
       });
 
-      return toInvoiceDetailResponse(updated);
+      return {
+        ...toInvoiceDetailResponse(updated),
+        inventory_reversals: inventoryReversals.map(toInvoiceInventoryReversalResponse),
+      };
     });
+  }
+
+  private async createInventoryReversals(input: {
+    readonly context: ResolvedTenantContext;
+    readonly isShopOwner: boolean;
+    readonly sourceType: 'refund' | 'void';
+    readonly sourceId: string;
+    readonly invoice: InvoiceWithDetailsRecord;
+    readonly reversal:
+      | CreateInvoiceRefundRequest['inventory_reversal']
+      | VoidInvoiceRequest['inventory_reversal']
+      | null;
+    readonly transactionType:
+      | typeof INVENTORY_TRANSACTION_TYPES.REFUND_INVENTORY_REVERSAL
+      | typeof INVENTORY_TRANSACTION_TYPES.VOID_INVENTORY_REVERSAL;
+    readonly createdAt: Date;
+    readonly transaction: DatabaseQueryClient;
+  }): Promise<readonly InvoiceInventoryReversalRecord[]> {
+    if (input.reversal?.selected !== true) {
+      return [];
+    }
+
+    if (input.reversal.lines.length === 0) {
+      throw GarageOsApiException.validationFailed([
+        {
+          field: 'inventory_reversal.lines',
+          code: 'inventory_reversal_lines_required',
+          message:
+            'At least one returned part line is required when inventory reversal is selected.',
+        },
+      ]);
+    }
+
+    assertAnyInvoicePermission(input.context, input.isShopOwner, [
+      'inventory.adjust',
+      'inventory.force_adjust',
+    ]);
+
+    const linesById = new Map(input.invoice.lines.map((line) => [line.id, line] as const));
+    const requestedLines = input.reversal.lines.map((line) => {
+      const invoiceLine = linesById.get(line.invoice_line_id);
+
+      if (
+        invoiceLine === undefined ||
+        invoiceLine.originatingJobOrderLineId === null ||
+        invoiceLine.productId === null ||
+        invoiceLine.productId !== line.product_id
+      ) {
+        throw GarageOsApiException.validationFailed([
+          {
+            field: 'inventory_reversal.lines',
+            code: 'inventory_reversal_line_not_returnable',
+            message:
+              'Inventory reversal lines must reference invoiced part lines for this invoice.',
+          },
+        ]);
+      }
+
+      return {
+        invoiceLine,
+        jobOrderLineId: invoiceLine.originatingJobOrderLineId,
+        productId: invoiceLine.productId,
+        quantityReturned: line.return_quantity,
+      };
+    });
+    const requestedByJobOrderLineId = new Map<string, bigint>();
+
+    for (const line of requestedLines) {
+      requestedByJobOrderLineId.set(
+        line.jobOrderLineId,
+        (requestedByJobOrderLineId.get(line.jobOrderLineId) ?? 0n) +
+          parseQuantityThousandths(line.quantityReturned),
+      );
+    }
+
+    const jobOrderLineIds = [...requestedByJobOrderLineId.keys()];
+    const refundTotals = await this.invoiceStore.listRefundInventoryReversalTotals(
+      input.context.tenantId,
+      jobOrderLineIds,
+      input.transaction,
+    );
+    const voidTotals = await this.invoiceStore.listVoidInventoryReversalTotals(
+      input.context.tenantId,
+      jobOrderLineIds,
+      input.transaction,
+    );
+    const returnedByJobOrderLineId = new Map<string, bigint>();
+
+    for (const total of [...refundTotals, ...voidTotals]) {
+      returnedByJobOrderLineId.set(
+        total.jobOrderLineId,
+        (returnedByJobOrderLineId.get(total.jobOrderLineId) ?? 0n) +
+          parseQuantityThousandths(total.quantityReturned),
+      );
+    }
+
+    for (const [jobOrderLineId, requestedQuantity] of requestedByJobOrderLineId) {
+      const invoiceLine = requestedLines.find(
+        (line) => line.jobOrderLineId === jobOrderLineId,
+      )?.invoiceLine;
+
+      if (invoiceLine === undefined) {
+        continue;
+      }
+
+      const remainingReturnable =
+        parseQuantityThousandths(invoiceLine.quantity) -
+        (returnedByJobOrderLineId.get(jobOrderLineId) ?? 0n);
+
+      if (requestedQuantity > remainingReturnable) {
+        throw GarageOsApiException.validationFailed([
+          {
+            field: 'inventory_reversal.lines.return_quantity',
+            code: 'inventory_reversal_exceeds_returnable_quantity',
+            message:
+              'Returned quantity cannot exceed the invoiced quantity minus prior refund or void reversals.',
+          },
+        ]);
+      }
+    }
+
+    const reversalRows = [];
+
+    for (const line of requestedLines) {
+      await this.stockBalancesService.incrementOnHandStock(
+        {
+          tenantId: input.context.tenantId,
+          branchId: input.invoice.invoice.branchId,
+          productId: line.productId,
+          quantityReceived: line.quantityReturned,
+        },
+        input.transaction,
+      );
+      const fifoLayer = await this.fifoLayerService.createLayer(
+        {
+          tenantId: input.context.tenantId,
+          branchId: input.invoice.invoice.branchId,
+          productId: line.productId,
+          quantityReceived: line.quantityReturned,
+          unitCost: line.invoiceLine.unitPrice,
+          sourceTransactionType: input.transactionType,
+          sourceTransactionId: input.sourceId,
+          receivedAt: input.createdAt,
+          originalSourceLayerId: null,
+        },
+        input.transaction,
+      );
+      const ledgerEntry = await this.inventoryLedgerService.recordLedgerEntry(
+        {
+          tenantId: input.context.tenantId,
+          branchId: input.invoice.invoice.branchId,
+          productId: line.productId,
+          transactionType: input.transactionType,
+          quantityDeltaOnHand: line.quantityReturned,
+          quantityDeltaReserved: ZERO_QUANTITY,
+          unitCost: line.invoiceLine.unitPrice,
+          totalCost: multiplyQuantityByMoney(line.quantityReturned, line.invoiceLine.unitPrice),
+          sourceType: REVERSAL_SOURCE_TYPE,
+          sourceId: input.sourceId,
+          occurredAt: input.createdAt,
+          createdByUserId: input.context.actorUserId,
+        },
+        input.transaction,
+      );
+
+      reversalRows.push({
+        id: randomUUID(),
+        jobOrderLineId: line.jobOrderLineId,
+        productId: line.productId,
+        quantityReturned: line.quantityReturned,
+        inventoryLedgerEntryId: ledgerEntry.id,
+        fifoLayerId: fifoLayer.id,
+        createdAt: input.createdAt,
+      });
+    }
+
+    return input.sourceType === 'refund'
+      ? this.invoiceStore.createRefundInventoryReversals(
+          {
+            tenantId: input.context.tenantId,
+            refundId: input.sourceId,
+            reversals: reversalRows,
+          },
+          input.transaction,
+        )
+      : this.invoiceStore.createVoidInventoryReversals(
+          {
+            tenantId: input.context.tenantId,
+            invoiceId: input.sourceId,
+            reversals: reversalRows,
+          },
+          input.transaction,
+        );
   }
 }
 
@@ -1187,20 +1460,6 @@ function assertAnyInvoicePermission(
   }
 
   throw GarageOsApiException.forbidden(permissions.join(' or '));
-}
-
-function assertInventoryReversalDeferred(request: CreateInvoiceRefundRequest): void {
-  if (request.inventory_reversal?.selected !== true) {
-    return;
-  }
-
-  throw GarageOsApiException.validationFailed([
-    {
-      field: 'inventory_reversal.selected',
-      code: 'refund_inventory_reversal_not_ready',
-      message: 'Refund inventory reversal is handled by the dedicated inventory reversal workflow.',
-    },
-  ]);
 }
 
 function assertAllRequestedJobOrdersFound(
@@ -1728,6 +1987,20 @@ function toInvoiceRefundResponse(refund: InvoiceRefundRecord): InvoiceRefundResp
   };
 }
 
+function toInvoiceInventoryReversalResponse(
+  reversal: InvoiceInventoryReversalRecord,
+): InvoiceInventoryReversalResponse {
+  return {
+    id: reversal.id,
+    job_order_line_id: reversal.jobOrderLineId,
+    product_id: reversal.productId,
+    quantity_returned: reversal.quantityReturned,
+    inventory_ledger_entry_id: reversal.inventoryLedgerEntryId,
+    fifo_layer_id: reversal.fifoLayerId,
+    created_at: reversal.createdAt.toISOString(),
+  };
+}
+
 function uniqueIds(ids: readonly string[]): readonly string[] {
   return [...new Set(ids.map((id) => id.trim()))];
 }
@@ -1742,6 +2015,10 @@ function subtractQuantity(left: string, right: string): string {
 
 function addMoney(left: string, right: string): string {
   return formatMoneyCents(parseMoneyCents(left) + parseMoneyCents(right));
+}
+
+function multiplyQuantityByMoney(quantity: string, money: string): string {
+  return formatMoneyCents((parseQuantityThousandths(quantity) * parseMoneyCents(money)) / 1000n);
 }
 
 function subtractMoney(left: string, right: string): string {

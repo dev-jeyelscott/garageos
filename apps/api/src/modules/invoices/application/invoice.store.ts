@@ -7,6 +7,7 @@ import type {
 import type {
   BillingAllocationStatus,
   InvoiceBillingAllocationRecord,
+  InvoiceInventoryReversalRecord,
   InvoiceJobOrderRecord,
   InvoiceLineRecord,
   InvoiceLineType,
@@ -279,6 +280,33 @@ export interface UpdateInvoiceRefundTotalsInput {
   readonly changedAt: Date;
 }
 
+export interface InventoryReversalTotalRecord {
+  readonly jobOrderLineId: string;
+  readonly quantityReturned: string;
+}
+
+export interface CreateInvoiceInventoryReversalInput {
+  readonly id: string;
+  readonly jobOrderLineId: string;
+  readonly productId: string;
+  readonly quantityReturned: string;
+  readonly inventoryLedgerEntryId: string;
+  readonly fifoLayerId: string;
+  readonly createdAt: Date;
+}
+
+export interface CreateRefundInventoryReversalsInput {
+  readonly tenantId: string;
+  readonly refundId: string;
+  readonly reversals: readonly CreateInvoiceInventoryReversalInput[];
+}
+
+export interface CreateVoidInventoryReversalsInput {
+  readonly tenantId: string;
+  readonly invoiceId: string;
+  readonly reversals: readonly CreateInvoiceInventoryReversalInput[];
+}
+
 export abstract class InvoiceStore {
   abstract isActiveShopOwner(input: {
     readonly tenantId: string;
@@ -403,6 +431,28 @@ export abstract class InvoiceStore {
     input: UpdateInvoiceRefundTotalsInput,
     client?: DatabaseQueryClient,
   ): Promise<InvoiceRecord | null>;
+
+  abstract listRefundInventoryReversalTotals(
+    tenantId: string,
+    jobOrderLineIds: readonly string[],
+    client?: DatabaseQueryClient,
+  ): Promise<readonly InventoryReversalTotalRecord[]>;
+
+  abstract listVoidInventoryReversalTotals(
+    tenantId: string,
+    jobOrderLineIds: readonly string[],
+    client?: DatabaseQueryClient,
+  ): Promise<readonly InventoryReversalTotalRecord[]>;
+
+  abstract createRefundInventoryReversals(
+    input: CreateRefundInventoryReversalsInput,
+    client?: DatabaseQueryClient,
+  ): Promise<readonly InvoiceInventoryReversalRecord[]>;
+
+  abstract createVoidInventoryReversals(
+    input: CreateVoidInventoryReversalsInput,
+    client?: DatabaseQueryClient,
+  ): Promise<readonly InvoiceInventoryReversalRecord[]>;
 
   abstract insertStatusEvent(
     input: InsertInvoiceStatusEventInput,

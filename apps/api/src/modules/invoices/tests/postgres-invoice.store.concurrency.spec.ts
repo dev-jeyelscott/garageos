@@ -13,6 +13,9 @@ import type {
 import { PostgresDatabaseTransactionRunner } from '../../../shared/database/postgres-database-transaction-runner';
 import type { TenantContextAuthenticatedSession } from '../../../shared/tenant-context/tenant-context';
 import { InvoicesService } from '../application/invoices.service';
+import type { FifoLayerService } from '../../inventory/application/fifo-layer.service';
+import type { InventoryLedgerService } from '../../inventory/application/inventory-ledger.service';
+import type { InventoryStockBalancesService } from '../../inventory/application/inventory-stock-balances.service';
 import { PostgresInvoiceStore } from '../persistence/postgres-invoice.store';
 
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -53,7 +56,14 @@ describeDatabase('Postgres invoice billing allocation concurrency', () => {
     const invoiceStore = new PostgresInvoiceStore(database);
     const transactionRunner = new PostgresDatabaseTransactionRunner(database);
 
-    service = new InvoicesService(invoiceStore, transactionRunner, createNoopAuditService());
+    service = new InvoicesService(
+      invoiceStore,
+      transactionRunner,
+      createNoopAuditService(),
+      createUnusedStockBalancesService(),
+      createUnusedFifoLayerService(),
+      createUnusedInventoryLedgerService(),
+    );
 
     await seedMinimalBillingContext(database);
   });
@@ -490,6 +500,18 @@ function createNoopAuditService(): AuditService {
       return {} as Awaited<ReturnType<AuditService['record']>>;
     },
   } as unknown as AuditService;
+}
+
+function createUnusedStockBalancesService(): InventoryStockBalancesService {
+  return {} as InventoryStockBalancesService;
+}
+
+function createUnusedFifoLayerService(): FifoLayerService {
+  return {} as FifoLayerService;
+}
+
+function createUnusedInventoryLedgerService(): InventoryLedgerService {
+  return {} as InventoryLedgerService;
 }
 
 function quoteIdentifier(identifier: string): string {

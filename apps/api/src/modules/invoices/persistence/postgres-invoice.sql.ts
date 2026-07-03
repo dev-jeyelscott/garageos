@@ -119,3 +119,27 @@ export const INVOICE_REFUND_COLUMNS = `
   created_by_user_id,
   created_at
 `;
+
+export const REFUND_INVENTORY_REVERSAL_COLUMNS = `
+  id,
+  tenant_id,
+  refund_id as source_id,
+  job_order_line_id,
+  product_id,
+  quantity_returned::text,
+  inventory_ledger_entry_id,
+  fifo_layer_id,
+  created_at
+`;
+
+export const VOID_INVENTORY_REVERSAL_COLUMNS = `
+  id,
+  tenant_id,
+  invoice_id as source_id,
+  job_order_line_id,
+  product_id,
+  quantity_returned::text,
+  inventory_ledger_entry_id,
+  fifo_layer_id,
+  created_at
+`;

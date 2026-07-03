@@ -17,6 +17,8 @@ import {
   type CreateInvoicePaymentInput,
   type CreateInvoiceReceiptInput,
   type CreateInvoiceRefundInput,
+  type CreateRefundInventoryReversalsInput,
+  type CreateVoidInventoryReversalsInput,
   type FindInvoiceWithDetailsInput,
   type FindInvoiceReceiptInput,
   type FindLatestInvoiceNumberForDateInput,
@@ -26,6 +28,7 @@ import {
   type InvoiceReceiptWithBranchRecord,
   type InvoiceSettingsRecord,
   type InsertInvoiceStatusEventInput,
+  type InventoryReversalTotalRecord,
   InvoiceStore,
   type ListInvoicesInput,
   type ListInvoiceReceiptsInput,
@@ -40,6 +43,7 @@ import {
 } from '../application/invoice.store';
 import type {
   InvoiceBillingAllocationRecord,
+  InvoiceInventoryReversalRecord,
   InvoiceJobOrderRecord,
   InvoiceLineRecord,
   InvoicePaymentRecord,
@@ -51,6 +55,7 @@ import type {
 } from '../application/invoice.records';
 import {
   type InvoiceBillingAllocationRow,
+  type InvoiceInventoryReversalRow,
   type InvoiceJobOrderRow,
   type InvoiceLineRow,
   type InvoicePaymentRow,
@@ -59,6 +64,7 @@ import {
   type InvoiceRow,
   type InvoiceStatusEventRow,
   mapInvoiceBillingAllocationRow,
+  mapInvoiceInventoryReversalRow,
   mapInvoiceJobOrderRow,
   mapInvoiceLineRow,
   mapInvoicePaymentRow,
@@ -76,6 +82,8 @@ import {
   INVOICE_RECEIPT_COLUMNS,
   INVOICE_REFUND_COLUMNS,
   INVOICE_STATUS_EVENT_COLUMNS,
+  REFUND_INVENTORY_REVERSAL_COLUMNS,
+  VOID_INVENTORY_REVERSAL_COLUMNS,
 } from './postgres-invoice.sql';
 
 @Injectable()
@@ -1113,6 +1121,148 @@ export class PostgresInvoiceStore extends InvoiceStore {
     return row === undefined ? null : mapInvoiceRow(row);
   }
 
+  async listRefundInventoryReversalTotals(
+    tenantId: string,
+    jobOrderLineIds: readonly string[],
+    client: DatabaseQueryClient = this.database,
+  ): Promise<readonly InventoryReversalTotalRecord[]> {
+    return this.listInventoryReversalTotals({
+      tableName: 'refund_inventory_reversals',
+      tenantId,
+      jobOrderLineIds,
+      client,
+    });
+  }
+
+  async listVoidInventoryReversalTotals(
+    tenantId: string,
+    jobOrderLineIds: readonly string[],
+    client: DatabaseQueryClient = this.database,
+  ): Promise<readonly InventoryReversalTotalRecord[]> {
+    return this.listInventoryReversalTotals({
+      tableName: 'void_inventory_reversals',
+      tenantId,
+      jobOrderLineIds,
+      client,
+    });
+  }
+
+  async createRefundInventoryReversals(
+    input: CreateRefundInventoryReversalsInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<readonly InvoiceInventoryReversalRecord[]> {
+    if (input.reversals.length === 0) {
+      return [];
+    }
+
+    const values: unknown[] = [];
+    const placeholders = input.reversals.map((reversal, index) => {
+      const offset = index * 9;
+      values.push(
+        reversal.id,
+        input.tenantId,
+        input.refundId,
+        reversal.jobOrderLineId,
+        reversal.productId,
+        reversal.quantityReturned,
+        reversal.inventoryLedgerEntryId,
+        reversal.fifoLayerId,
+        reversal.createdAt,
+      );
+
+      return `(
+        $${offset + 1}::uuid,
+        $${offset + 2}::uuid,
+        $${offset + 3}::uuid,
+        $${offset + 4}::uuid,
+        $${offset + 5}::uuid,
+        $${offset + 6}::numeric(14,3),
+        $${offset + 7}::uuid,
+        $${offset + 8}::uuid,
+        $${offset + 9}::timestamptz
+      )`;
+    });
+
+    const result = await client.query<InvoiceInventoryReversalRow>(
+      `
+        insert into refund_inventory_reversals (
+          id,
+          tenant_id,
+          refund_id,
+          job_order_line_id,
+          product_id,
+          quantity_returned,
+          inventory_ledger_entry_id,
+          fifo_layer_id,
+          created_at
+        )
+        values ${placeholders.join(', ')}
+        returning ${REFUND_INVENTORY_REVERSAL_COLUMNS}
+      `,
+      values,
+    );
+
+    return result.rows.map(mapInvoiceInventoryReversalRow);
+  }
+
+  async createVoidInventoryReversals(
+    input: CreateVoidInventoryReversalsInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<readonly InvoiceInventoryReversalRecord[]> {
+    if (input.reversals.length === 0) {
+      return [];
+    }
+
+    const values: unknown[] = [];
+    const placeholders = input.reversals.map((reversal, index) => {
+      const offset = index * 9;
+      values.push(
+        reversal.id,
+        input.tenantId,
+        input.invoiceId,
+        reversal.jobOrderLineId,
+        reversal.productId,
+        reversal.quantityReturned,
+        reversal.inventoryLedgerEntryId,
+        reversal.fifoLayerId,
+        reversal.createdAt,
+      );
+
+      return `(
+        $${offset + 1}::uuid,
+        $${offset + 2}::uuid,
+        $${offset + 3}::uuid,
+        $${offset + 4}::uuid,
+        $${offset + 5}::uuid,
+        $${offset + 6}::numeric(14,3),
+        $${offset + 7}::uuid,
+        $${offset + 8}::uuid,
+        $${offset + 9}::timestamptz
+      )`;
+    });
+
+    const result = await client.query<InvoiceInventoryReversalRow>(
+      `
+        insert into void_inventory_reversals (
+          id,
+          tenant_id,
+          invoice_id,
+          job_order_line_id,
+          product_id,
+          quantity_returned,
+          inventory_ledger_entry_id,
+          fifo_layer_id,
+          created_at
+        )
+        values ${placeholders.join(', ')}
+        returning ${VOID_INVENTORY_REVERSAL_COLUMNS}
+      `,
+      values,
+    );
+
+    return result.rows.map(mapInvoiceInventoryReversalRow);
+  }
+
   async insertStatusEvent(
     input: InsertInvoiceStatusEventInput,
     client: DatabaseQueryClient = this.database,
@@ -1222,6 +1372,38 @@ export class PostgresInvoiceStore extends InvoiceStore {
     );
 
     return result.rows[0]?.invoice_number ?? null;
+  }
+
+  private async listInventoryReversalTotals(input: {
+    readonly tableName: 'refund_inventory_reversals' | 'void_inventory_reversals';
+    readonly tenantId: string;
+    readonly jobOrderLineIds: readonly string[];
+    readonly client: DatabaseQueryClient;
+  }): Promise<readonly InventoryReversalTotalRecord[]> {
+    if (input.jobOrderLineIds.length === 0) {
+      return [];
+    }
+
+    const result = await input.client.query<{
+      job_order_line_id: string;
+      quantity_returned: string;
+    }>(
+      `
+        select
+          job_order_line_id,
+          coalesce(sum(quantity_returned), 0)::text as quantity_returned
+        from ${input.tableName}
+        where tenant_id = $1::uuid
+          and job_order_line_id = any($2::uuid[])
+        group by job_order_line_id
+      `,
+      [input.tenantId, input.jobOrderLineIds],
+    );
+
+    return result.rows.map((row) => ({
+      jobOrderLineId: row.job_order_line_id,
+      quantityReturned: row.quantity_returned,
+    }));
   }
 
   private async findInvoice(

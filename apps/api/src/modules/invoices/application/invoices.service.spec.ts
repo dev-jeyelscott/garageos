@@ -1,12 +1,16 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { AuditService } from '../../../shared/audit/audit.service';
 import type { DatabaseQueryClient } from '../../../shared/database/database-client';
 import type { DatabaseTransactionRunner } from '../../../shared/database/database-transaction';
 import type { TenantContextAuthenticatedSession } from '../../../shared/tenant-context/tenant-context';
+import type { FifoLayerService } from '../../inventory/application/fifo-layer.service';
+import type { InventoryLedgerService } from '../../inventory/application/inventory-ledger.service';
+import type { InventoryStockBalancesService } from '../../inventory/application/inventory-stock-balances.service';
 import {
   BILLING_ALLOCATION_STATUSES,
   type InvoiceBillingAllocationRecord,
+  type InvoiceInventoryReversalRecord,
   type InvoiceJobOrderRecord,
   type InvoiceLineRecord,
   type InvoicePaymentRecord,
@@ -26,9 +30,12 @@ import {
   type CreateInvoicePaymentInput,
   type CreateInvoiceReceiptInput,
   type CreateInvoiceRefundInput,
+  type CreateRefundInventoryReversalsInput,
+  type CreateVoidInventoryReversalsInput,
   type FindLatestInvoiceNumberForDateInput,
   type FindInvoiceReceiptInput,
   type InsertInvoiceStatusEventInput,
+  type InventoryReversalTotalRecord,
   type InvoiceDraftJobOrderLineRecord,
   type InvoiceDraftJobOrderRecord,
   type InvoicePaymentWithInvoiceRecord,
@@ -613,6 +620,159 @@ describe('InvoicesService', () => {
     });
   });
 
+  it('records selected refund inventory reversal with stock, FIFO, ledger, and reversal rows', async () => {
+    const store = new FakeInvoiceStore();
+    store.jobOrderLines = [
+      {
+        ...createDefaultJobOrderLine(),
+        lineType: 'part',
+        productId: '88888888-8888-4888-8888-888888888888',
+        serviceId: null,
+      },
+    ];
+    const services = createInventoryServices();
+    const service = createService(store, services);
+    const draft = await service.createDraftInvoice(
+      {
+        job_order_ids: [jobOrderId],
+        invoice_date: createdAt,
+      },
+      createSession(),
+    );
+    await service.issueInvoice(draft.invoice.id, {}, createSession());
+    const payment = await service.recordPayment(
+      draft.invoice.id,
+      {
+        amount: '1120.00',
+        payment_date: createdAt,
+        payment_method: 'cash',
+      },
+      createSession(['payments.create']),
+    );
+
+    const result = await service.recordRefund(
+      payment.payment.id,
+      {
+        amount: '1120.00',
+        reason: 'Returned part.',
+        collection_should_continue: false,
+        close_invoice_after_refund: true,
+        inventory_reversal: {
+          selected: true,
+          lines: [
+            {
+              invoice_line_id: draft.lines[0]?.id ?? '',
+              product_id: '88888888-8888-4888-8888-888888888888',
+              return_quantity: '1.000',
+            },
+          ],
+        },
+      },
+      createSession(['payments.refund', 'inventory.adjust']),
+    );
+
+    expect(result.inventory_reversals).toEqual([
+      expect.objectContaining({
+        job_order_line_id: jobOrderLineId,
+        product_id: '88888888-8888-4888-8888-888888888888',
+        quantity_returned: '1.000',
+        inventory_ledger_entry_id: 'ledger-entry-1',
+        fifo_layer_id: 'fifo-layer-1',
+      }),
+    ]);
+    expect(services.stockBalancesService.incrementOnHandStock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        productId: '88888888-8888-4888-8888-888888888888',
+        quantityReceived: '1.000',
+      }),
+      expect.anything(),
+    );
+    expect(services.fifoLayerService.createLayer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceTransactionType: 'refund_inventory_reversal',
+        quantityReceived: '1.000',
+      }),
+      expect.anything(),
+    );
+    expect(services.ledgerService.recordLedgerEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        transactionType: 'refund_inventory_reversal',
+        quantityDeltaOnHand: '1.000',
+        quantityDeltaReserved: '0.000',
+      }),
+      expect.anything(),
+    );
+    expect(store.createdRefundInventoryReversals).toHaveLength(1);
+  });
+
+  it('blocks refund inventory reversal quantities above remaining returnable quantity', async () => {
+    const store = new FakeInvoiceStore();
+    store.jobOrderLines = [
+      {
+        ...createDefaultJobOrderLine(),
+        lineType: 'part',
+        productId: '88888888-8888-4888-8888-888888888888',
+        serviceId: null,
+      },
+    ];
+    store.refundInventoryReversalTotals = [
+      {
+        jobOrderLineId,
+        quantityReturned: '0.500',
+      },
+    ];
+    const services = createInventoryServices();
+    const service = createService(store, services);
+    const draft = await service.createDraftInvoice(
+      {
+        job_order_ids: [jobOrderId],
+        invoice_date: createdAt,
+      },
+      createSession(),
+    );
+    await service.issueInvoice(draft.invoice.id, {}, createSession());
+    const payment = await service.recordPayment(
+      draft.invoice.id,
+      {
+        amount: '1120.00',
+        payment_date: createdAt,
+        payment_method: 'cash',
+      },
+      createSession(['payments.create']),
+    );
+
+    await expect(
+      service.recordRefund(
+        payment.payment.id,
+        {
+          amount: '100.00',
+          reason: 'Too many returned parts.',
+          collection_should_continue: true,
+          close_invoice_after_refund: false,
+          inventory_reversal: {
+            selected: true,
+            lines: [
+              {
+                invoice_line_id: draft.lines[0]?.id ?? '',
+                product_id: '88888888-8888-4888-8888-888888888888',
+                return_quantity: '0.501',
+              },
+            ],
+          },
+        },
+        createSession(['payments.refund', 'inventory.adjust']),
+      ),
+    ).rejects.toMatchObject({
+      code: 'validation_failed',
+      details: [
+        expect.objectContaining({
+          code: 'inventory_reversal_exceeds_returnable_quantity',
+        }),
+      ],
+    });
+    expect(services.stockBalancesService.incrementOnHandStock).not.toHaveBeenCalled();
+  });
+
   it('blocks refund amounts greater than the payment refundable amount', async () => {
     const store = new FakeInvoiceStore();
     const service = createService(store);
@@ -890,7 +1050,10 @@ describe('InvoicesService', () => {
   });
 });
 
-function createService(store: FakeInvoiceStore): InvoicesService {
+function createService(
+  store: FakeInvoiceStore,
+  inventoryServices: ReturnType<typeof createInventoryServices> = createInventoryServices(),
+): InvoicesService {
   return new InvoicesService(
     store,
     {
@@ -903,7 +1066,50 @@ function createService(store: FakeInvoiceStore): InvoicesService {
         return {} as Awaited<ReturnType<AuditService['record']>>;
       },
     } as unknown as AuditService,
+    inventoryServices.stockBalancesService,
+    inventoryServices.fifoLayerService,
+    inventoryServices.ledgerService,
   );
+}
+
+function createInventoryServices(): {
+  readonly stockBalancesService: InventoryStockBalancesService & {
+    readonly incrementOnHandStock: ReturnType<typeof vi.fn>;
+  };
+  readonly fifoLayerService: FifoLayerService & {
+    readonly createLayer: ReturnType<typeof vi.fn>;
+  };
+  readonly ledgerService: InventoryLedgerService & {
+    readonly recordLedgerEntry: ReturnType<typeof vi.fn>;
+  };
+} {
+  return {
+    stockBalancesService: {
+      incrementOnHandStock: vi.fn().mockResolvedValue({
+        tenant_id: tenantId,
+        branch_id: branchId,
+        product_id: '88888888-8888-4888-8888-888888888888',
+        on_hand_qty: '1.000',
+        reserved_qty: '0.000',
+        available_qty: '1.000',
+        lock_version: 1,
+      }),
+    } as unknown as InventoryStockBalancesService & {
+      readonly incrementOnHandStock: ReturnType<typeof vi.fn>;
+    },
+    fifoLayerService: {
+      createLayer: vi.fn().mockResolvedValue({
+        id: 'fifo-layer-1',
+      }),
+    } as unknown as FifoLayerService & { readonly createLayer: ReturnType<typeof vi.fn> },
+    ledgerService: {
+      recordLedgerEntry: vi.fn().mockResolvedValue({
+        id: 'ledger-entry-1',
+      }),
+    } as unknown as InventoryLedgerService & {
+      readonly recordLedgerEntry: ReturnType<typeof vi.fn>;
+    },
+  };
 }
 
 function createSession(
@@ -962,6 +1168,10 @@ class FakeInvoiceStore extends InvoiceStore {
   createdPayments: readonly InvoicePaymentRecord[] = [];
   createdReceipts: readonly InvoiceReceiptRecord[] = [];
   createdRefunds: readonly InvoiceRefundRecord[] = [];
+  createdRefundInventoryReversals: readonly InvoiceInventoryReversalRecord[] = [];
+  createdVoidInventoryReversals: readonly InvoiceInventoryReversalRecord[] = [];
+  refundInventoryReversalTotals: readonly InventoryReversalTotalRecord[] = [];
+  voidInventoryReversalTotals: readonly InventoryReversalTotalRecord[] = [];
   lastListReceiptInput: ListInvoiceReceiptsInput | null = null;
   createBillingAllocationsResult: readonly InvoiceBillingAllocationRecord[] | null = null;
   invoiceSettings: InvoiceSettingsRecord = {
@@ -1318,6 +1528,54 @@ class FakeInvoiceStore extends InvoiceStore {
     };
 
     return this.createdInvoice;
+  }
+
+  async listRefundInventoryReversalTotals(): Promise<readonly InventoryReversalTotalRecord[]> {
+    return this.refundInventoryReversalTotals;
+  }
+
+  async listVoidInventoryReversalTotals(): Promise<readonly InventoryReversalTotalRecord[]> {
+    return this.voidInventoryReversalTotals;
+  }
+
+  async createRefundInventoryReversals(
+    input: CreateRefundInventoryReversalsInput,
+  ): Promise<readonly InvoiceInventoryReversalRecord[]> {
+    const reversals = input.reversals.map((reversal) => ({
+      id: reversal.id,
+      tenantId: input.tenantId,
+      sourceId: input.refundId,
+      jobOrderLineId: reversal.jobOrderLineId,
+      productId: reversal.productId,
+      quantityReturned: reversal.quantityReturned,
+      inventoryLedgerEntryId: reversal.inventoryLedgerEntryId,
+      fifoLayerId: reversal.fifoLayerId,
+      createdAt: reversal.createdAt,
+    }));
+
+    this.createdRefundInventoryReversals = [...this.createdRefundInventoryReversals, ...reversals];
+
+    return reversals;
+  }
+
+  async createVoidInventoryReversals(
+    input: CreateVoidInventoryReversalsInput,
+  ): Promise<readonly InvoiceInventoryReversalRecord[]> {
+    const reversals = input.reversals.map((reversal) => ({
+      id: reversal.id,
+      tenantId: input.tenantId,
+      sourceId: input.invoiceId,
+      jobOrderLineId: reversal.jobOrderLineId,
+      productId: reversal.productId,
+      quantityReturned: reversal.quantityReturned,
+      inventoryLedgerEntryId: reversal.inventoryLedgerEntryId,
+      fifoLayerId: reversal.fifoLayerId,
+      createdAt: reversal.createdAt,
+    }));
+
+    this.createdVoidInventoryReversals = [...this.createdVoidInventoryReversals, ...reversals];
+
+    return reversals;
   }
 
   async insertStatusEvent(input: InsertInvoiceStatusEventInput): Promise<InvoiceStatusEventRecord> {

@@ -202,6 +202,18 @@ export interface InvoiceRefundRecord {
   readonly createdAt: Date;
 }
 
+export interface InvoiceInventoryReversalRecord {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly sourceId: string;
+  readonly jobOrderLineId: string;
+  readonly productId: string;
+  readonly quantityReturned: string;
+  readonly inventoryLedgerEntryId: string;
+  readonly fifoLayerId: string;
+  readonly createdAt: Date;
+}
+
 export interface InvoiceWithDetailsRecord {
   readonly invoice: InvoiceRecord;
   readonly jobOrders: readonly InvoiceJobOrderRecord[];

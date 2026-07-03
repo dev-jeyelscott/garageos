@@ -33,6 +33,19 @@ const refundReasonSchema = z
   .min(1, { message: 'Refund reason is required.' })
   .max(500);
 
+const inventoryReversalLineSchema = z.object({
+  invoice_line_id: uuidSchema,
+  product_id: uuidSchema,
+  return_quantity: z.string().regex(/^\d+(\.\d{3})$/, {
+    message: 'Return quantity must use exactly 3 decimal places.',
+  }),
+});
+
+const inventoryReversalRequestSchema = z.object({
+  selected: z.boolean().default(false),
+  lines: z.array(inventoryReversalLineSchema).default([]),
+});
+
 const invoiceLevelDiscountSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('fixed'),
@@ -111,6 +124,7 @@ export const cancelInvoiceRequestSchema = z.object({
 
 export const voidInvoiceRequestSchema = z.object({
   reason: workflowReasonSchema,
+  inventory_reversal: inventoryReversalRequestSchema.optional(),
 });
 
 export const createInvoicePaymentRequestSchema = z.object({
@@ -131,22 +145,7 @@ export const createInvoiceRefundRequestSchema = z
     reason: refundReasonSchema,
     collection_should_continue: z.boolean().default(true),
     close_invoice_after_refund: z.boolean().default(false),
-    inventory_reversal: z
-      .object({
-        selected: z.boolean().default(false),
-        lines: z
-          .array(
-            z.object({
-              invoice_line_id: uuidSchema,
-              product_id: uuidSchema,
-              return_quantity: z.string().regex(/^\d+(\.\d{3})$/, {
-                message: 'Return quantity must use exactly 3 decimal places.',
-              }),
-            }),
-          )
-          .default([]),
-      })
-      .optional(),
+    inventory_reversal: inventoryReversalRequestSchema.optional(),
   })
   .superRefine((value, context) => {
     if (value.close_invoice_after_refund && value.collection_should_continue) {

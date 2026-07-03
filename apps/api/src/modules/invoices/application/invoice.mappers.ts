@@ -9,6 +9,7 @@ import {
   TAX_PROFILE_VALUES,
   type BillingAllocationStatus,
   type InvoiceBillingAllocationRecord,
+  type InvoiceInventoryReversalRecord,
   type InvoiceJobOrderRecord,
   type InvoiceLineRecord,
   type InvoiceLineType,
@@ -143,6 +144,18 @@ export interface InvoiceRefundRow extends DatabaseRow {
   readonly inventory_reversal_selected: boolean;
   readonly status: string;
   readonly created_by_user_id: string | null;
+  readonly created_at: Date | string;
+}
+
+export interface InvoiceInventoryReversalRow extends DatabaseRow {
+  readonly id: string;
+  readonly tenant_id: string;
+  readonly source_id: string;
+  readonly job_order_line_id: string;
+  readonly product_id: string;
+  readonly quantity_returned: string;
+  readonly inventory_ledger_entry_id: string;
+  readonly fifo_layer_id: string;
   readonly created_at: Date | string;
 }
 
@@ -282,6 +295,22 @@ export function mapInvoiceRefundRow(row: InvoiceRefundRow): InvoiceRefundRecord 
     inventoryReversalSelected: row.inventory_reversal_selected,
     status: mapInvoiceRefundStatus(row.status),
     createdByUserId: row.created_by_user_id,
+    createdAt: toDate(row.created_at),
+  };
+}
+
+export function mapInvoiceInventoryReversalRow(
+  row: InvoiceInventoryReversalRow,
+): InvoiceInventoryReversalRecord {
+  return {
+    id: row.id,
+    tenantId: row.tenant_id,
+    sourceId: row.source_id,
+    jobOrderLineId: row.job_order_line_id,
+    productId: row.product_id,
+    quantityReturned: row.quantity_returned,
+    inventoryLedgerEntryId: row.inventory_ledger_entry_id,
+    fifoLayerId: row.fifo_layer_id,
     createdAt: toDate(row.created_at),
   };
 }
