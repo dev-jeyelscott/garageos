@@ -255,17 +255,6 @@
 - [x] Implement financial immutability protections
 - [ ] Implement cashier mobile flows
 
-Completion notes:
-
-- 2026-07-03: Verified M9.12 AR backend/report basis is implemented through `accounts/receivable` list and summary API wiring, AR service authorization/branch scoping, PostgreSQL invoice-balance queries, and focused AR service tests.
-- Validation: `pnpm.cmd --filter @garageos/api test -- accounts-receivable` passed; `pnpm.cmd --filter @garageos/api typecheck` passed; `pnpm.cmd --filter @garageos/api lint` passed.
-- Files verified: `apps/api/src/modules/invoices/api/accounts-receivable.controller.ts`, `apps/api/src/modules/invoices/api/accounts-receivable.schemas.ts`, `apps/api/src/modules/invoices/application/accounts-receivable.service.ts`, `apps/api/src/modules/invoices/application/accounts-receivable.store.ts`, `apps/api/src/modules/invoices/application/accounts-receivable.records.ts`, `apps/api/src/modules/invoices/persistence/postgres-accounts-receivable.store.ts`, `apps/api/src/modules/invoices/invoices.module.ts`.
-- Next recommended task: M9.13 -- Add financial immutability protections and audit coverage.
-- 2026-07-03: Completed M9.13 financial immutability hardening by preserving branch-scoped invoice reads, strict business-date API query validation, FIFO-costed inventory reversal behavior for refund/void corrections, and focused invoice service/store regression coverage. No new routes, schema migrations, or frontend behavior were added.
-- Validation: `pnpm.cmd --filter @garageos/api test -- invoice` passed; `pnpm.cmd --filter @garageos/api typecheck` passed; `pnpm.cmd --filter @garageos/api lint` passed.
-- Files changed: `apps/api/src/modules/invoices/api/accounts-receivable.schemas.ts`, `apps/api/src/modules/invoices/api/invoice.schemas.ts`, `apps/api/src/modules/invoices/application/invoice.store.ts`, `apps/api/src/modules/invoices/application/invoices.service.ts`, `apps/api/src/modules/invoices/application/invoices.service.spec.ts`, `apps/api/src/modules/invoices/persistence/postgres-invoice.store.ts`, `apps/api/src/modules/invoices/tests/postgres-invoice.store.spec.ts`.
-- Next recommended task: M9.14 -- Implement invoice frontend list/detail/draft/issue flows.
-
 ## Milestone 10 — Expenses, Reminders, Notifications, Integrations
 
 - [ ] Implement expense categories and expense workflows
