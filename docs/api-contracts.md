@@ -1502,84 +1502,95 @@ Posting behavior:
 
 ---
 
-## 9.18 Invoice APIs
+must be allocated across eligible lines before tax calculation.
 
-Base path: `/api/v1/invoices`
-
-| Method  | Path                          | Permission              | Idempotency | Description                                                  |
-| ------- | ----------------------------- | ----------------------- | ----------: | ------------------------------------------------------------ |
-| `GET`   | `/`                           | `invoices.read`         |          No | List invoices.                                               |
-| `POST`  | `/`                           | `invoices.create`       |         Yes | Create draft invoice and number from one or more job orders. |
-| `GET`   | `/{invoice_id}`               | `invoices.read`         |          No | Get invoice.                                                 |
-| `PATCH` | `/{invoice_id}`               | `invoices.update_draft` |          No | Edit draft invoice only.                                     |
-| `POST`  | `/{invoice_id}/issue`         | `invoices.issue`        |         Yes | Issue invoice, copy tax fields, finalize allocations.        |
-| `POST`  | `/{invoice_id}/cancel`        | `invoices.cancel`       |         Yes | Cancel draft/pending zero-payment invoice.                   |
-| `POST`  | `/{invoice_id}/void`          | `invoices.void`         |         Yes | Void issued invoice after required refunds.                  |
-| `GET`   | `/{invoice_id}/status-events` | `invoices.read`         |          No | View invoice status history.                                 |
-| `GET`   | `/{invoice_id}/print`         | `invoices.read`         |          No | Printable invoice document metadata or signed URL.           |
+Replace it with:
 
 ### 9.18.1 `POST /invoices`
 
+Creates a draft invoice from one or more existing job orders.
+
+The server derives `branch_id`, `customer_id`, invoice lines, tax fields, and reserved billing allocations from the selected job orders and eligible job order lines. Tenant context is resolved from the authenticated session. Clients MUST NOT send arbitrary `branch_id`, `customer_id`, or freeform `lines` to change invoice ownership, branch scope, customer scope, quantity, or price.
+
 Request:
 
-```json
+````json
 {
-  "branch_id": "uuid",
-  "customer_id": "uuid",
+  "job_order_ids": ["uuid"],
+  "job_order_line_ids": ["uuid"],
   "invoice_date": "2026-06-24",
   "due_date": "2026-07-01",
-  "job_order_ids": ["uuid"],
   "invoice_level_discount": {
     "type": "fixed",
     "amount": "100.00",
     "reason": "Loyal customer discount."
-  },
-  "lines": [
-    {
-      "originating_job_order_line_id": "uuid",
-      "line_type": "labor",
-      "description": "Diagnostic labor",
-      "quantity": "1.000",
-      "unit_price": "250.00",
-      "line_discount_amount": "0.00"
-    }
-  ]
+  }
 }
-```
 
-Response `201`:
+Request fields:
 
-```json
+Field	Required	Description
+job_order_ids	Yes	One or more job orders to invoice.
+job_order_line_ids	No	Optional subset of eligible job order lines. When omitted, the server invoices all eligible billable lines from the selected job orders.
+invoice_date	No	Business date for the draft invoice. Defaults to the current tenant-local business date when omitted.
+due_date	No	Optional due date. Defaults from shop invoice settings when omitted.
+invoice_level_discount	No	Optional fixed or percentage invoice-level discount. Requires a reason when present.
+
+Response 201:
+
 {
   "data": {
     "invoice": {
       "id": "uuid",
-      "invoice_number": "MG-000001",
+      "branch_id": "uuid",
+      "customer_id": "uuid",
+      "invoice_number": "MG-20260624-000001",
+      "invoice_date": "2026-06-24",
+      "due_date": "2026-07-01",
       "status": "draft",
       "subtotal_amount": "250.00",
       "discount_amount": "100.00",
       "tax_amount": "18.00",
       "total_amount": "168.00",
-      "remaining_collectible_balance": "168.00"
+      "remaining_collectible_balance": "168.00",
+      "lock_version": 0,
+      "created_at": "2026-06-24T00:00:00Z",
+      "updated_at": "2026-06-24T00:00:00Z"
     },
-    "billing_allocations": [
+    "job_order_ids": ["uuid"],
+    "lines": [
       {
-        "job_order_line_id": "uuid",
-        "status": "reserved",
-        "allocated_quantity": "1.000",
-        "allocated_amount": "250.00"
+        "id": "uuid",
+        "originating_job_order_line_id": "uuid",
+        "line_type": "labor",
+        "product_id": null,
+        "service_id": null,
+        "description": "Diagnostic labor",
+        "quantity": "1.000",
+        "unit_price": "250.00",
+        "line_discount_amount": "0.00",
+        "allocated_invoice_discount_amount": "100.00",
+        "taxable_base_amount": "150.00",
+        "tax_amount": "18.00",
+        "line_total": "168.00",
+        "line_order": 1
       }
     ]
   },
   "meta": {}
 }
-```
 
 Validation:
 
-- Invoice must link to at least one job order before issuance.
-- Linked job orders must belong to same tenant, same customer, same branch, and not be cancelled/released at invoice creation.
-- Billing allocations must prevent concurrent overbilling.
+- job_order_ids must contain at least one UUID and must not contain duplicates.
+- job_order_line_ids, when provided, must not contain duplicates.
+- Requested job orders must exist under the authenticated tenant.
+- Requested job orders must be eligible for draft invoice creation.
+- Linked job orders must belong to the same tenant, same customer, and same branch.
+- The authenticated user must have access to the derived branch.
+- Requested job order lines must belong to the selected job orders and must be eligible for invoicing.
+- The server derives invoice lines from locked job order line records.
+- Billing allocations must prevent duplicate billing, overbilling, and concurrent overbilling.
 - Invoice-level discounts must be allocated across eligible lines before tax calculation.
 
 ### 9.18.2 `POST /invoices/{invoice_id}/issue`
@@ -1591,7 +1602,7 @@ Request:
   "issue_date": "2026-06-24",
   "due_date": "2026-07-01"
 }
-```
+````
 
 Response `200` returns status `pending`, copied tax fields, finalized billing allocations, and printable document metadata.
 
