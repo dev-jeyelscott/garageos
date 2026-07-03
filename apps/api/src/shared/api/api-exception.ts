@@ -182,6 +182,15 @@ export class GarageOsApiException extends HttpException {
     });
   }
 
+  static refundAmountExceedsRefundable(details: ApiErrorDetail[] = []): GarageOsApiException {
+    return new GarageOsApiException({
+      code: API_ERROR_CODES.REFUND_AMOUNT_EXCEEDS_REFUNDABLE,
+      message: 'Refund exceeds refundable payment amount.',
+      status: HttpStatus.UNPROCESSABLE_ENTITY,
+      details,
+    });
+  }
+
   static rateLimited(): GarageOsApiException {
     return new GarageOsApiException({
       code: API_ERROR_CODES.RATE_LIMITED,

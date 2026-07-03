@@ -13,6 +13,7 @@ import {
   type InvoiceLineType,
   type InvoicePaymentRecord,
   type InvoiceReceiptRecord,
+  type InvoiceRefundRecord,
   type InvoiceRecord,
   type InvoiceStatus,
   type InvoiceStatusEventRecord,
@@ -126,6 +127,21 @@ export interface InvoiceReceiptRow extends DatabaseRow {
   readonly payment_method: string;
   readonly issued_at: Date | string;
   readonly created_by_user_id: string | null;
+}
+
+export interface InvoiceRefundRow extends DatabaseRow {
+  readonly id: string;
+  readonly tenant_id: string;
+  readonly invoice_id: string;
+  readonly payment_id: string;
+  readonly amount: string;
+  readonly reason: string;
+  readonly collection_should_continue: boolean;
+  readonly close_invoice_after_refund: boolean;
+  readonly inventory_reversal_selected: boolean;
+  readonly status: string;
+  readonly created_by_user_id: string | null;
+  readonly created_at: Date | string;
 }
 
 export function mapInvoiceRow(row: InvoiceRow): InvoiceRecord {
@@ -248,6 +264,27 @@ export function mapInvoiceReceiptRow(row: InvoiceReceiptRow): InvoiceReceiptReco
     paymentMethod: mapPaymentMethod(row.payment_method),
     issuedAt: toDate(row.issued_at),
     createdByUserId: row.created_by_user_id,
+  };
+}
+
+export function mapInvoiceRefundRow(row: InvoiceRefundRow): InvoiceRefundRecord {
+  if (row.status !== 'posted') {
+    throw new Error(`Unknown refund status: ${row.status}.`);
+  }
+
+  return {
+    id: row.id,
+    tenantId: row.tenant_id,
+    invoiceId: row.invoice_id,
+    paymentId: row.payment_id,
+    amount: row.amount,
+    reason: row.reason,
+    collectionShouldContinue: row.collection_should_continue,
+    closeInvoiceAfterRefund: row.close_invoice_after_refund,
+    inventoryReversalSelected: row.inventory_reversal_selected,
+    status: row.status,
+    createdByUserId: row.created_by_user_id,
+    createdAt: toDate(row.created_at),
   };
 }
 

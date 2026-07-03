@@ -27,6 +27,12 @@ const workflowReasonSchema = z
   .min(1, { message: 'A reason is required for this invoice workflow action.' })
   .max(500);
 
+const refundReasonSchema = z
+  .string()
+  .trim()
+  .min(1, { message: 'Refund reason is required.' })
+  .max(500);
+
 const invoiceLevelDiscountSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('fixed'),
@@ -117,6 +123,49 @@ export const createInvoicePaymentRequestSchema = z.object({
   notes: z.string().trim().min(1).max(500).optional(),
 });
 
+export const createInvoiceRefundRequestSchema = z
+  .object({
+    amount: moneyAmountSchema.refine((value) => Number(value) > 0, {
+      message: 'Refund amount must be greater than zero.',
+    }),
+    reason: refundReasonSchema,
+    collection_should_continue: z.boolean().default(true),
+    close_invoice_after_refund: z.boolean().default(false),
+    inventory_reversal: z
+      .object({
+        selected: z.boolean().default(false),
+        lines: z
+          .array(
+            z.object({
+              invoice_line_id: uuidSchema,
+              product_id: uuidSchema,
+              return_quantity: z.string().regex(/^\d+(\.\d{3})$/, {
+                message: 'Return quantity must use exactly 3 decimal places.',
+              }),
+            }),
+          )
+          .default([]),
+      })
+      .optional(),
+  })
+  .superRefine((value, context) => {
+    if (value.close_invoice_after_refund && value.collection_should_continue) {
+      context.addIssue({
+        code: 'custom',
+        path: ['close_invoice_after_refund'],
+        message: 'Closed refunds must not continue collection.',
+      });
+    }
+
+    if (!value.collection_should_continue && !value.close_invoice_after_refund) {
+      context.addIssue({
+        code: 'custom',
+        path: ['collection_should_continue'],
+        message: 'Refunds that stop collection must explicitly close the invoice after refund.',
+      });
+    }
+  });
+
 export type ListInvoicesQuery = z.infer<typeof listInvoicesQuerySchema>;
 export type ListReceiptsQuery = z.infer<typeof listReceiptsQuerySchema>;
 export type CreateDraftInvoiceRequest = z.infer<typeof createDraftInvoiceRequestSchema>;
@@ -124,3 +173,4 @@ export type IssueInvoiceRequest = z.infer<typeof issueInvoiceRequestSchema>;
 export type CancelInvoiceRequest = z.infer<typeof cancelInvoiceRequestSchema>;
 export type VoidInvoiceRequest = z.infer<typeof voidInvoiceRequestSchema>;
 export type CreateInvoicePaymentRequest = z.infer<typeof createInvoicePaymentRequestSchema>;
+export type CreateInvoiceRefundRequest = z.infer<typeof createInvoiceRefundRequestSchema>;

@@ -11,6 +11,7 @@ import {
   type InvoiceLineRecord,
   type InvoicePaymentRecord,
   type InvoiceReceiptRecord,
+  type InvoiceRefundRecord,
   type InvoiceRecord,
   type InvoiceStatusEventRecord,
   type InvoiceWithDetailsRecord,
@@ -24,16 +25,21 @@ import {
   type CreateInvoiceLinesInput,
   type CreateInvoicePaymentInput,
   type CreateInvoiceReceiptInput,
+  type CreateInvoiceRefundInput,
   type FindLatestInvoiceNumberForDateInput,
   type FindInvoiceReceiptInput,
   type InsertInvoiceStatusEventInput,
   type InvoiceDraftJobOrderLineRecord,
   type InvoiceDraftJobOrderRecord,
+  type InvoicePaymentWithInvoiceRecord,
   type InvoiceReceiptWithBranchRecord,
   type InvoiceSettingsRecord,
   type ListInvoiceReceiptsInput,
   type ListInvoicesInput,
+  type LockInvoicePaymentWithInvoiceInput,
   type UpdateInvoicePaymentTotalsInput,
+  type UpdateInvoicePaymentRefundableAmountInput,
+  type UpdateInvoiceRefundTotalsInput,
   type UpdateBillingAllocationStatusesInput,
   type UpdateInvoiceWorkflowStatusInput,
 } from './invoice.store';
@@ -548,6 +554,144 @@ describe('InvoicesService', () => {
     ]);
   });
 
+  it('records a partial refund and recalculates a paid invoice back to partially paid', async () => {
+    const store = new FakeInvoiceStore();
+    const service = createService(store);
+    const draft = await service.createDraftInvoice(
+      {
+        job_order_ids: [jobOrderId],
+        invoice_date: createdAt,
+      },
+      createSession(),
+    );
+    await service.issueInvoice(draft.invoice.id, {}, createSession());
+    const payment = await service.recordPayment(
+      draft.invoice.id,
+      {
+        amount: '1120.00',
+        payment_date: createdAt,
+        payment_method: 'gcash',
+      },
+      createSession(['payments.create']),
+    );
+
+    const result = await service.recordRefund(
+      payment.payment.id,
+      {
+        amount: '120.00',
+        reason: 'Customer returned unused part.',
+        collection_should_continue: true,
+        close_invoice_after_refund: false,
+      },
+      createSession(['payments.refund']),
+    );
+
+    expect(result.refund).toMatchObject({
+      invoice_id: draft.invoice.id,
+      payment_id: payment.payment.id,
+      amount: '120.00',
+      reason: 'Customer returned unused part.',
+      collection_should_continue: true,
+      close_invoice_after_refund: false,
+      inventory_reversal_selected: false,
+      status: 'posted',
+    });
+    expect(result.payment).toMatchObject({
+      id: payment.payment.id,
+      refundable_amount: '1000.00',
+    });
+    expect(result.invoice).toMatchObject({
+      status: 'partially_paid',
+      amount_paid: '1120.00',
+      amount_refunded: '120.00',
+      remaining_collectible_balance: '120.00',
+    });
+    expect(store.statusEvents.at(-1)).toMatchObject({
+      fromStatus: 'paid',
+      toStatus: 'partially_paid',
+      reason: 'invoice_refund_recorded',
+    });
+  });
+
+  it('blocks refund amounts greater than the payment refundable amount', async () => {
+    const store = new FakeInvoiceStore();
+    const service = createService(store);
+    const draft = await service.createDraftInvoice(
+      {
+        job_order_ids: [jobOrderId],
+        invoice_date: createdAt,
+      },
+      createSession(),
+    );
+    await service.issueInvoice(draft.invoice.id, {}, createSession());
+    const payment = await service.recordPayment(
+      draft.invoice.id,
+      {
+        amount: '100.00',
+        payment_date: createdAt,
+        payment_method: 'cash',
+      },
+      createSession(['payments.create']),
+    );
+
+    await expect(
+      service.recordRefund(
+        payment.payment.id,
+        {
+          amount: '100.01',
+          reason: 'Invalid refund.',
+          collection_should_continue: true,
+          close_invoice_after_refund: false,
+        },
+        createSession(['invoices.refund']),
+      ),
+    ).rejects.toMatchObject({
+      code: 'refund_amount_exceeds_refundable',
+    });
+
+    expect(store.createdRefunds).toEqual([]);
+  });
+
+  it('closes a fully refunded invoice only when close after refund is explicit', async () => {
+    const store = new FakeInvoiceStore();
+    const service = createService(store);
+    const draft = await service.createDraftInvoice(
+      {
+        job_order_ids: [jobOrderId],
+        invoice_date: createdAt,
+      },
+      createSession(),
+    );
+    await service.issueInvoice(draft.invoice.id, {}, createSession());
+    const payment = await service.recordPayment(
+      draft.invoice.id,
+      {
+        amount: '1120.00',
+        payment_date: createdAt,
+        payment_method: 'bank_transfer',
+      },
+      createSession(['payments.create']),
+    );
+
+    const result = await service.recordRefund(
+      payment.payment.id,
+      {
+        amount: '1120.00',
+        reason: 'Full cancellation refund.',
+        collection_should_continue: false,
+        close_invoice_after_refund: true,
+      },
+      createSession(['invoices.refund']),
+    );
+
+    expect(result.invoice).toMatchObject({
+      status: 'refunded',
+      amount_refunded: '1120.00',
+      remaining_collectible_balance: '0.00',
+    });
+    expect(store.createdInvoice?.refundedAt).toBeInstanceOf(Date);
+  });
+
   it('lists immutable receipts for assigned branches only', async () => {
     const store = new FakeInvoiceStore();
     const service = createService(store);
@@ -817,6 +961,7 @@ class FakeInvoiceStore extends InvoiceStore {
   createdAllocations: readonly InvoiceBillingAllocationRecord[] = [];
   createdPayments: readonly InvoicePaymentRecord[] = [];
   createdReceipts: readonly InvoiceReceiptRecord[] = [];
+  createdRefunds: readonly InvoiceRefundRecord[] = [];
   lastListReceiptInput: ListInvoiceReceiptsInput | null = null;
   createBillingAllocationsResult: readonly InvoiceBillingAllocationRecord[] | null = null;
   invoiceSettings: InvoiceSettingsRecord = {
@@ -1096,6 +1241,83 @@ class FakeInvoiceStore extends InvoiceStore {
           receipt,
           branchId,
         };
+  }
+
+  async lockPaymentWithInvoiceForUpdate(
+    input: LockInvoicePaymentWithInvoiceInput,
+  ): Promise<InvoicePaymentWithInvoiceRecord | null> {
+    const payment = this.createdPayments.find((current) => current.id === input.paymentId);
+
+    if (payment === undefined || this.createdInvoice === null) {
+      return null;
+    }
+
+    return {
+      payment,
+      invoice: this.createdInvoice,
+    };
+  }
+
+  async createRefund(input: CreateInvoiceRefundInput): Promise<InvoiceRefundRecord> {
+    const refund = {
+      id: input.id,
+      tenantId: input.tenantId,
+      invoiceId: input.invoiceId,
+      paymentId: input.paymentId,
+      amount: input.amount,
+      reason: input.reason,
+      collectionShouldContinue: input.collectionShouldContinue,
+      closeInvoiceAfterRefund: input.closeInvoiceAfterRefund,
+      inventoryReversalSelected: input.inventoryReversalSelected,
+      status: 'posted' as const,
+      createdByUserId: input.createdByUserId,
+      createdAt: input.createdAt,
+    };
+
+    this.createdRefunds = [...this.createdRefunds, refund];
+
+    return refund;
+  }
+
+  async updatePaymentRefundableAmount(
+    input: UpdateInvoicePaymentRefundableAmountInput,
+  ): Promise<InvoicePaymentRecord | null> {
+    let updatedPayment: InvoicePaymentRecord | null = null;
+
+    this.createdPayments = this.createdPayments.map((payment) => {
+      if (payment.id !== input.paymentId) {
+        return payment;
+      }
+
+      updatedPayment = {
+        ...payment,
+        refundableAmount: input.refundableAmount,
+      };
+
+      return updatedPayment;
+    });
+
+    return updatedPayment;
+  }
+
+  async updateInvoiceRefundTotals(
+    input: UpdateInvoiceRefundTotalsInput,
+  ): Promise<InvoiceRecord | null> {
+    if (this.createdInvoice === null) {
+      return null;
+    }
+
+    this.createdInvoice = {
+      ...this.createdInvoice,
+      amountRefunded: input.amountRefunded,
+      remainingCollectibleBalance: input.remainingCollectibleBalance,
+      status: input.status,
+      refundedAt: input.refundedAt,
+      updatedAt: input.changedAt,
+      lockVersion: this.createdInvoice.lockVersion + 1,
+    };
+
+    return this.createdInvoice;
   }
 
   async insertStatusEvent(input: InsertInvoiceStatusEventInput): Promise<InvoiceStatusEventRecord> {

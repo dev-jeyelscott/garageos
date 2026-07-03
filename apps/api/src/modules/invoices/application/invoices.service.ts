@@ -24,6 +24,7 @@ import {
 import type {
   CancelInvoiceRequest,
   CreateInvoicePaymentRequest,
+  CreateInvoiceRefundRequest,
   CreateDraftInvoiceRequest,
   IssueInvoiceRequest,
   ListInvoicesQuery,
@@ -43,6 +44,7 @@ import {
   type InvoiceLineType,
   type InvoicePaymentRecord,
   type InvoiceReceiptRecord,
+  type InvoiceRefundRecord,
   type InvoiceRecord,
   type InvoiceStatus,
   type InvoiceStatusEventRecord,
@@ -148,9 +150,28 @@ export interface InvoiceReceiptResponse {
   readonly issued_at: string;
 }
 
+export interface InvoiceRefundResponse {
+  readonly id: string;
+  readonly invoice_id: string;
+  readonly payment_id: string;
+  readonly amount: string;
+  readonly reason: string;
+  readonly collection_should_continue: boolean;
+  readonly close_invoice_after_refund: boolean;
+  readonly inventory_reversal_selected: boolean;
+  readonly status: InvoiceRefundRecord['status'];
+  readonly created_at: string;
+}
+
 export interface InvoicePaymentMutationResponse {
   readonly payment: InvoicePaymentResponse;
   readonly receipt: InvoiceReceiptResponse;
+  readonly invoice: InvoiceResponse;
+}
+
+export interface InvoiceRefundMutationResponse {
+  readonly refund: InvoiceRefundResponse;
+  readonly payment: InvoicePaymentResponse;
   readonly invoice: InvoiceResponse;
 }
 
@@ -841,6 +862,158 @@ export class InvoicesService {
     });
   }
 
+  async recordRefund(
+    paymentId: string,
+    request: CreateInvoiceRefundRequest,
+    session: TenantContextAuthenticatedSession,
+  ): Promise<InvoiceRefundMutationResponse> {
+    const context = resolveTenantContextFromAuthenticatedSession(session);
+    const isShopOwner = await this.invoiceStore.isActiveShopOwner({
+      tenantId: context.tenantId,
+      userId: context.actorUserId,
+    });
+
+    assertTenantLifecycleAccess({
+      context,
+      isShopOwner,
+      action: TENANT_ACCESS_ACTIONS.OPERATIONAL_WRITE,
+    });
+    assertAnyInvoicePermission(context, isShopOwner, ['payments.refund', 'invoices.refund']);
+    assertInventoryReversalDeferred(request);
+
+    return this.transactionRunner.runInTransaction(async (transaction) => {
+      const current = await this.invoiceStore.lockPaymentWithInvoiceForUpdate(
+        {
+          tenantId: context.tenantId,
+          paymentId: paymentId.trim(),
+        },
+        transaction,
+      );
+
+      if (current === null) {
+        throw GarageOsApiException.resourceNotFound('Payment was not found.');
+      }
+
+      assertBranchAccessAllowed({ context, branchId: current.invoice.branchId });
+      assertInvoiceCanReceiveRefund(current.invoice);
+      assertRefundDoesNotExceedRefundable(request.amount, current.payment.refundableAmount);
+
+      const createdAt = new Date();
+      const nextPaymentRefundableAmount = subtractMoney(
+        current.payment.refundableAmount,
+        request.amount,
+      );
+      const nextAmountRefunded = addMoney(current.invoice.amountRefunded, request.amount);
+      const fullyRefunded =
+        parseMoneyCents(nextAmountRefunded) >= parseMoneyCents(current.invoice.amountPaid);
+
+      if (request.close_invoice_after_refund && !fullyRefunded) {
+        throw GarageOsApiException.validationFailed([
+          {
+            field: 'close_invoice_after_refund',
+            code: 'invoice_close_after_refund_requires_full_refund',
+            message:
+              'Invoice can be closed as refunded only after all payment amounts are refunded.',
+          },
+        ]);
+      }
+
+      const refund = await this.invoiceStore.createRefund(
+        {
+          id: randomUUID(),
+          tenantId: context.tenantId,
+          invoiceId: current.invoice.id,
+          paymentId: current.payment.id,
+          amount: request.amount,
+          reason: request.reason,
+          collectionShouldContinue: request.collection_should_continue,
+          closeInvoiceAfterRefund: request.close_invoice_after_refund,
+          inventoryReversalSelected: request.inventory_reversal?.selected ?? false,
+          createdByUserId: context.actorUserId,
+          createdAt,
+        },
+        transaction,
+      );
+      const payment = await this.invoiceStore.updatePaymentRefundableAmount(
+        {
+          tenantId: context.tenantId,
+          paymentId: current.payment.id,
+          refundableAmount: nextPaymentRefundableAmount,
+        },
+        transaction,
+      );
+
+      if (payment === null) {
+        throw GarageOsApiException.versionConflict();
+      }
+
+      const nextInvoiceState = calculateInvoiceRefundState({
+        invoice: current.invoice,
+        refundAmount: request.amount,
+        nextAmountRefunded,
+        closeInvoiceAfterRefund: request.close_invoice_after_refund,
+        changedAt: createdAt,
+      });
+      const updatedInvoice = await this.invoiceStore.updateInvoiceRefundTotals(
+        {
+          tenantId: context.tenantId,
+          invoiceId: current.invoice.id,
+          amountRefunded: nextAmountRefunded,
+          remainingCollectibleBalance: nextInvoiceState.remainingCollectibleBalance,
+          status: nextInvoiceState.status,
+          refundedAt: nextInvoiceState.refundedAt,
+          changedAt: createdAt,
+        },
+        transaction,
+      );
+
+      if (updatedInvoice === null) {
+        throw GarageOsApiException.versionConflict();
+      }
+
+      if (updatedInvoice.status !== current.invoice.status) {
+        await this.invoiceStore.insertStatusEvent(
+          {
+            id: randomUUID(),
+            tenantId: context.tenantId,
+            invoiceId: updatedInvoice.id,
+            fromStatus: current.invoice.status,
+            toStatus: updatedInvoice.status,
+            reason: 'invoice_refund_recorded',
+            createdByUserId: context.actorUserId,
+            createdAt,
+          },
+          transaction,
+        );
+      }
+
+      const response = {
+        refund: toInvoiceRefundResponse(refund),
+        payment: toInvoicePaymentResponse(payment),
+        invoice: toInvoiceResponse(updatedInvoice),
+      };
+
+      await this.auditService.record({
+        tenantId: context.tenantId,
+        actorUserId: context.actorUserId,
+        actorType: AUDIT_ACTOR_TYPES.TENANT_USER,
+        action: 'payments.refunded',
+        entityType: 'refund',
+        entityId: refund.id,
+        branchId: updatedInvoice.branchId,
+        beforeJson: {
+          payment: toInvoicePaymentResponse(current.payment),
+          invoice: toInvoiceResponse(current.invoice),
+        },
+        afterJson: response,
+        reason: request.reason,
+        client: transaction,
+      });
+
+      return response;
+    });
+  }
+
   private async getAuthorizedReceipt(
     receiptId: string,
     session: TenantContextAuthenticatedSession,
@@ -999,6 +1172,35 @@ function assertInvoicePermission(
   if (!isShopOwner && !context.effectivePermissions.includes(permission)) {
     throw GarageOsApiException.forbidden(permission);
   }
+}
+
+function assertAnyInvoicePermission(
+  context: ResolvedTenantContext,
+  isShopOwner: boolean,
+  permissions: readonly string[],
+): void {
+  if (
+    isShopOwner ||
+    permissions.some((permission) => context.effectivePermissions.includes(permission))
+  ) {
+    return;
+  }
+
+  throw GarageOsApiException.forbidden(permissions.join(' or '));
+}
+
+function assertInventoryReversalDeferred(request: CreateInvoiceRefundRequest): void {
+  if (request.inventory_reversal?.selected !== true) {
+    return;
+  }
+
+  throw GarageOsApiException.validationFailed([
+    {
+      field: 'inventory_reversal.selected',
+      code: 'refund_inventory_reversal_not_ready',
+      message: 'Refund inventory reversal is handled by the dedicated inventory reversal workflow.',
+    },
+  ]);
 }
 
 function assertAllRequestedJobOrdersFound(
@@ -1216,6 +1418,42 @@ function assertPaymentDoesNotOverpay(amount: string, remainingCollectibleBalance
   ]);
 }
 
+function assertInvoiceCanReceiveRefund(invoice: InvoiceRecord): void {
+  if (
+    invoice.status === INVOICE_STATUSES.PENDING ||
+    invoice.status === INVOICE_STATUSES.PARTIALLY_PAID ||
+    invoice.status === INVOICE_STATUSES.PAID ||
+    invoice.status === INVOICE_STATUSES.OVERDUE
+  ) {
+    return;
+  }
+
+  throw GarageOsApiException.workflowTransitionBlocked(
+    'Invoice cannot receive refunds in its current status.',
+    [
+      {
+        field: 'payment_id',
+        code: 'invoice_status_not_refundable',
+        message: 'Draft, cancelled, voided, and refunded invoices cannot receive payment refunds.',
+      },
+    ],
+  );
+}
+
+function assertRefundDoesNotExceedRefundable(amount: string, refundableAmount: string): void {
+  if (parseMoneyCents(amount) <= parseMoneyCents(refundableAmount)) {
+    return;
+  }
+
+  throw GarageOsApiException.refundAmountExceedsRefundable([
+    {
+      field: 'amount',
+      code: 'refund_amount_exceeds_payment_refundable_amount',
+      message: 'Refund amount cannot exceed payment refundable amount.',
+    },
+  ]);
+}
+
 function calculateInvoicePaymentStatus(
   invoice: InvoiceRecord,
   remainingCollectibleBalance: string,
@@ -1236,6 +1474,58 @@ function calculateInvoicePaymentStatus(
   }
 
   return INVOICE_STATUSES.PARTIALLY_PAID;
+}
+
+function calculateInvoiceRefundState(input: {
+  readonly invoice: InvoiceRecord;
+  readonly refundAmount: string;
+  readonly nextAmountRefunded: string;
+  readonly closeInvoiceAfterRefund: boolean;
+  readonly changedAt: Date;
+}): {
+  readonly remainingCollectibleBalance: string;
+  readonly status: InvoiceStatus;
+  readonly refundedAt: Date | null;
+} {
+  if (input.closeInvoiceAfterRefund) {
+    return {
+      remainingCollectibleBalance: '0.00',
+      status: INVOICE_STATUSES.REFUNDED,
+      refundedAt: input.changedAt,
+    };
+  }
+
+  const remainingCollectibleBalance = addMoney(
+    input.invoice.remainingCollectibleBalance,
+    input.refundAmount,
+  );
+  const netPaidCents =
+    parseMoneyCents(input.invoice.amountPaid) - parseMoneyCents(input.nextAmountRefunded);
+
+  if (parseMoneyCents(remainingCollectibleBalance) === 0n) {
+    return {
+      remainingCollectibleBalance,
+      status: INVOICE_STATUSES.PAID,
+      refundedAt: null,
+    };
+  }
+
+  if (
+    input.invoice.dueDate !== null &&
+    input.invoice.dueDate.getTime() < input.changedAt.getTime()
+  ) {
+    return {
+      remainingCollectibleBalance,
+      status: INVOICE_STATUSES.OVERDUE,
+      refundedAt: null,
+    };
+  }
+
+  return {
+    remainingCollectibleBalance,
+    status: netPaidCents > 0n ? INVOICE_STATUSES.PARTIALLY_PAID : INVOICE_STATUSES.PENDING,
+    refundedAt: null,
+  };
 }
 
 function assertSingleValue(
@@ -1420,6 +1710,21 @@ function toInvoiceReceiptResponse(receipt: InvoiceReceiptRecord): InvoiceReceipt
     amount: receipt.amount,
     payment_method: receipt.paymentMethod,
     issued_at: receipt.issuedAt.toISOString(),
+  };
+}
+
+function toInvoiceRefundResponse(refund: InvoiceRefundRecord): InvoiceRefundResponse {
+  return {
+    id: refund.id,
+    invoice_id: refund.invoiceId,
+    payment_id: refund.paymentId,
+    amount: refund.amount,
+    reason: refund.reason,
+    collection_should_continue: refund.collectionShouldContinue,
+    close_invoice_after_refund: refund.closeInvoiceAfterRefund,
+    inventory_reversal_selected: refund.inventoryReversalSelected,
+    status: refund.status,
+    created_at: refund.createdAt.toISOString(),
   };
 }
 

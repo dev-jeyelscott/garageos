@@ -248,12 +248,20 @@
 - [x] Implement immutable receipt generation
 - [x] Implement partial and split payments
 - [x] Implement overpayment blocking
-- [ ] Implement refund creation
+- [x] Implement refund creation
 - [ ] Implement refund inventory reversal where applicable
-- [ ] Implement paid-invoice refund status recalculation
+- [x] Implement paid-invoice refund status recalculation
 - [ ] Implement AR balances/report basis
 - [ ] Implement financial immutability protections
 - [ ] Implement cashier mobile flows
+
+M9.10 completion note (2026-07-03):
+
+- Status: completed backend refund creation and invoice status recalculation.
+- Files changed: invoice refund schema/controller/service/store/mappers/tests.
+- Validation: `pnpm.cmd --filter @garageos/api test -- invoices.service` passed; `pnpm.cmd --filter @garageos/api test -- postgres-invoice.store` passed; `pnpm.cmd --filter @garageos/api typecheck` passed; `pnpm.cmd --filter @garageos/api lint` passed; `pnpm.cmd lint` passed.
+- Follow-up: M9.11 refund inventory reversal remains pending and intentionally outside this slice.
+- Next recommended task: M9.11 -- Implement refund/void inventory reversal where documented.
 
 ## Milestone 10 — Expenses, Reminders, Notifications, Integrations
 

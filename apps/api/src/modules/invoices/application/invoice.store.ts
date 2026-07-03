@@ -12,6 +12,7 @@ import type {
   InvoiceLineType,
   InvoicePaymentRecord,
   InvoiceReceiptRecord,
+  InvoiceRefundRecord,
   InvoiceRecord,
   InvoiceStatus,
   InvoiceStatusEventRecord,
@@ -238,6 +239,46 @@ export interface InvoiceReceiptWithBranchRecord {
   readonly branchId: string;
 }
 
+export interface InvoicePaymentWithInvoiceRecord {
+  readonly payment: InvoicePaymentRecord;
+  readonly invoice: InvoiceRecord;
+}
+
+export interface LockInvoicePaymentWithInvoiceInput {
+  readonly tenantId: string;
+  readonly paymentId: string;
+}
+
+export interface CreateInvoiceRefundInput {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly invoiceId: string;
+  readonly paymentId: string;
+  readonly amount: string;
+  readonly reason: string;
+  readonly collectionShouldContinue: boolean;
+  readonly closeInvoiceAfterRefund: boolean;
+  readonly inventoryReversalSelected: boolean;
+  readonly createdByUserId: string;
+  readonly createdAt: Date;
+}
+
+export interface UpdateInvoicePaymentRefundableAmountInput {
+  readonly tenantId: string;
+  readonly paymentId: string;
+  readonly refundableAmount: string;
+}
+
+export interface UpdateInvoiceRefundTotalsInput {
+  readonly tenantId: string;
+  readonly invoiceId: string;
+  readonly amountRefunded: string;
+  readonly remainingCollectibleBalance: string;
+  readonly status: InvoiceStatus;
+  readonly refundedAt: Date | null;
+  readonly changedAt: Date;
+}
+
 export abstract class InvoiceStore {
   abstract isActiveShopOwner(input: {
     readonly tenantId: string;
@@ -342,6 +383,26 @@ export abstract class InvoiceStore {
     input: FindInvoiceReceiptInput,
     client?: DatabaseQueryClient,
   ): Promise<InvoiceReceiptWithBranchRecord | null>;
+
+  abstract lockPaymentWithInvoiceForUpdate(
+    input: LockInvoicePaymentWithInvoiceInput,
+    client: DatabaseQueryClient,
+  ): Promise<InvoicePaymentWithInvoiceRecord | null>;
+
+  abstract createRefund(
+    input: CreateInvoiceRefundInput,
+    client?: DatabaseQueryClient,
+  ): Promise<InvoiceRefundRecord>;
+
+  abstract updatePaymentRefundableAmount(
+    input: UpdateInvoicePaymentRefundableAmountInput,
+    client?: DatabaseQueryClient,
+  ): Promise<InvoicePaymentRecord | null>;
+
+  abstract updateInvoiceRefundTotals(
+    input: UpdateInvoiceRefundTotalsInput,
+    client?: DatabaseQueryClient,
+  ): Promise<InvoiceRecord | null>;
 
   abstract insertStatusEvent(
     input: InsertInvoiceStatusEventInput,

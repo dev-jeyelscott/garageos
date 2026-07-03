@@ -16,10 +16,12 @@ import {
   type CreateInvoiceLinesInput,
   type CreateInvoicePaymentInput,
   type CreateInvoiceReceiptInput,
+  type CreateInvoiceRefundInput,
   type FindInvoiceWithDetailsInput,
   type FindInvoiceReceiptInput,
   type FindLatestInvoiceNumberForDateInput,
   type InvoiceDraftJobOrderLineRecord,
+  type InvoicePaymentWithInvoiceRecord,
   type InvoiceDraftJobOrderRecord,
   type InvoiceReceiptWithBranchRecord,
   type InvoiceSettingsRecord,
@@ -27,10 +29,13 @@ import {
   InvoiceStore,
   type ListInvoicesInput,
   type ListInvoiceReceiptsInput,
+  type LockInvoicePaymentWithInvoiceInput,
   type LockInvoiceWithDetailsForUpdateInput,
   type ReplaceDraftInvoiceLinesInput,
   type UpdateBillingAllocationStatusesInput,
   type UpdateInvoicePaymentTotalsInput,
+  type UpdateInvoicePaymentRefundableAmountInput,
+  type UpdateInvoiceRefundTotalsInput,
   type UpdateInvoiceWorkflowStatusInput,
 } from '../application/invoice.store';
 import type {
@@ -39,6 +44,7 @@ import type {
   InvoiceLineRecord,
   InvoicePaymentRecord,
   InvoiceReceiptRecord,
+  InvoiceRefundRecord,
   InvoiceRecord,
   InvoiceStatusEventRecord,
   InvoiceWithDetailsRecord,
@@ -49,6 +55,7 @@ import {
   type InvoiceLineRow,
   type InvoicePaymentRow,
   type InvoiceReceiptRow,
+  type InvoiceRefundRow,
   type InvoiceRow,
   type InvoiceStatusEventRow,
   mapInvoiceBillingAllocationRow,
@@ -56,6 +63,7 @@ import {
   mapInvoiceLineRow,
   mapInvoicePaymentRow,
   mapInvoiceReceiptRow,
+  mapInvoiceRefundRow,
   mapInvoiceRow,
   mapInvoiceStatusEventRow,
 } from '../application/invoice.mappers';
@@ -66,6 +74,7 @@ import {
   INVOICE_LINE_COLUMNS,
   INVOICE_PAYMENT_COLUMNS,
   INVOICE_RECEIPT_COLUMNS,
+  INVOICE_REFUND_COLUMNS,
   INVOICE_STATUS_EVENT_COLUMNS,
 } from './postgres-invoice.sql';
 
@@ -955,6 +964,153 @@ export class PostgresInvoiceStore extends InvoiceStore {
           receipt: mapInvoiceReceiptRow(row),
           branchId: row.branch_id,
         };
+  }
+
+  async lockPaymentWithInvoiceForUpdate(
+    input: LockInvoicePaymentWithInvoiceInput,
+    client: DatabaseQueryClient,
+  ): Promise<InvoicePaymentWithInvoiceRecord | null> {
+    const paymentResult = await client.query<InvoicePaymentRow>(
+      `
+        select ${INVOICE_PAYMENT_COLUMNS}
+        from payments
+        where tenant_id = $1::uuid
+          and id = $2::uuid
+        for update
+      `,
+      [input.tenantId, input.paymentId],
+    );
+    const paymentRow = paymentResult.rows[0];
+
+    if (paymentRow === undefined) {
+      return null;
+    }
+
+    const payment = mapInvoicePaymentRow(paymentRow);
+    const invoiceResult = await client.query<InvoiceRow>(
+      `
+        select ${INVOICE_COLUMNS}
+        from invoices
+        where tenant_id = $1::uuid
+          and id = $2::uuid
+        for update
+      `,
+      [input.tenantId, payment.invoiceId],
+    );
+    const invoiceRow = invoiceResult.rows[0];
+
+    if (invoiceRow === undefined) {
+      return null;
+    }
+
+    return {
+      payment,
+      invoice: mapInvoiceRow(invoiceRow),
+    };
+  }
+
+  async createRefund(
+    input: CreateInvoiceRefundInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<InvoiceRefundRecord> {
+    const result = await client.query<InvoiceRefundRow>(
+      `
+        insert into refunds (
+          id,
+          tenant_id,
+          invoice_id,
+          payment_id,
+          amount,
+          reason,
+          collection_should_continue,
+          close_invoice_after_refund,
+          inventory_reversal_selected,
+          created_by_user_id,
+          created_at
+        )
+        values (
+          $1::uuid,
+          $2::uuid,
+          $3::uuid,
+          $4::uuid,
+          $5::numeric(14,2),
+          $6,
+          $7,
+          $8,
+          $9,
+          $10::uuid,
+          $11::timestamptz
+        )
+        returning ${INVOICE_REFUND_COLUMNS}
+      `,
+      [
+        input.id,
+        input.tenantId,
+        input.invoiceId,
+        input.paymentId,
+        input.amount,
+        input.reason,
+        input.collectionShouldContinue,
+        input.closeInvoiceAfterRefund,
+        input.inventoryReversalSelected,
+        input.createdByUserId,
+        input.createdAt,
+      ],
+    );
+
+    return mapInvoiceRefundRow(getRequiredRow(result, 'create invoice refund'));
+  }
+
+  async updatePaymentRefundableAmount(
+    input: UpdateInvoicePaymentRefundableAmountInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<InvoicePaymentRecord | null> {
+    const result = await client.query<InvoicePaymentRow>(
+      `
+        update payments
+        set refundable_amount = $3::numeric(14,2)
+        where tenant_id = $1::uuid
+          and id = $2::uuid
+        returning ${INVOICE_PAYMENT_COLUMNS}
+      `,
+      [input.tenantId, input.paymentId, input.refundableAmount],
+    );
+    const row = result.rows[0];
+
+    return row === undefined ? null : mapInvoicePaymentRow(row);
+  }
+
+  async updateInvoiceRefundTotals(
+    input: UpdateInvoiceRefundTotalsInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<InvoiceRecord | null> {
+    const result = await client.query<InvoiceRow>(
+      `
+        update invoices
+        set
+          amount_refunded = $3::numeric(14,2),
+          remaining_collectible_balance = $4::numeric(14,2),
+          status = $5,
+          refunded_at = $6::timestamptz,
+          updated_at = $7::timestamptz,
+          lock_version = lock_version + 1
+        where tenant_id = $1::uuid
+          and id = $2::uuid
+        returning ${INVOICE_COLUMNS}
+      `,
+      [
+        input.tenantId,
+        input.invoiceId,
+        input.amountRefunded,
+        input.remainingCollectibleBalance,
+        input.status,
+        input.refundedAt,
+        input.changedAt,
+      ],
+    );
+    const row = result.rows[0];
+
+    return row === undefined ? null : mapInvoiceRow(row);
   }
 
   async insertStatusEvent(

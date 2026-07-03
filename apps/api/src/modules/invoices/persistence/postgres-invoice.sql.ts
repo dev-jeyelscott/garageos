@@ -104,3 +104,18 @@ export const INVOICE_RECEIPT_COLUMNS = `
   issued_at,
   created_by_user_id
 `;
+
+export const INVOICE_REFUND_COLUMNS = `
+  id,
+  tenant_id,
+  invoice_id,
+  payment_id,
+  amount::text,
+  reason,
+  collection_should_continue,
+  close_invoice_after_refund,
+  inventory_reversal_selected,
+  status,
+  created_by_user_id,
+  created_at
+`;

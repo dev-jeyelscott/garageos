@@ -21,6 +21,8 @@ import {
   type CancelInvoiceRequest,
   createInvoicePaymentRequestSchema,
   type CreateInvoicePaymentRequest,
+  createInvoiceRefundRequestSchema,
+  type CreateInvoiceRefundRequest,
   createDraftInvoiceRequestSchema,
   type CreateDraftInvoiceRequest,
   issueInvoiceRequestSchema,
@@ -249,5 +251,65 @@ export class ReceiptsController {
     const session = await this.authService.getAuthenticatedRouteSession(authorizationHeader);
 
     return this.invoicesService.getReceiptPrintMetadata(receiptId, session.tenantContextSession);
+  }
+}
+
+@UseGuards(AccessTokenAuthGuard)
+@Controller('payments/:payment_id/refunds')
+export class PaymentsRefundsController {
+  constructor(
+    private readonly authService: AuthService,
+    private readonly invoicesService: InvoicesService,
+    private readonly idempotencyService: IdempotencyService,
+  ) {}
+
+  @Post()
+  async recordRefund(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Param('payment_id') paymentId: string,
+    @Body(new ZodValidationPipe(createInvoiceRefundRequestSchema))
+    request: CreateInvoiceRefundRequest,
+  ): ReturnType<InvoicesService['recordRefund']> {
+    const session = await this.authService.getAuthenticatedRouteSession(authorizationHeader);
+    const now = new Date();
+
+    const idempotency = await this.idempotencyService.begin({
+      tenantId: session.tenantContextSession.actor.tenant_id,
+      userId: session.tenantContextSession.actor.user_id,
+      endpoint: 'POST /api/v1/payments/{payment_id}/refunds',
+      idempotencyKey,
+      requestIntent: { payment_id: paymentId, ...request },
+      now,
+      expiresAt: this.invoicesService.getIdempotencyExpiresAt(now),
+    });
+
+    if (idempotency.type === 'replayed') {
+      return idempotency.responseBodyJson as ReturnType<InvoicesService['recordRefund']>;
+    }
+
+    try {
+      const response = await this.invoicesService.recordRefund(
+        paymentId,
+        request,
+        session.tenantContextSession,
+      );
+
+      await this.idempotencyService.completeSucceeded({
+        id: idempotency.record.id,
+        responseStatusCode: 201,
+        responseBodyJson: response,
+        now: new Date(),
+      });
+
+      return response;
+    } catch (error) {
+      await this.idempotencyService.completeFailed({
+        id: idempotency.record.id,
+        now: new Date(),
+      });
+
+      throw error;
+    }
   }
 }

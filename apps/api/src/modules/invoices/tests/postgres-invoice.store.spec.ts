@@ -9,6 +9,8 @@ import {
   type InvoiceBillingAllocationRow,
   type InvoiceJobOrderRow,
   type InvoiceLineRow,
+  type InvoicePaymentRow,
+  type InvoiceRefundRow,
   type InvoiceRow,
   type InvoiceStatusEventRow,
   mapInvoiceLineRow,
@@ -26,6 +28,7 @@ const userId = '55555555-5555-4555-8555-555555555555';
 const jobOrderId = '66666666-6666-4666-8666-666666666666';
 const invoiceLineId = '77777777-7777-4777-8777-777777777777';
 const jobOrderLineId = '88888888-8888-4888-8888-888888888888';
+const paymentId = '99999999-9999-4999-8999-999999999999';
 const createdAt = new Date('2026-07-02T01:00:00.000Z');
 const invoiceDate = new Date('2026-07-02T00:00:00.000Z');
 
@@ -325,6 +328,115 @@ describe('PostgresInvoiceStore', () => {
     expect(sql).toContain('for update');
   });
 
+  it('locks payment and invoice rows before refund checks', async () => {
+    const client = new RecordingDatabaseClient([
+      [createPaymentRow()],
+      [
+        createInvoiceRow({
+          status: 'paid',
+          amount_paid: '1120.00',
+          remaining_collectible_balance: '0.00',
+        }),
+      ],
+    ]);
+    const store = new PostgresInvoiceStore(client);
+
+    const result = await store.lockPaymentWithInvoiceForUpdate({ tenantId, paymentId }, client);
+
+    expect(normalizeSql(client.queries[0]?.sql ?? '')).toContain('from payments');
+    expect(normalizeSql(client.queries[0]?.sql ?? '')).toContain('for update');
+    expect(normalizeSql(client.queries[1]?.sql ?? '')).toContain('from invoices');
+    expect(normalizeSql(client.queries[1]?.sql ?? '')).toContain('for update');
+    expect(client.queries[1]?.values).toEqual([tenantId, invoiceId]);
+    expect(result?.payment.id).toBe(paymentId);
+    expect(result?.invoice.status).toBe('paid');
+  });
+
+  it('creates posted refund records with documented correction fields', async () => {
+    const client = new RecordingDatabaseClient([[createRefundRow()]]);
+    const store = new PostgresInvoiceStore(client);
+
+    const result = await store.createRefund({
+      id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      tenantId,
+      invoiceId,
+      paymentId,
+      amount: '120.00',
+      reason: 'Customer returned unused part.',
+      collectionShouldContinue: true,
+      closeInvoiceAfterRefund: false,
+      inventoryReversalSelected: false,
+      createdByUserId: userId,
+      createdAt,
+    });
+
+    expect(normalizeSql(client.queries[0]?.sql ?? '')).toContain('insert into refunds');
+    expect(client.queries[0]?.values).toEqual([
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      tenantId,
+      invoiceId,
+      paymentId,
+      '120.00',
+      'Customer returned unused part.',
+      true,
+      false,
+      false,
+      userId,
+      createdAt,
+    ]);
+    expect(result).toMatchObject({
+      invoiceId,
+      paymentId,
+      amount: '120.00',
+      status: 'posted',
+    });
+  });
+
+  it('updates payment refundable amount and invoice refund totals tenant-scoped', async () => {
+    const client = new RecordingDatabaseClient([
+      [createPaymentRow({ refundable_amount: '1000.00' })],
+      [
+        createInvoiceRow({
+          status: 'partially_paid',
+          amount_paid: '1120.00',
+          amount_refunded: '120.00',
+          remaining_collectible_balance: '120.00',
+        }),
+      ],
+    ]);
+    const store = new PostgresInvoiceStore(client);
+
+    const payment = await store.updatePaymentRefundableAmount({
+      tenantId,
+      paymentId,
+      refundableAmount: '1000.00',
+    });
+    const invoice = await store.updateInvoiceRefundTotals({
+      tenantId,
+      invoiceId,
+      amountRefunded: '120.00',
+      remainingCollectibleBalance: '120.00',
+      status: 'partially_paid',
+      refundedAt: null,
+      changedAt: createdAt,
+    });
+
+    expect(normalizeSql(client.queries[0]?.sql ?? '')).toContain('update payments');
+    expect(client.queries[0]?.values).toEqual([tenantId, paymentId, '1000.00']);
+    expect(normalizeSql(client.queries[1]?.sql ?? '')).toContain('update invoices');
+    expect(client.queries[1]?.values).toEqual([
+      tenantId,
+      invoiceId,
+      '120.00',
+      '120.00',
+      'partially_paid',
+      null,
+      createdAt,
+    ]);
+    expect(payment?.refundableAmount).toBe('1000.00');
+    expect(invoice?.amountRefunded).toBe('120.00');
+  });
+
   it('inserts invoice status events with required actor and tenant scope', async () => {
     const client = new RecordingDatabaseClient([[createStatusEventRow()]]);
     const store = new PostgresInvoiceStore(client);
@@ -555,6 +667,41 @@ function createStatusEventRow(
     from_status: null,
     to_status: 'draft',
     reason: 'invoice_created',
+    created_by_user_id: userId,
+    created_at: createdAt.toISOString(),
+    ...overrides,
+  };
+}
+
+function createPaymentRow(overrides: Partial<InvoicePaymentRow> = {}): InvoicePaymentRow {
+  return {
+    id: paymentId,
+    tenant_id: tenantId,
+    invoice_id: invoiceId,
+    amount: '1120.00',
+    refundable_amount: '1120.00',
+    payment_date: invoiceDate.toISOString(),
+    payment_method: 'cash',
+    reference_number: null,
+    notes: null,
+    created_by_user_id: userId,
+    created_at: createdAt.toISOString(),
+    ...overrides,
+  };
+}
+
+function createRefundRow(overrides: Partial<InvoiceRefundRow> = {}): InvoiceRefundRow {
+  return {
+    id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    tenant_id: tenantId,
+    invoice_id: invoiceId,
+    payment_id: paymentId,
+    amount: '120.00',
+    reason: 'Customer returned unused part.',
+    collection_should_continue: true,
+    close_invoice_after_refund: false,
+    inventory_reversal_selected: false,
+    status: 'posted',
     created_by_user_id: userId,
     created_at: createdAt.toISOString(),
     ...overrides,

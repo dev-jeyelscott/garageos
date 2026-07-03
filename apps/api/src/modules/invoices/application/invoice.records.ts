@@ -177,6 +177,21 @@ export interface InvoiceReceiptRecord {
   readonly createdByUserId: string | null;
 }
 
+export interface InvoiceRefundRecord {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly invoiceId: string;
+  readonly paymentId: string;
+  readonly amount: string;
+  readonly reason: string;
+  readonly collectionShouldContinue: boolean;
+  readonly closeInvoiceAfterRefund: boolean;
+  readonly inventoryReversalSelected: boolean;
+  readonly status: 'posted';
+  readonly createdByUserId: string | null;
+  readonly createdAt: Date;
+}
+
 export interface InvoiceWithDetailsRecord {
   readonly invoice: InvoiceRecord;
   readonly jobOrders: readonly InvoiceJobOrderRecord[];
