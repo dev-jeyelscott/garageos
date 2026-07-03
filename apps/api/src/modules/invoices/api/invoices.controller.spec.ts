@@ -58,6 +58,37 @@ const DRAFT_RESPONSE = {
   lines: [],
 };
 
+const PAYMENT_RESPONSE = {
+  payment: {
+    id: PAYMENT_ID,
+    invoice_id: INVOICE_ID,
+    amount: '560.00',
+    refundable_amount: '560.00',
+    payment_date: new Date('2026-07-03T00:00:00.000Z'),
+    payment_method: 'cash' as const,
+    reference_number: null,
+    notes: 'Partial payment',
+    created_at: NOW.toISOString(),
+  },
+  receipt: {
+    id: '77777777-7777-4777-8777-777777777777',
+    invoice_id: INVOICE_ID,
+    payment_id: PAYMENT_ID,
+    receipt_number: 'RCT-20260703-000001',
+    amount: '560.00',
+    refundable_amount: '560.00',
+    payment_method: 'cash' as const,
+    issued_at: NOW.toISOString(),
+  },
+  invoice: {
+    ...DRAFT_RESPONSE.invoice,
+    status: 'partially_paid' as const,
+    amount_paid: '560.00',
+    remaining_collectible_balance: '560.00',
+    updated_at: NOW.toISOString(),
+  },
+};
+
 const REFUND_RESPONSE = {
   refund: {
     id: REFUND_ID,
@@ -76,7 +107,7 @@ const REFUND_RESPONSE = {
     invoice_id: INVOICE_ID,
     amount: '1120.00',
     refundable_amount: '1000.00',
-    payment_date: '2026-07-03',
+    payment_date: new Date('2026-07-03T00:00:00.000Z'),
     payment_method: 'cash' as const,
     reference_number: null,
     notes: null,
@@ -151,6 +182,87 @@ describe('InvoicesController idempotency', () => {
     } finally {
       warnSpy.mockRestore();
     }
+  });
+});
+
+describe('InvoicesController payment idempotency', () => {
+  it('wraps payment creation in the documented idempotency scope', async () => {
+    const { invoicesController, invoicesService, idempotencyService } = createControllers();
+    const httpResponse = createHttpResponse();
+    const request = {
+      amount: '560.00',
+      payment_date: new Date('2026-07-03T00:00:00.000Z'),
+      payment_method: 'cash' as const,
+      notes: 'Partial payment',
+    };
+
+    const response = await invoicesController.recordPayment(
+      'Bearer token',
+      'payment-key',
+      INVOICE_ID,
+      request,
+      httpResponse,
+    );
+
+    expect(response).toEqual(PAYMENT_RESPONSE);
+    expect(httpResponse.status).toHaveBeenCalledWith(201);
+    expect(idempotencyService.begin).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: TENANT_ID,
+        userId: USER_ID,
+        endpoint: 'POST /api/v1/invoices/{invoice_id}/payments',
+        idempotencyKey: 'payment-key',
+        requestIntent: { invoice_id: INVOICE_ID, ...request },
+      }),
+    );
+    expect(invoicesService.recordPayment).toHaveBeenCalledWith(
+      INVOICE_ID,
+      request,
+      expect.any(Object),
+    );
+    expect(idempotencyService.completeSucceeded).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: IDEMPOTENCY_RECORD.id,
+        responseStatusCode: 201,
+        responseBodyJson: PAYMENT_RESPONSE,
+      }),
+    );
+  });
+
+  it('restores the recorded HTTP status when replaying a payment response', async () => {
+    const { invoicesController, invoicesService, idempotencyService } = createControllers();
+    const httpResponse = createHttpResponse();
+    const request = {
+      amount: '560.00',
+      payment_date: new Date('2026-07-03T00:00:00.000Z'),
+      payment_method: 'cash' as const,
+      notes: 'Partial payment',
+    };
+
+    vi.mocked(idempotencyService.begin).mockResolvedValueOnce({
+      type: 'replayed',
+      record: {
+        ...IDEMPOTENCY_RECORD,
+        status: 'succeeded',
+        responseStatusCode: 201,
+        responseBodyJson: PAYMENT_RESPONSE,
+      },
+      responseStatusCode: 201,
+      responseBodyJson: PAYMENT_RESPONSE,
+    });
+
+    const response = await invoicesController.recordPayment(
+      'Bearer token',
+      'payment-key',
+      INVOICE_ID,
+      request,
+      httpResponse,
+    );
+
+    expect(response).toEqual(PAYMENT_RESPONSE);
+    expect(httpResponse.status).toHaveBeenCalledWith(201);
+    expect(invoicesService.recordPayment).not.toHaveBeenCalled();
+    expect(idempotencyService.completeSucceeded).not.toHaveBeenCalled();
   });
 });
 
@@ -278,6 +390,7 @@ function createControllers(): {
   const invoicesService = {
     getIdempotencyExpiresAt: vi.fn((now: Date) => new Date(now.getTime() + 24 * 60 * 60 * 1000)),
     createDraftInvoice: vi.fn(async () => DRAFT_RESPONSE),
+    recordPayment: vi.fn(async () => PAYMENT_RESPONSE),
     recordRefund: vi.fn(async () => REFUND_RESPONSE),
   } as unknown as InvoicesService;
 

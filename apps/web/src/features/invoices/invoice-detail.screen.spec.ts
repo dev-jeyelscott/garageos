@@ -3,8 +3,10 @@ import { describe, expect, it } from 'vitest';
 import type { AuthSessionResponseData } from '../auth/types/auth-session';
 
 import {
+  buildInvoicePaymentInput,
   buildInvoiceRefundInput,
   canEnterInvoiceCancelReason,
+  getInvoicePaymentBlockedReason,
   getInvoiceRefundBlockedReason,
   getInvoiceRefundFormBlockedReason,
   getInvoiceWorkflowBlockedReason,
@@ -115,6 +117,10 @@ const refundSession = buildSession({
   permissions: ['payments.refund'],
 });
 
+const paymentSession = buildSession({
+  permissions: ['payments.create', 'receipts.read'],
+});
+
 describe('canEnterInvoiceCancelReason', () => {
   it.each<InvoiceStatus>(['draft', 'pending'])(
     'allows cancel reason entry for %s invoices',
@@ -214,6 +220,114 @@ describe('invoice workflow action guards', () => {
         reason: 'Fully refunded correction.',
       }),
     ).toBeNull();
+  });
+});
+
+describe('invoice payment guards', () => {
+  it('allows partial payments under the remaining collectible balance', () => {
+    expect(
+      getInvoicePaymentBlockedReason({
+        invoice: buildInvoice({
+          status: 'pending',
+          amount_paid: '0.00',
+          remaining_collectible_balance: '1000.00',
+        }),
+        session: paymentSession,
+        isOffline: false,
+        writeActionsAllowed: true,
+        amount: '250.00',
+        paymentDate: '2026-07-04',
+      }),
+    ).toBeNull();
+  });
+
+  it('requires receipt read permission because successful payments generate receipts', () => {
+    expect(
+      getInvoicePaymentBlockedReason({
+        invoice: buildInvoice({
+          status: 'pending',
+          amount_paid: '0.00',
+          remaining_collectible_balance: '1000.00',
+        }),
+        session: buildSession({ permissions: ['payments.create'] }),
+        isOffline: false,
+        writeActionsAllowed: true,
+        amount: '250.00',
+        paymentDate: '2026-07-04',
+      }),
+    ).toBe('Your tenant session does not include receipts.read permission.');
+  });
+
+  it('blocks payment recording while offline', () => {
+    expect(
+      getInvoicePaymentBlockedReason({
+        invoice: buildInvoice({
+          status: 'pending',
+          amount_paid: '0.00',
+          remaining_collectible_balance: '1000.00',
+        }),
+        session: paymentSession,
+        isOffline: true,
+        writeActionsAllowed: false,
+        amount: '250.00',
+        paymentDate: '2026-07-04',
+      }),
+    ).toBe('Reconnect before recording payments. Offline mode is read-only.');
+  });
+
+  it('blocks payment recording for read-only tenant sessions', () => {
+    expect(
+      getInvoicePaymentBlockedReason({
+        invoice: buildInvoice({
+          status: 'pending',
+          amount_paid: '0.00',
+          remaining_collectible_balance: '1000.00',
+        }),
+        session: buildSession({
+          permissions: ['payments.create', 'receipts.read'],
+          readOnly: true,
+        }),
+        isOffline: false,
+        writeActionsAllowed: false,
+        amount: '250.00',
+        paymentDate: '2026-07-04',
+      }),
+    ).toBe('This tenant is read-only. Payment writes are blocked.');
+  });
+
+  it('blocks overpayment above the remaining collectible balance', () => {
+    expect(
+      getInvoicePaymentBlockedReason({
+        invoice: buildInvoice({
+          status: 'partially_paid',
+          amount_paid: '750.00',
+          remaining_collectible_balance: '250.00',
+        }),
+        session: paymentSession,
+        isOffline: false,
+        writeActionsAllowed: true,
+        amount: '251.00',
+        paymentDate: '2026-07-04',
+      }),
+    ).toBe('Payment amount cannot exceed the remaining collectible balance.');
+  });
+
+  it('builds split payment input with normalized amount and trimmed optional fields', () => {
+    expect(
+      buildInvoicePaymentInput({
+        amount: '250',
+        paymentDate: '2026-07-04',
+        paymentMethod: 'gcash',
+        referenceNumber: '  GCash-REF-001  ',
+        notes: '  partial payment  ',
+      }),
+    ).toEqual({
+      amount: '250.00',
+      payment_date: '2026-07-04',
+      payment_method: 'gcash',
+      reference_number: 'GCash-REF-001',
+      notes: 'partial payment',
+    });
   });
 });
 
