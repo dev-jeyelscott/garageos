@@ -38,7 +38,6 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 
 ## Current Focus
 
-- [ ] **In Progress** — M9.16 — Implement refund and void frontend flows
 - [ ] **Backlog** — M9.17 — Add Milestone 9 E2E, mobile, permission, and blocked-state coverage
 - [ ] **Backlog** — M9.18 — Final Milestone 9 regression, documentation, and handoff
 
