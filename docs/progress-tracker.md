@@ -1,350 +1,384 @@
 # GarageOS Progress Tracker
 
-## Milestone 0 — Project Foundation and Engineering Decisions
+**Last Notion alignment:** 2026-07-03  
+**Source of truth:** Notion database `GarageOS — Full Build Task Tracker`  
+**Repository path:** `docs/progress-tracker.md`
 
-- [x] Create approved documentation baseline
-- [x] Create source-aligned build roadmap
-- [x] Create tech stack and architecture record package
-- [x] Initialize repository and workspace
-- [x] Finalize monorepo structure
-- [x] Create app packages: `web`, `api`, `worker`, `scheduler`
-- [x] Create shared packages: `shared`, `api-client`, `config`, `test-utils`
-- [x] Create database package: `db`
-- [x] Configure root package scripts
-- [x] Configure TypeScript baseline
-- [x] Configure local Docker Compose
-- [x] Add safe `.env.example`
-- [x] Create CI baseline
-- [ ] Verify ADR/runbook/API/testing docs directory coverage in repository
-- [ ] Verify Definition of Done artifact in repository
-- [ ] Verify traceability template in repository
-- [ ] Verify UX wireframe backlog in repository
-- [ ] Verify QA automation structure beyond package test scripts
+This tracker is a repository snapshot of the current Notion cards. Notion remains the operational source for live card status; this file should be refreshed whenever Notion card statuses change materially.
 
-## Milestone 1 — Database Foundation and Core Migrations
+## Status Summary
 
-- [x] Create database schema source document
-- [x] Finalize migration tool choice
-- [x] Add migration scripts
-- [x] Add schema validation script
-- [x] Add seed script
-- [x] Add PostgreSQL migration gate in CI
-- [x] Add platform, tenant, and subscription schema
-- [x] Add user, auth, session, and token schema
-- [x] Add roles, permissions, role permissions, user roles, and branch assignments
-- [x] Add shop profile, branches, and tenant settings schema
-- [x] Add customer and motorcycle schema
-- [x] Add service, estimate, job order, mechanic session, and status history schema
-- [x] Add product, category, stock balance, inventory ledger, FIFO, reservation, and allocation schema
-- [x] Add adjustment, transfer, supplier, purchase, return, payment, credit, and AP schema
-- [x] Add invoice, billing allocation, payment, receipt, refund, and AR schema
-- [x] Add expenses, reminders, notifications, files, exports, audit logs, idempotency keys, background jobs, and reporting/search scaffolds
-- [x] Add constraints, indexes, foreign keys, precision checks, and document-number uniqueness
-- [x] Add seed data for plans, plan limits, and permissions
-- [x] Add schema drift/count validation
-- [ ] Verify protected Shop Owner role seed behavior separately
-- [ ] Verify database fixture factory coverage
+| Status                  |   Cards |
+| ----------------------- | ------: |
+| Done                    |     173 |
+| In Progress             |       1 |
+| Backlog                 |     111 |
+| **Total tracked cards** | **285** |
 
-## Milestone 2 — API Foundation, Auth, Tenant Context, RBAC
+## Milestone Status Summary
 
-- [x] Create API contract source document
-- [x] Create REST API skeleton under `/api/v1`
-- [x] Implement response envelope interceptor
-- [x] Implement error envelope filter
-- [x] Add request context middleware
-- [x] Implement auth module
-- [x] Implement owner signup route
-- [x] Implement login route
-- [x] Implement refresh route
-- [x] Implement logout and logout-all routes
-- [x] Implement email verification routes
-- [x] Implement forgot/reset/change password routes
-- [x] Implement current session route
-- [x] Implement password hashing and token hashing services
-- [x] Implement access token signing
-- [x] Implement refresh-token cookie transport
-- [x] Implement rate-limit providers
-- [x] Implement tenant context route guard
-- [x] Implement tenant status access route guard
-- [x] Implement permission access route guard
-- [x] Implement branch access route guard
-- [x] Implement Zod validation pipeline
-- [x] Implement idempotency service
-- [x] Implement shared transaction runner
-- [x] Implement shared audit service
-- [x] Add auth/session API tests where present
-- [ ] Verify full auth UI screen coverage
+| Milestone    | Status Summary                    | Notes                    |
+| ------------ | --------------------------------- | ------------------------ |
+| M0           | 15 Done                           | Complete                 |
+| M1           | 18 Done                           | Complete                 |
+| M2           | 21 Done                           | Complete                 |
+| M3           | 19 Done                           | Complete                 |
+| M4           | 15 Done                           | Complete                 |
+| M5           | 16 Done                           | Complete                 |
+| M6           | 16 Done                           | Complete                 |
+| M7           | 16 Done                           | Complete                 |
+| M8           | 14 Done                           | Complete                 |
+| M9           | 22 Done, 1 In Progress, 2 Backlog | Current active milestone |
+| M10          | 16 Backlog                        | Not started              |
+| M11          | 18 Backlog                        | Not started              |
+| M12          | 16 Backlog                        | Not started              |
+| M13          | 19 Backlog                        | Not started              |
+| M14          | 40 Backlog                        | Not started              |
+| No milestone | 1 Done                            | Review record            |
 
-## Milestone 3 — Tenant Lifecycle, Onboarding, Platform Admin
+## Current Focus
 
-- [x] Define tenant lifecycle and platform admin source requirements
-- [x] Implement platform tenant module
-- [x] Implement platform tenant list endpoint
-- [x] Implement platform tenant detail endpoint
-- [x] Implement platform tenant creation endpoint
-- [x] Implement subscription update endpoint
-- [x] Implement read-only override endpoint
-- [x] Implement suspension endpoint
-- [x] Implement support access session start/end endpoints
-- [x] Implement tenant export queue endpoint
-- [x] Implement tenant deletion job queue endpoint
-- [x] Implement platform audit log list endpoint
-- [x] Implement tenant lifecycle evaluation service
-- [x] Implement tenant lifecycle command service
-- [x] Add idempotency to platform critical writes
-- [x] Keep renewal/payment behavior external to GarageOS
-- [x] Implement tenant onboarding completion UI workflow
-- [ ] Implement or verify `/platform/tenants` UI
-- [ ] Implement or verify `/platform/tenants/{tenant_id}` UI
-- [ ] Implement or verify `/platform/tenants/new` UI
-- [ ] Implement or verify subscription override UI
-- [ ] Implement or verify support access UI
-- [ ] Implement or verify tenant lifecycle worker scheduling
+- [ ] **In Progress** — M9.16 — Implement refund and void frontend flows
+- [ ] **Backlog** — M9.17 — Add Milestone 9 E2E, mobile, permission, and blocked-state coverage
+- [ ] **Backlog** — M9.18 — Final Milestone 9 regression, documentation, and handoff
 
-## Milestone 4 — Core Master Data
+---
 
-- [x] Implement branch list endpoint
-- [x] Implement branch detail endpoint
-- [x] Implement branch create endpoint
-- [x] Implement branch update endpoint
-- [x] Implement branch deactivate endpoint
-- [x] Implement branch reactivate endpoint
-- [x] Enforce branch idempotency for critical branch writes
-- [x] Implement employee list endpoint
-- [x] Implement employee create endpoint
-- [x] Implement employee invitation list/create/revoke endpoints
-- [x] Implement employee detail/update endpoints
-- [x] Implement employee role assignment endpoint
-- [x] Implement employee branch assignment endpoint
-- [x] Implement employee deactivate/reactivate endpoints
-- [x] Implement role list endpoint
-- [x] Implement permission list endpoint
-- [x] Implement role create/detail/update/deactivate endpoints
-- [x] Implement customer list/search endpoint
-- [x] Implement customer create endpoint
-- [x] Implement customer detail endpoint
-- [x] Implement customer update endpoint
-- [x] Implement motorcycle list/search endpoint
-- [x] Implement motorcycle create endpoint
-- [x] Implement motorcycle detail endpoint
-- [x] Implement motorcycle update endpoint
-- [x] Implement service list endpoint
-- [x] Implement service create/detail/update endpoints
-- [x] Implement service deactivate/reactivate endpoints
-- [x] Implement product category list/create/detail/update/deactivate/reactivate endpoints
-- [x] Implement product list/create/detail/update/deactivate/reactivate endpoints
-- [ ] Implement customer merge endpoint
-- [ ] Implement customer soft-delete/restore endpoints
-- [ ] Implement motorcycle soft-delete/restore endpoints
-- [ ] Implement full mobile screens for branches, employees, roles, customers, motorcycles, and services
-- [ ] Replace planned tenant route scaffolds with real tenant UIs where still planned
+## M0 — Project Foundation and Engineering Decisions
 
-## Milestone 5 — Service Operations
+- [x] **Done** — M0.01 — Initialize repository and workspace
+- [x] **Done** — M0.02 — Choose final monorepo structure
+- [x] **Done** — M0.03 — Create app packages web, api, worker, scheduler
+- [x] **Done** — M0.04 — Create shared packages shared, api-client, config, test-utils
+- [x] **Done** — M0.05 — Create docs directories for ADRs, runbooks, API, and testing
+- [x] **Done** — M0.06 — Configure TypeScript, linting, formatting, commit hooks, and test runner
+- [x] **Done** — M0.07 — Configure local Docker Compose for PostgreSQL and local service execution
+- [x] **Done** — M0.08 — Add env example with no real secrets
+- [x] **Done** — M0.09 — Create CI pipeline for lint, typecheck, unit tests, dependency scan, and migration placeholder
+- [x] **Done** — M0.10 — Record foundational ADRs
+- [x] **Done** — M0.11 — Create Definition of Done
+- [x] **Done** — M0.12 — Create feature-ticket traceability template
+- [x] **Done** — M0.13 — Create initial UX wireframe backlog from UX screen map
+- [x] **Done** — M0.14 — Create baseline QA automation structure
+- [x] **Done** — M0 — Project Foundation and Engineering Decisions
 
-- [x] Implement estimate list endpoint
-- [x] Implement estimate create endpoint
-- [x] Implement estimate detail endpoint
-- [x] Implement estimate update endpoint
-- [x] Implement estimate present endpoint
-- [x] Implement estimate approve endpoint
-- [x] Implement estimate convert endpoint
-- [x] Implement job order list endpoint
-- [x] Implement job order create endpoint
-- [x] Implement job order detail endpoint
-- [x] Implement job order update endpoint
-- [x] Implement job order status events endpoint
-- [x] Implement job order audit events endpoint
-- [x] Implement job attachment placeholder list/create endpoints
-- [x] Implement mechanic assignment endpoint
-- [x] Implement service note endpoint
-- [x] Implement job order status transition endpoint
-- [x] Implement job order completion endpoint
-- [x] Implement job order service line endpoint
-- [x] Implement job order part line endpoint
-- [x] Implement job order line update, complete, and remove endpoints
-- [x] Implement mechanic session module
-- [ ] Implement estimate cancel endpoint if not present elsewhere
-- [ ] Implement estimate expiration worker/action if not present elsewhere
-- [ ] Implement full mobile service intake screens
-- [ ] Implement full mechanic assigned-jobs UI
+## M1 — Database Foundation and Core Migrations
 
-## Milestone 6 — Inventory Foundation and FIFO
+- [x] **Done** — M1.01 — Finalize migration tool choice
+- [x] **Done** — M1.02 — Add PostgreSQL extensions
+- [x] **Done** — M1.03 — Define enum/check strategy
+- [x] **Done** — M1.04 — Create platform, tenant, and subscription schema
+- [x] **Done** — M1.05 — Create user, auth, session, and token schema
+- [x] **Done** — M1.06 — Create RBAC and branch assignment schema
+- [x] **Done** — M1.07 — Create shop profile, branches, and tenant settings tables
+- [x] **Done** — M1.08 — Create customer and motorcycle tables
+- [x] **Done** — M1.09 — Create service, estimate, job order, mechanic session, and status history tables
+- [x] **Done** — M1.10 — Create product, inventory ledger, FIFO, reservation, and allocation tables
+- [x] **Done** — M1.11 — Create adjustment, transfer, supplier, purchase, return, AP, payment, and credit tables
+- [x] **Done** — M1.12 — Create invoice, billing allocation, payment, receipt, refund, and AR tables
+- [x] **Done** — M1.13 — Create expenses, reminders, notifications, outbox, files, exports, audit, idempotency, jobs, and report scaffolds
+- [x] **Done** — M1.14 — Add constraints, indexes, document-number uniqueness, and foreign keys
+- [x] **Done** — M1.15 — Add seed data for plans, limits, permissions, and Shop Owner protections
+- [x] **Done** — M1.16 — Add database fixture factory and migration tests
+- [x] **Done** — M1.17 — Add schema drift checklist
+- [x] **Done** — M1 — Database Foundation and Core Migrations
 
-- [x] Implement inventory module
-- [x] Implement product and category management backend
-- [x] Implement branch stock balances service
-- [x] Implement stock balance read endpoint
-- [x] Implement immutable inventory ledger service
-- [x] Implement inventory ledger read endpoint
-- [x] Implement FIFO layer service
-- [x] Implement FIFO layer read endpoint
-- [x] Implement FIFO consumption service
-- [x] Implement inventory reservation service
-- [x] Implement inventory read service
-- [x] Implement product stock read endpoint
-- [x] Implement available stock calculation support
-- [x] Implement inventory reconciliation service
-- [x] Implement low-stock alert service
-- [x] Implement low-stock alert read endpoint
-- [x] Add schema validation for stock balances, ledger, FIFO layers, and low-stock alerts
-- [x] Add FIFO/concurrency coverage in repo history
-- [x] Add inventory stock balance UI foundation
-- [ ] Replace inventory planned-route scaffolds with full inventory workflow UIs
+## M2 — API Foundation, Auth, Tenant Context, RBAC
 
-## Milestone 7 — Inventory Workflows
+- [x] **Done** — M2.01 — Create REST API skeleton under api/v1
+- [x] **Done** — M2.02 — Implement response and error envelopes
+- [x] **Done** — M2.03 — Add request ID and correlation ID middleware
+- [x] **Done** — M2.04 — Implement auth routes
+- [x] **Done** — M2.05 — Implement password hashing and token hashing
+- [x] **Done** — M2.06 — Implement access token expiration and refresh token rotation
+- [x] **Done** — M2.07 — Implement remember-me session rules
+- [x] **Done** — M2.08 — Implement login and password-reset rate limits
+- [x] **Done** — M2.09 — Implement tenant context resolution from authenticated session
+- [x] **Done** — M2.10 — Implement tenant status/subscription guard
+- [x] **Done** — M2.11 — Implement platform admin and support access context
+- [x] **Done** — M2.12 — Implement permission guard
+- [x] **Done** — M2.13 — Implement branch access guard
+- [x] **Done** — M2.14 — Implement validation pipeline
+- [x] **Done** — M2.15 — Implement idempotency service for critical writes
+- [x] **Done** — M2.16 — Implement optimistic locking convention
+- [x] **Done** — M2.17 — Implement shared transaction wrapper
+- [x] **Done** — M2.18 — Implement shared audit service
+- [x] **Done** — M2.19 — Implement auth/session UI screens
+- [x] **Done** — M2.20 — Add contract, integration, and security tests
+- [x] **Done** — M2 — API Foundation, Auth, Tenant Context, RBAC
 
-- [x] Implement inventory adjustment draft/create workflow
-- [x] Implement inventory adjustment submit workflow
-- [x] Implement inventory adjustment approve workflow
-- [x] Implement inventory adjustment reject workflow
-- [x] Implement inventory adjustment cancel workflow
-- [x] Implement inventory adjustment post workflow
-- [x] Implement positive adjustment FIFO effects
-- [x] Implement negative adjustment FIFO effects
-- [x] Implement force adjustment workflow
-- [x] Implement transfer draft/create workflow
-- [x] Implement transfer submit workflow
-- [x] Implement transfer send workflow
-- [x] Implement transfer receive workflow
-- [x] Implement transfer variance handling
-- [x] Implement transfer cancel workflow
-- [x] Implement transfer reservation and release behavior
-- [x] Implement low-stock alerts
-- [x] Implement branch deactivation stock blockers
-- [x] Implement inventory audit and status history coverage
-- [ ] Implement full inventory adjustment UI
-- [ ] Implement full inventory transfer UI
+## M3 — Tenant Lifecycle, Onboarding, Platform Admin
 
-## Milestone 8 — Purchasing, Suppliers, and AP
+- [x] **Done** — M3.01 — Implement platform-created tenant flow
+- [x] **Done** — M3.02 — Implement owner signup tenant flow
+- [x] **Done** — M3.03 — Validate configured default plan and default subscription duration
+- [x] **Done** — M3.04 — Implement onboarding state machine
+- [x] **Done** — M3.05 — Implement shop profile setup
+- [x] **Done** — M3.06 — Implement first branch setup
+- [x] **Done** — M3.07 — Implement tax/localization setup
+- [x] **Done** — M3.08 — Implement invoice prefix setup
+- [x] **Done** — M3.09 — Implement onboarding completion gate
+- [x] **Done** — M3.10 — Implement subscription status calculation
+- [x] **Done** — M3.11 — Implement grace/read-only/suspended/pending-deletion/deleted gates
+- [x] **Done** — M3.12 — Implement plan limit and tenant override service
+- [x] **Done** — M3.13 — Implement platform tenant management screens
+- [x] **Done** — M3.14 — Implement subscription override UI/API
+- [x] **Done** — M3.15 — Implement support access session flow
+- [x] **Done** — M3.16 — Implement tenant lifecycle worker
+- [x] **Done** — M3.17 — Implement tenant export/deletion job placeholders
+- [x] **Done** — M3.18 — Implement renewal request/instructions flow without payment collection
+- [x] **Done** — M3 — Tenant Lifecycle, Onboarding, Platform Admin
 
-- [x] Implement supplier list/search UI
-- [x] Implement supplier create/edit/status actions UI
-- [x] Implement purchase order list/search UI
-- [x] Implement purchase order detail UI
-- [x] Implement purchase receiving backend/API and FIFO/AP effects
-- [x] Harden purchase receiving validation coverage
-- [x] Add database-backed purchase receiving integration/concurrency tests
-- [x] Verify supplier lifecycle backend/API coverage
-- [x] Implement purchase order draft/create/update workflow
-- [x] Implement purchase order order/cancel/close workflow actions
-- [x] Implement purchase receiving UI workflow
-- [x] Implement supplier payment workflow
-- [x] Implement supplier credit workflow
-- [x] Implement supplier return workflow
-- [x] Implement supplier return valuation
-- [x] Implement AP balances/report basis
-- [x] Complete purchasing/AP mobile screens beyond existing supplier and purchase order pages
+## M4 — Core Master Data
 
-## Milestone 9 — Invoicing, Payments, Receipts, Refunds, AR
+- [x] **Done** — M4.01 — Implement branch list/detail/create/update/deactivate/reactivate
+- [x] **Done** — M4.02 — Enforce plan branch limits and last-active-branch rule
+- [x] **Done** — M4.03 — Implement employee invitation, creation, deactivation, and reactivation
+- [x] **Done** — M4.04 — Implement role and permission management
+- [x] **Done** — M4.05 — Implement role-template edit protections
+- [x] **Done** — M4.06 — Implement branch assignment and tenant-wide branch access management
+- [x] **Done** — M4.07 — Implement customer create/search/detail/update/merge/soft-delete/restore
+- [x] **Done** — M4.08 — Implement customer tags if supported by current schema/design
+- [x] **Done** — M4.09 — Implement motorcycle create/search/detail/update/soft-delete/restore
+- [x] **Done** — M4.10 — Implement service catalog create/read/update/deactivate
+- [x] **Done** — M4.11 — Implement product category management where needed by inventory
+- [x] **Done** — M4.12 — Add duplicate warnings without automatic merge
+- [x] **Done** — M4.13 — Add audit logs for high-risk changes
+- [x] **Done** — M4.14 — Add mobile-first screens for branches, employees, roles, customers, motorcycles, and services
+- [x] **Done** — M4 — Core Master Data
 
-- [x] Implement invoice draft from job orders
-- [x] Implement billing allocation service
-- [x] Implement invoice calculations
-- [x] Implement invoice-level discount allocation
-- [x] Implement tax calculation from tenant tax settings
-- [x] Implement invoice issuance
-- [x] Implement invoice cancel and void rules
-- [x] Implement payment creation
-- [x] Implement immutable receipt generation
-- [x] Implement partial and split payments
-- [x] Implement overpayment blocking
-- [x] Implement refund creation
-- [x] Implement refund inventory reversal where applicable
-- [x] Implement paid-invoice refund status recalculation
-- [x] Implement AR balances/report basis
-- [x] Implement financial immutability protections
-- [x] Implement cashier mobile flows
-- [ ] Next recommended task: M9.16 refund and void frontend flows.
+## M5 — Service Operations
 
-## Milestone 10 — Expenses, Reminders, Notifications, Integrations
+- [x] **Done** — M5.01 — Implement estimate number generation
+- [x] **Done** — M5.02 — Implement estimate draft/create/update
+- [x] **Done** — M5.03 — Implement estimate present, approve, convert, cancel, and expiration flows
+- [x] **Done** — M5.04 — Implement job order number generation
+- [x] **Done** — M5.05 — Implement job order create/detail/update
+- [x] **Done** — M5.06 — Implement job order service, labor, and part line scaffolding
+- [x] **Done** — M5.07 — Implement job order assignment to employees/mechanics
+- [x] **Done** — M5.08 — Implement job order status transitions
+- [x] **Done** — M5.09 — Implement correction workflow with permissions and audit reason
+- [x] **Done** — M5.10 — Implement mechanic assigned-jobs view
+- [x] **Done** — M5.11 — Implement mechanic session start/pause/resume/finish
+- [x] **Done** — M5.12 — Implement service notes and labor task completion
+- [x] **Done** — M5.13 — Implement job attachments placeholders until full file module
+- [x] **Done** — M5.14 — Add status history and audit history UI
+- [x] **Done** — M5.15 — Add mobile-first intake and mechanic workflows
+- [x] **Done** — M5 — Service Operations
 
-- [ ] Implement expense categories and expense workflows
-- [ ] Implement expense edit and void rules
-- [ ] Implement reminder rules
-- [ ] Implement reminder scheduler
-- [ ] Implement notification preferences
-- [ ] Implement in-app notification delivery
-- [ ] Implement push notification adapter interface
-- [ ] Implement email notification adapter interface
-- [ ] Implement SMS notification adapter interface
-- [ ] Implement delivery attempts and failure tracking
-- [ ] Implement plan-channel enforcement
-- [ ] Implement no-silent-downgrade notification behavior
-- [ ] Implement provider failure observability
-- [ ] Implement mobile screens for expenses, reminders, and notifications
+## M6 — Inventory Foundation and FIFO
 
-## Milestone 11 — Files, Exports, Offline PWA Cache
+- [x] **Done** — M6.01 — Implement product and category management
+- [x] **Done** — M6.02 — Implement branch stock balances
+- [x] **Done** — M6.03 — Implement immutable inventory ledger write service
+- [x] **Done** — M6.04 — Implement FIFO layer creation and locking strategy
+- [x] **Done** — M6.05 — Implement available stock calculation
+- [x] **Done** — M6.06 — Implement inventory reservation command
+- [x] **Done** — M6.07 — Implement FIFO reservation allocation from oldest available layers
+- [x] **Done** — M6.08 — Implement reservation release
+- [x] **Done** — M6.09 — Implement FIFO consumption records
+- [x] **Done** — M6.10 — Integrate job order part reservation
+- [x] **Done** — M6.11 — Integrate job order completion with FIFO consumption
+- [x] **Done** — M6.12 — Implement inventory read/search APIs
+- [x] **Done** — M6.13 — Add deterministic FIFO fixtures
+- [x] **Done** — M6.14 — Add concurrency tests for reservation, allocation, and consumption
+- [x] **Done** — M6.15 — Add reconciliation checks between balances, ledger, reservations, and FIFO layers
+- [x] **Done** — M6 — Inventory Foundation and FIFO
 
-- [ ] Select object storage provider
-- [ ] Implement private tenant-scoped file paths
-- [ ] Implement upload intent and signed URL flows
-- [ ] Implement file metadata lifecycle
-- [ ] Implement entity file attachments
-- [ ] Implement full tenant export job
-- [ ] Implement tenant export package format
-- [ ] Implement export status and download expiry
-- [ ] Implement PWA manifest
-- [ ] Implement service worker
-- [ ] Implement read-only recent-record cache
-- [ ] Implement offline write blocking
-- [ ] Implement file/export/offline mobile screens
+## M7 — Inventory Workflows
 
-## Milestone 12 — Dashboard, Reports, Search, Export Formats
+- [x] **Done** — M7.01 — Implement inventory adjustment draft/request flow
+- [x] **Done** — M7.02 — Implement approval/rejection flow
+- [x] **Done** — M7.03 — Implement posting flow with idempotency and locks
+- [x] **Done** — M7.04 — Implement positive adjustment FIFO layer creation
+- [x] **Done** — M7.05 — Implement negative adjustment FIFO consumption
+- [x] **Done** — M7.06 — Implement force adjustment permission and reason handling
+- [x] **Done** — M7.07 — Implement transfer draft/request flow
+- [x] **Done** — M7.08 — Implement transfer reservation
+- [x] **Done** — M7.09 — Implement transfer send
+- [x] **Done** — M7.10 — Implement transfer receive
+- [x] **Done** — M7.11 — Implement variance loss handling
+- [x] **Done** — M7.12 — Implement transfer cancellation rules
+- [x] **Done** — M7.13 — Implement low-stock alerts
+- [x] **Done** — M7.14 — Integrate branch deactivation stock blockers
+- [x] **Done** — M7.15 — Add audit and status history
+- [x] **Done** — M7 — Inventory Workflows
 
-- [ ] Implement dashboard summary API and screen
-- [ ] Implement revenue chart
-- [ ] Implement inventory alerts dashboard widget
-- [ ] Implement customer reports
-- [ ] Implement service reports
-- [ ] Implement inventory reports
-- [ ] Implement AR reports
-- [ ] Implement AP reports
-- [ ] Implement financial reports
-- [ ] Implement branch comparison report plan gates
-- [ ] Implement advanced report plan gates
-- [ ] Implement search read models
-- [ ] Implement CSV export formats
-- [ ] Implement PDF/Excel export formats where documented
-- [ ] Implement formula verification fixtures
-- [ ] Implement report performance tests
+## M8 — Purchasing, Suppliers, and Accounts Payable
 
-## Milestone 13 — Security, Observability, Performance, DR Hardening
+- [x] **Done** — M8.01 — Implement supplier create/read/update/deactivate/reactivate
+- [x] **Done** — M8.02 — Implement purchase order draft/create/update/cancel
+- [x] **Done** — M8.03 — Implement ordered/received/partially received/closed transitions
+- [x] **Done** — M8.04 — Implement purchase receiving with stock and FIFO layer creation
+- [x] **Done** — M8.05 — Implement cash purchase behavior without AP liability
+- [x] **Done** — M8.06 — Implement credit purchase AP behavior
+- [x] **Done** — M8.07 — Implement supplier payment recording
+- [x] **Done** — M8.08 — Implement supplier credits
+- [x] **Done** — M8.09 — Implement supplier returns
+- [x] **Done** — M8.10 — Implement supplier return valuation from documented costing basis
+- [x] **Done** — M8.11 — Implement AP balances and report basis
+- [x] **Done** — M8.12 — Add status history, audit logs, and idempotency
+- [x] **Done** — M8.13 — Add purchasing and AP mobile screens
+- [x] **Done** — M8 — Purchasing, Suppliers, and Accounts Payable
 
-- [ ] Complete threat modeling by module
-- [ ] Complete tenant isolation tests
-- [ ] Complete branch access tests
-- [ ] Complete support access audit review
-- [ ] Complete sensitive log review
-- [ ] Complete rate-limit tests
-- [ ] Complete dependency and container scans
-- [ ] Implement structured logs
-- [ ] Implement metrics
-- [ ] Implement error monitoring
-- [ ] Implement tracing/correlation visibility
-- [ ] Implement background job observability
-- [ ] Complete performance tests
-- [ ] Configure encrypted backups
-- [ ] Complete restore rehearsal
-- [ ] Create production runbooks
-- [ ] Verify append-only protections before launch
+## M9 — Invoicing, Payments, Receipts, Refunds, AR
 
-## Milestone 14 — End-to-End UAT and Launch Readiness
+- [x] **Done** — M9.01 — Review invoice/payment source alignment and repo patterns
+- [x] **Done** — M9.02 — Implement invoice domain types, schemas, and repository basis
+- [x] **Done** — M9.03 — Implement invoice draft from job orders
+- [x] **Done** — M9.04 — Implement billing allocation service and concurrency protection
+- [x] **Done** — M9.05 — Implement invoice line, discount, and tax calculation service
+- [x] **Done** — M9.06 — Implement invoice issue, cancel, and void workflows
+- [x] **Done** — M9.07 — Implement payment creation and overpayment blocking
+- [x] **Done** — M9.08 — Generate exactly one immutable receipt per payment
+- [x] **Done** — M9.09 — Implement partial and split payment behavior
+- [x] **Done** — M9.10 — Implement refund creation and invoice status recalculation
+- [x] **Done** — M9.11 — Implement refund/void inventory reversal where documented
+- [x] **Done** — M9.12 — Implement AR balances and report basis
+- [x] **Done** — M9.13 — Add financial immutability protections and audit coverage
+- [x] **Done** — M9.14 — Implement invoice frontend list/detail/draft/issue flows
+- [x] **Done** — M9.15 — Implement payment and receipt frontend flows
+- [x] **In Progress** — M9.16 — Implement refund and void frontend flows
+- [ ] **Backlog** — M9.17 — Add Milestone 9 E2E, mobile, permission, and blocked-state coverage
+- [ ] **Backlog** — M9.18 — Final Milestone 9 regression, documentation, and handoff
+- [x] **Done** — M9.BUG — Add database-backed billing allocation concurrency proof
+- [x] **Done** — M9.BUG — Add invoice workflow UI regression coverage
+- [x] **Done** — M9.BUG — Disabled New invoice link remains navigable
+- [x] **Done** — M9.BUG — Invoice draft UI/API contract mismatch needs resolution
+- [x] **Done** — M9.BUG — Invoice list lacks cursor pagination UI
+- [x] **Done** — M9.BUG — Invoice UI blocks pending invoice cancellation
+- [x] **Done** — [Review] garageos@eff0b976 — No actionable findings
 
-- [ ] Freeze release candidate scope against approved documentation
-- [ ] Run full regression suite
-- [ ] Run mobile-first E2E workflows
-- [ ] Run role-based UAT scenarios
-- [ ] Validate service workflows
-- [ ] Validate inventory workflows
-- [ ] Validate purchasing/AP workflows
-- [ ] Validate invoicing/payment/refund/AR workflows
-- [ ] Validate expense/reminder/notification workflows
-- [ ] Validate file/export/offline workflows
-- [ ] Validate dashboard/report workflows
-- [ ] Validate tenant lifecycle workflows
-- [ ] Burn down release-blocking defects
-- [ ] Collect product/QA/security/DevOps/engineering signoffs
-- [ ] Provision production
-- [ ] Bootstrap first platform admin
-- [ ] Execute production smoke test
-- [ ] Execute pilot launch
+## M10 — Expenses, Reminders, Notifications, Integrations
+
+- [ ] **Backlog** — M10.01 — Implement expense categories
+- [ ] **Backlog** — M10.02 — Implement expense create/read/update/void
+- [ ] **Backlog** — M10.03 — Implement expense financial report basis
+- [ ] **Backlog** — M10.04 — Implement reminder rules
+- [ ] **Backlog** — M10.05 — Implement reminder scheduling worker
+- [ ] **Backlog** — M10.06 — Implement notification preferences
+- [ ] **Backlog** — M10.07 — Implement in-app notification delivery
+- [ ] **Backlog** — M10.08 — Implement push notification adapter
+- [ ] **Backlog** — M10.09 — Implement email adapter
+- [ ] **Backlog** — M10.10 — Implement SMS adapter
+- [ ] **Backlog** — M10.11 — Implement delivery attempts and failure tracking
+- [ ] **Backlog** — M10.12 — Enforce plan channels for reminders and notifications
+- [ ] **Backlog** — M10.13 — Implement no-silent-downgrade behavior for unavailable channels
+- [ ] **Backlog** — M10.14 — Add provider sandbox/test adapters
+- [ ] **Backlog** — M10.15 — Add sanitized logging for provider payloads
+- [ ] **Backlog** — M10 — Expenses, Reminders, Notifications, Integrations
+
+## M11 — Files, Exports, Offline PWA Cache
+
+- [ ] **Backlog** — M11.01 — Finalize object storage provider/configuration
+- [ ] **Backlog** — M11.02 — Implement private tenant-scoped object paths
+- [ ] **Backlog** — M11.03 — Implement upload intent API
+- [ ] **Backlog** — M11.04 — Implement signed upload/download URL flow
+- [ ] **Backlog** — M11.05 — Implement file metadata lifecycle
+- [ ] **Backlog** — M11.06 — Implement file linking to documented entities
+- [ ] **Backlog** — M11.07 — Implement file soft-delete and restore
+- [ ] **Backlog** — M11.08 — Implement retention rules for financial/audit-relevant files
+- [ ] **Backlog** — M11.09 — Implement full tenant export job
+- [ ] **Backlog** — M11.10 — Package structured data, relationships, audit export, attachment manifest, README, and attachments
+- [ ] **Backlog** — M11.11 — Implement export job status and safe error summaries
+- [ ] **Backlog** — M11.12 — Implement export download expiry
+- [ ] **Backlog** — M11.13 — Implement PWA manifest and service worker
+- [ ] **Backlog** — M11.14 — Implement app-shell cache
+- [ ] **Backlog** — M11.15 — Implement read-only recent-record cache
+- [ ] **Backlog** — M11.16 — Clear user-scoped cache on logout/session invalidation
+- [ ] **Backlog** — M11.17 — Block offline writes, uploads, approvals, payments, refunds, inventory actions, settings changes, and role changes
+- [ ] **Backlog** — M11 — Files, Exports, Offline PWA Cache
+
+## M12 — Dashboard, Reports, Search, Export Formats
+
+- [ ] **Backlog** — M12.01 — Implement dashboard summary API and screen
+- [ ] **Backlog** — M12.02 — Implement revenue chart
+- [ ] **Backlog** — M12.03 — Implement inventory alerts
+- [ ] **Backlog** — M12.04 — Implement customer reports
+- [ ] **Backlog** — M12.05 — Implement service reports
+- [ ] **Backlog** — M12.06 — Implement inventory reports
+- [ ] **Backlog** — M12.07 — Implement AR/AP reports
+- [ ] **Backlog** — M12.08 — Implement revenue, collection, COGS, gross profit, expenses, and variance reports
+- [ ] **Backlog** — M12.09 — Implement branch comparison reports where plan allows
+- [ ] **Backlog** — M12.10 — Implement advanced operational reports where plan allows
+- [ ] **Backlog** — M12.11 — Implement search read models for documented entities
+- [ ] **Backlog** — M12.12 — Implement CSV/PDF/Excel export formats where documented
+- [ ] **Backlog** — M12.13 — Implement report export jobs for large exports
+- [ ] **Backlog** — M12.14 — Add formula verification fixtures
+- [ ] **Backlog** — M12.15 — Add performance tests for high-volume lists, dashboards, ledgers, search, and exports
+- [ ] **Backlog** — M12 — Dashboard, Reports, Search, Export Formats
+
+## M13 — Security, Observability, Performance, DR Hardening
+
+- [ ] **Backlog** — M13.01 — Run threat modeling by module
+- [ ] **Backlog** — M13.02 — Run tenant isolation tests across UI, API, repository, database, files, reports, and exports
+- [ ] **Backlog** — M13.03 — Run branch access tests across branch-specific records and linked histories
+- [ ] **Backlog** — M13.04 — Run support access audit review
+- [ ] **Backlog** — M13.05 — Run sensitive log review
+- [ ] **Backlog** — M13.06 — Run rate-limit tests
+- [ ] **Backlog** — M13.07 — Run dependency and container scans
+- [ ] **Backlog** — M13.08 — Add or verify structured logs
+- [ ] **Backlog** — M13.09 — Add or verify metrics
+- [ ] **Backlog** — M13.10 — Add or verify error monitoring
+- [ ] **Backlog** — M13.11 — Add or verify traces and correlation IDs
+- [ ] **Backlog** — M13.12 — Verify background job observability
+- [ ] **Backlog** — M13.13 — Run API performance tests
+- [ ] **Backlog** — M13.14 — Run report/export performance tests
+- [ ] **Backlog** — M13.15 — Configure encrypted backups
+- [ ] **Backlog** — M13.16 — Perform restore rehearsal
+- [ ] **Backlog** — M13.17 — Validate or formally waive RPO 24h and RTO 4h targets
+- [ ] **Backlog** — M13.18 — Complete operational runbooks
+- [ ] **Backlog** — M13 — Security, Observability, Performance, DR Hardening
+
+## M14 — End-to-End UAT and Launch Readiness
+
+- [ ] **Backlog** — M14.01 — Freeze release-candidate scope against approved source docs
+- [ ] **Backlog** — M14.02 — Run full regression suite
+- [ ] **Backlog** — M14.03 — Run mobile-first E2E workflows
+- [ ] **Backlog** — M14.04 — Run role-based UAT scenarios
+- [ ] **Backlog** — M14.05 — Validate tenant lifecycle states end to end
+- [ ] **Backlog** — M14.06 — Validate full service workflow from intake through report impact
+- [ ] **Backlog** — M14.07 — Validate purchasing/AP workflow
+- [ ] **Backlog** — M14.08 — Validate refunds, voids, and AR recalculation
+- [ ] **Backlog** — M14.09 — Validate reminders/notifications and plan channels
+- [ ] **Backlog** — M14.10 — Validate files, exports, offline cache, and deletion lifecycle
+- [ ] **Backlog** — M14.11 — Burn down release-blocking defects
+- [ ] **Backlog** — M14.12 — Collect product, QA, security, DevOps, and engineering signoffs
+- [ ] **Backlog** — M14.13 — Provision production environment
+- [ ] **Backlog** — M14.14 — Bootstrap first platform admin
+- [ ] **Backlog** — M14.15 — Verify seeds, plans, permissions, role templates, provider configs, storage, analytics, error monitoring, backups, and restore procedures
+- [ ] **Backlog** — M14.16 — Execute production smoke plan
+- [ ] **Backlog** — M14.17 — Onboard limited pilot tenants manually
+- [ ] **Backlog** — M14.18 — Monitor errors, latency, background jobs, reports, exports, and provider delivery
+- [ ] **Backlog** — M14.19 — Fix launch defects before broader sales rollout
+- [ ] **Backlog** — M14.UAT01 — Owner signup, email verification, onboarding, and first branch setup
+- [ ] **Backlog** — M14.UAT02 — Platform-created tenant, owner invitation, subscription assignment, and onboarding
+- [ ] **Backlog** — M14.UAT03 — Employee invitation, role assignment, branch assignment, and access restriction
+- [ ] **Backlog** — M14.UAT04 — Customer and motorcycle creation, duplicate warning, service history, and restore workflow
+- [ ] **Backlog** — M14.UAT05 — Estimate creation, presentation, approval, expiration, cancellation, and conversion
+- [ ] **Backlog** — M14.UAT06 — Job order creation, mechanic assignment, status transitions, service/labor lines, and release
+- [ ] **Backlog** — M14.UAT07 — Mechanic session start, pause, resume, finish, and productivity reporting
+- [ ] **Backlog** — M14.UAT08 — Product creation, purchase receiving, FIFO layer creation, and low-stock alert
+- [ ] **Backlog** — M14.UAT09 — Job order part reservation, completion, FIFO consumption, COGS calculation, and ledger review
+- [ ] **Backlog** — M14.UAT10 — Inventory adjustment approval and posting
+- [ ] **Backlog** — M14.UAT11 — Branch transfer reservation, send, receive, variance loss, and FIFO cost preservation
+- [ ] **Backlog** — M14.UAT12 — Supplier purchase, partial receiving, AP creation, supplier payment, and supplier return
+- [ ] **Backlog** — M14.UAT13 — Invoice creation, billing allocation, issuance, tax/discount calculation, and payment
+- [ ] **Backlog** — M14.UAT14 — Split payment, receipt generation, refund, refund inventory reversal, and AR recalculation
+- [ ] **Backlog** — M14.UAT15 — Expense creation, edit, void, and financial report impact
+- [ ] **Backlog** — M14.UAT16 — Reminder creation, channel enforcement, delivery tracking, and notification display
+- [ ] **Backlog** — M14.UAT17 — File upload, signed download, soft deletion, restoration, and export attachment packaging
+- [ ] **Backlog** — M14.UAT18 — Dashboard and reports with branch filters and plan restrictions
+- [ ] **Backlog** — M14.UAT19 — Tenant read-only, suspended, pending-deletion, renewal, export, and deletion lifecycle
+- [ ] **Backlog** — M14.UAT20 — Offline app shell and read-only recent-record cache behavior
+- [ ] **Backlog** — M14 — End-to-End UAT and Launch Readiness
+
+## Unmilestoned Notion Records
+
+- [x] **Done** — [Review] garageos@aa88188 — AI code review completed with 10 findings
+
+## Maintenance Notes
+
+- Update this file after meaningful Notion status changes or after completing a milestone handoff.
+- Keep card titles and statuses aligned with Notion. Avoid adding local-only checklist items here unless corresponding Notion cards exist.
+- Keep implementation-specific completion notes in the relevant Notion card and commit history; this tracker should stay a concise card/status snapshot.
