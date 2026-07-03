@@ -2,7 +2,7 @@ import { Slot } from '@radix-ui/react-slot';
 import { cva, type VariantProps } from 'class-variance-authority';
 import Link from 'next/link';
 import type { LinkProps } from 'next/link';
-import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import type { AnchorHTMLAttributes, ButtonHTMLAttributes, ReactNode } from 'react';
 
 import { cn } from './utils';
 
@@ -82,21 +82,52 @@ export function Button({
   );
 }
 
+export type ButtonLinkProps = LinkProps &
+  Omit<AnchorHTMLAttributes<HTMLAnchorElement>, keyof LinkProps | 'className' | 'href'> & {
+    readonly children: ReactNode;
+    readonly variant?: ButtonVariant;
+    readonly size?: ButtonSize;
+    readonly className?: string;
+    readonly disabled?: boolean;
+  };
+
 export function ButtonLink({
   href,
   children,
   variant = 'default',
   size = 'md',
   className,
+  disabled = false,
   ...props
-}: LinkProps & {
-  readonly children: ReactNode;
-  readonly variant?: ButtonVariant;
-  readonly size?: ButtonSize;
-  readonly className?: string;
-}) {
+}: ButtonLinkProps) {
+  const computedClassName = buttonClassName({ variant, size, className });
+
+  if (disabled) {
+    const {
+      title,
+      'aria-label': ariaLabel,
+      'aria-describedby': ariaDescribedBy,
+      'aria-controls': ariaControls,
+    } = props;
+
+    return (
+      <button
+        type="button"
+        className={computedClassName}
+        disabled
+        aria-disabled="true"
+        aria-label={ariaLabel}
+        aria-describedby={ariaDescribedBy}
+        aria-controls={ariaControls}
+        title={title}
+      >
+        {children}
+      </button>
+    );
+  }
+
   return (
-    <Link href={href} className={buttonClassName({ variant, size, className })} {...props}>
+    <Link href={href} className={computedClassName} {...props}>
       {children}
     </Link>
   );

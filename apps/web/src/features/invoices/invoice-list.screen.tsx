@@ -189,6 +189,7 @@ export function InvoiceListScreen() {
   const branchOptions = session?.branches ?? [];
   const shouldShowBranchFilter =
     session?.tenant_wide_branch_access === true || branchOptions.length > 1;
+  const isCreateInvoiceBlocked = !canCreateInvoices || !writeActionsAllowed;
 
   if (sessionState.status === 'error') {
     return (
@@ -241,15 +242,22 @@ export function InvoiceListScreen() {
           </div>
           <ButtonLink
             href="/invoices/new"
-            aria-disabled={!canCreateInvoices || !writeActionsAllowed}
-            className={
-              !canCreateInvoices || !writeActionsAllowed ? 'pointer-events-none opacity-60' : ''
-            }
+            disabled={isCreateInvoiceBlocked}
+            title={isCreateInvoiceBlocked ? 'New invoice creation is unavailable.' : undefined}
           >
             New invoice
           </ButtonLink>
         </CardHeader>
       </Card>
+
+      {session !== null && !canCreateInvoices ? (
+        <Alert>
+          <p className="text-sm leading-6">
+            New invoice creation is unavailable because your tenant session does not include{' '}
+            <strong>invoices.create</strong>.
+          </p>
+        </Alert>
+      ) : null}
 
       {networkStatus === 'offline' ? (
         <Alert>
