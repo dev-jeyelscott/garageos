@@ -3,6 +3,7 @@
 import {
   Alert,
   Badge,
+  Button,
   ButtonLink,
   Card,
   CardContent,
@@ -26,12 +27,18 @@ interface InvoiceListResultsProps {
   readonly invoiceListState: InvoiceListState;
   readonly isInitialLoading: boolean;
   readonly hasActiveFilters: boolean;
+  readonly isLoadingMore: boolean;
+  readonly canLoadMore: boolean;
+  readonly onLoadMore: () => void;
 }
 
 export function InvoiceListResults({
   invoiceListState,
   isInitialLoading,
   hasActiveFilters,
+  isLoadingMore,
+  canLoadMore,
+  onLoadMore,
 }: InvoiceListResultsProps) {
   if (isInitialLoading) {
     return <InvoiceListLoadingState />;
@@ -67,6 +74,26 @@ export function InvoiceListResults({
       <p className="text-sm text-muted-foreground">
         Showing {invoiceListState.invoices.length} invoice record(s).
       </p>
+
+      {invoiceListState.pagination?.has_more === true ? (
+        <div className="grid gap-2 rounded-2xl border border-border bg-muted/30 p-4 sm:flex sm:items-center sm:justify-between">
+          <p className="text-sm leading-6 text-muted-foreground">
+            {isLoadingMore
+              ? 'Loading the next invoice page.'
+              : canLoadMore
+                ? 'More invoice records are available for the current filters.'
+                : 'Load more is unavailable until the current blocker is resolved.'}
+          </p>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={!canLoadMore || isLoadingMore}
+            onClick={onLoadMore}
+          >
+            {isLoadingMore ? 'Loading more...' : 'Load more invoices'}
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildInvoiceListSearchParams,
   normalizeInvoiceDetailPayload,
   normalizeInvoiceListPayload,
   normalizePaymentMutationPayload,
@@ -60,6 +61,50 @@ const receipt = {
 };
 
 describe('invoice api normalizers', () => {
+  it('builds cursor pagination query params for invoice list requests', () => {
+    const params = buildInvoiceListSearchParams({
+      filters: {
+        status: 'pending',
+        branch_id: 'branch-1',
+        customer_id: 'customer-1',
+        from_date: '2026-07-01',
+        to_date: '2026-07-31',
+      },
+      limit: 25,
+      cursor: 'cursor-next-page',
+    });
+
+    expect(params.get('limit')).toBe('25');
+    expect(params.get('cursor')).toBe('cursor-next-page');
+    expect(params.get('status')).toBe('pending');
+    expect(params.get('branch_id')).toBe('branch-1');
+    expect(params.get('customer_id')).toBe('customer-1');
+    expect(params.get('from_date')).toBe('2026-07-01');
+    expect(params.get('to_date')).toBe('2026-07-31');
+  });
+
+  it('omits blank cursors and all-branch/all-status filters from invoice list requests', () => {
+    const params = buildInvoiceListSearchParams({
+      filters: {
+        status: 'all',
+        branch_id: 'all',
+        customer_id: '',
+        from_date: '',
+        to_date: '',
+      },
+      limit: 50,
+      cursor: '   ',
+    });
+
+    expect(params.get('limit')).toBe('50');
+    expect(params.has('cursor')).toBe(false);
+    expect(params.has('status')).toBe(false);
+    expect(params.has('branch_id')).toBe(false);
+    expect(params.has('customer_id')).toBe(false);
+    expect(params.has('from_date')).toBe(false);
+    expect(params.has('to_date')).toBe(false);
+  });
+
   it('normalizes invoice list payloads from the documented service response', () => {
     expect(normalizeInvoiceListPayload({ invoices: [invoice] }, meta)).toMatchObject({
       invoices: [

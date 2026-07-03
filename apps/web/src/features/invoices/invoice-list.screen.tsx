@@ -26,6 +26,7 @@ import {
 import type {
   InvoiceBranchFilter,
   InvoiceListFilters,
+  InvoiceListItem,
   InvoiceListState,
   InvoiceStatusFilter,
 } from './invoice.types';
@@ -57,6 +58,7 @@ export function InvoiceListScreen() {
     invoices: [],
     pagination: null,
   });
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const networkStatus = useNetworkStatus();
 
   useEffect(() => {
@@ -176,6 +178,47 @@ export function InvoiceListScreen() {
     setAppliedFilters(defaultInvoiceListFilters);
   }
 
+  async function handleLoadMore() {
+    const nextCursor = invoiceListState.pagination?.next_cursor ?? null;
+
+    if (
+      nextCursor === null ||
+      nextCursor.length === 0 ||
+      isLoadingMore ||
+      networkStatus === 'offline' ||
+      !canAccessInvoices
+    ) {
+      return;
+    }
+
+    setIsLoadingMore(true);
+
+    try {
+      const result = await getInvoices({
+        filters: appliedFilters,
+        limit: invoiceListPageSize,
+        cursor: nextCursor,
+      });
+
+      setInvoiceListState((current) => ({
+        status: 'loaded',
+        invoices: mergeUniqueInvoices(current.invoices, result.invoices),
+        pagination: result.pagination,
+      }));
+    } catch (error) {
+      setInvoiceListState((current) => ({
+        status: 'error',
+        invoices: current.invoices,
+        pagination: current.pagination,
+        message: toSafeErrorMessage(error, 'Unable to load more invoices.'),
+        detail: toSafeErrorDetail(error),
+        code: getApiErrorCode(error),
+      }));
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }
+
   const isInitialLoading =
     sessionState.status === 'loading' ||
     (canAccessInvoices &&
@@ -190,6 +233,13 @@ export function InvoiceListScreen() {
   const shouldShowBranchFilter =
     session?.tenant_wide_branch_access === true || branchOptions.length > 1;
   const isCreateInvoiceBlocked = !canCreateInvoices || !writeActionsAllowed;
+  const canLoadMoreInvoices =
+    invoiceListState.pagination?.has_more === true &&
+    invoiceListState.pagination.next_cursor !== null &&
+    invoiceListState.pagination.next_cursor.length > 0 &&
+    networkStatus !== 'offline' &&
+    !isInitialLoading &&
+    !isLoadingMore;
 
   if (sessionState.status === 'error') {
     return (
@@ -380,9 +430,29 @@ export function InvoiceListScreen() {
             invoiceListState={invoiceListState}
             isInitialLoading={isInitialLoading}
             hasActiveFilters={hasActiveFilters}
+            isLoadingMore={isLoadingMore}
+            canLoadMore={canLoadMoreInvoices}
+            onLoadMore={handleLoadMore}
           />
         </CardContent>
       </Card>
     </div>
   );
+
+  function mergeUniqueInvoices(
+    currentInvoices: readonly InvoiceListItem[],
+    nextInvoices: readonly InvoiceListItem[],
+  ): readonly InvoiceListItem[] {
+    const seenInvoiceIds = new Set(currentInvoices.map((invoice) => invoice.id));
+    const mergedInvoices = [...currentInvoices];
+
+    for (const invoice of nextInvoices) {
+      if (!seenInvoiceIds.has(invoice.id)) {
+        seenInvoiceIds.add(invoice.id);
+        mergedInvoices.push(invoice);
+      }
+    }
+
+    return mergedInvoices;
+  }
 }

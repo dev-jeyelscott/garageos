@@ -23,17 +23,24 @@ import type {
   InvoiceWorkflowReasonInput,
 } from './invoice.types';
 
-export async function getInvoices({
+export function buildInvoiceListSearchParams({
   filters,
   limit,
+  cursor,
 }: {
   readonly filters: InvoiceListFilters;
   readonly limit: number;
-}): Promise<InvoiceListResult> {
-  const accessToken = await getAccessTokenOrRefresh();
+  readonly cursor?: string | null | undefined;
+}): URLSearchParams {
   const params = new URLSearchParams();
 
   params.set('limit', String(limit));
+
+  const normalizedCursor = cursor?.trim() ?? '';
+
+  if (normalizedCursor.length > 0) {
+    params.set('cursor', normalizedCursor);
+  }
 
   if (filters.status !== 'all') {
     params.set('status', filters.status);
@@ -54,6 +61,21 @@ export async function getInvoices({
   if (filters.to_date.length > 0) {
     params.set('to_date', filters.to_date);
   }
+
+  return params;
+}
+
+export async function getInvoices({
+  filters,
+  limit,
+  cursor,
+}: {
+  readonly filters: InvoiceListFilters;
+  readonly limit: number;
+  readonly cursor?: string | null | undefined;
+}): Promise<InvoiceListResult> {
+  const accessToken = await getAccessTokenOrRefresh();
+  const params = buildInvoiceListSearchParams({ filters, limit, cursor });
 
   const envelope = await getAuthJsonEnvelope<unknown>(`/invoices?${params.toString()}`, {
     accessToken,
