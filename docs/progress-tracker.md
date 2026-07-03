@@ -245,7 +245,7 @@
 - [x] Implement invoice issuance
 - [x] Implement invoice cancel and void rules
 - [x] Implement payment creation
-- [ ] Implement immutable receipt generation
+- [x] Implement immutable receipt generation
 - [ ] Implement partial and split payments
 - [x] Implement overpayment blocking
 - [ ] Implement refund creation
@@ -265,6 +265,10 @@ Completion notes:
 - Validation: `pnpm.cmd --filter @garageos/api test -- invoices.service` passed; `pnpm.cmd --filter @garageos/api typecheck` passed; `pnpm.cmd --filter @garageos/api lint` passed.
 - Files changed: `apps/api/src/shared/api/api-exception.ts`, `apps/api/src/shared/numbering/document-numbering.ts`, `apps/api/src/modules/invoices/api/invoices.controller.ts`, `apps/api/src/modules/invoices/api/invoice.schemas.ts`, `apps/api/src/modules/invoices/application/invoice.mappers.ts`, `apps/api/src/modules/invoices/application/invoice.records.ts`, `apps/api/src/modules/invoices/application/invoice.store.ts`, `apps/api/src/modules/invoices/application/invoices.service.ts`, `apps/api/src/modules/invoices/application/invoices.service.spec.ts`, `apps/api/src/modules/invoices/persistence/postgres-invoice.sql.ts`, `apps/api/src/modules/invoices/persistence/postgres-invoice.store.ts`, `docs/progress-tracker.md`.
 - Next recommended task: M9.08 immutable receipt generation hardening and coverage.
+- 2026-07-03: Completed M9.08 immutable receipt generation hardening and read workflow. Existing payment creation already generated one receipt per payment with tenant-wide receipt numbering and database one-to-one constraints; this slice added documented read-only receipt list/detail/print metadata endpoints, `receipts.read` permission enforcement, tenant lifecycle checks, branch-scoped receipt reads, and focused receipt regression coverage without adding update/delete receipt surfaces.
+- Validation: `pnpm.cmd --filter @garageos/api test -- invoices.service` passed; `pnpm.cmd --filter @garageos/api typecheck` passed; `pnpm.cmd --filter @garageos/api lint` passed.
+- Files changed: `apps/api/src/modules/invoices/api/invoices.controller.ts`, `apps/api/src/modules/invoices/api/invoice.schemas.ts`, `apps/api/src/modules/invoices/application/invoice.store.ts`, `apps/api/src/modules/invoices/application/invoices.service.ts`, `apps/api/src/modules/invoices/application/invoices.service.spec.ts`, `apps/api/src/modules/invoices/invoices.module.ts`, `apps/api/src/modules/invoices/persistence/postgres-invoice.store.ts`, `docs/progress-tracker.md`.
+- Next recommended task: M9.09 partial and split payment behavior.
 
 ## Milestone 10 — Expenses, Reminders, Notifications, Integrations
 

@@ -51,6 +51,10 @@ export const listInvoicesQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });
 
+export const listReceiptsQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+
 export const createDraftInvoiceRequestSchema = z
   .object({
     job_order_ids: z.array(uuidSchema).min(1).max(25),
@@ -114,6 +118,7 @@ export const createInvoicePaymentRequestSchema = z.object({
 });
 
 export type ListInvoicesQuery = z.infer<typeof listInvoicesQuerySchema>;
+export type ListReceiptsQuery = z.infer<typeof listReceiptsQuerySchema>;
 export type CreateDraftInvoiceRequest = z.infer<typeof createDraftInvoiceRequestSchema>;
 export type IssueInvoiceRequest = z.infer<typeof issueInvoiceRequestSchema>;
 export type CancelInvoiceRequest = z.infer<typeof cancelInvoiceRequestSchema>;

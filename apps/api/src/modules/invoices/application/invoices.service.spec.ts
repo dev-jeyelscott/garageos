@@ -25,10 +25,13 @@ import {
   type CreateInvoicePaymentInput,
   type CreateInvoiceReceiptInput,
   type FindLatestInvoiceNumberForDateInput,
+  type FindInvoiceReceiptInput,
   type InsertInvoiceStatusEventInput,
   type InvoiceDraftJobOrderLineRecord,
   type InvoiceDraftJobOrderRecord,
+  type InvoiceReceiptWithBranchRecord,
   type InvoiceSettingsRecord,
+  type ListInvoiceReceiptsInput,
   type ListInvoicesInput,
   type UpdateInvoicePaymentTotalsInput,
   type UpdateBillingAllocationStatusesInput,
@@ -38,6 +41,7 @@ import { InvoicesService } from './invoices.service';
 
 const tenantId = '11111111-1111-4111-8111-111111111111';
 const branchId = '22222222-2222-4222-8222-222222222222';
+const otherBranchId = '22222222-2222-4222-8222-999999999999';
 const customerId = '33333333-3333-4333-8333-333333333333';
 const userId = '44444444-4444-4444-8444-444444444444';
 const jobOrderId = '55555555-5555-4555-8555-555555555555';
@@ -459,6 +463,112 @@ describe('InvoicesService', () => {
     });
   });
 
+  it('lists immutable receipts for assigned branches only', async () => {
+    const store = new FakeInvoiceStore();
+    const service = createService(store);
+    const draft = await service.createDraftInvoice(
+      {
+        job_order_ids: [jobOrderId],
+        invoice_date: createdAt,
+      },
+      createSession(),
+    );
+    await service.issueInvoice(draft.invoice.id, {}, createSession());
+    await service.recordPayment(
+      draft.invoice.id,
+      {
+        amount: '1120.00',
+        payment_date: createdAt,
+        payment_method: 'cash',
+      },
+      createSession(['payments.create']),
+    );
+
+    const result = await service.listReceipts({ limit: 50 }, createSession(['receipts.read']));
+
+    expect(result.receipts).toHaveLength(1);
+    expect(result.receipts[0]).toMatchObject({
+      invoice_id: draft.invoice.id,
+      receipt_number: 'RCPT-000001',
+      amount: '1120.00',
+      payment_method: 'cash',
+    });
+    expect(store.lastListReceiptInput).toMatchObject({
+      tenantId,
+      branchIds: [branchId],
+      limit: 50,
+    });
+  });
+
+  it('gets receipt detail and printable metadata with receipts.read permission', async () => {
+    const store = new FakeInvoiceStore();
+    const service = createService(store);
+    const draft = await service.createDraftInvoice(
+      {
+        job_order_ids: [jobOrderId],
+        invoice_date: createdAt,
+      },
+      createSession(),
+    );
+    await service.issueInvoice(draft.invoice.id, {}, createSession());
+    const payment = await service.recordPayment(
+      draft.invoice.id,
+      {
+        amount: '1120.00',
+        payment_date: createdAt,
+        payment_method: 'gcash',
+      },
+      createSession(['payments.create']),
+    );
+
+    const detail = await service.getReceipt(payment.receipt.id, createSession(['receipts.read']));
+    const print = await service.getReceiptPrintMetadata(
+      payment.receipt.id,
+      createSession(['receipts.read']),
+    );
+
+    expect(detail.receipt).toEqual(payment.receipt);
+    expect(print.receipt).toEqual(payment.receipt);
+  });
+
+  it('requires receipts.read permission before receipt reads', async () => {
+    const store = new FakeInvoiceStore();
+    const service = createService(store);
+
+    await expect(service.listReceipts({ limit: 50 }, createSession([]))).rejects.toMatchObject({
+      code: 'forbidden',
+      details: [{ required_permission: 'receipts.read' }],
+    });
+  });
+
+  it('blocks receipt detail reads when branch access is denied', async () => {
+    const store = new FakeInvoiceStore();
+    const service = createService(store);
+    const draft = await service.createDraftInvoice(
+      {
+        job_order_ids: [jobOrderId],
+        invoice_date: createdAt,
+      },
+      createSession(),
+    );
+    await service.issueInvoice(draft.invoice.id, {}, createSession());
+    const payment = await service.recordPayment(
+      draft.invoice.id,
+      {
+        amount: '1120.00',
+        payment_date: createdAt,
+        payment_method: 'cash',
+      },
+      createSession(['payments.create']),
+    );
+
+    await expect(
+      service.getReceipt(payment.receipt.id, createSession(['receipts.read'], [otherBranchId])),
+    ).rejects.toMatchObject({
+      code: 'branch_access_denied',
+    });
+  });
+
   it('blocks payment amounts greater than remaining collectible balance', async () => {
     const store = new FakeInvoiceStore();
     const service = createService(store);
@@ -575,6 +685,7 @@ function createSession(
     'invoices.cancel',
     'invoices.void',
   ],
+  branchIds: readonly string[] = [branchId],
 ): TenantContextAuthenticatedSession {
   return {
     actor: {
@@ -590,7 +701,7 @@ function createSession(
       status: 'active',
     },
     effective_permissions: [...permissions],
-    branches: [{ id: branchId }],
+    branches: branchIds.map((id) => ({ id })),
     tenant_wide_branch_access: false,
     subscription_status_source: 'system_computed',
   };
@@ -621,6 +732,7 @@ class FakeInvoiceStore extends InvoiceStore {
   createdAllocations: readonly InvoiceBillingAllocationRecord[] = [];
   createdPayments: readonly InvoicePaymentRecord[] = [];
   createdReceipts: readonly InvoiceReceiptRecord[] = [];
+  lastListReceiptInput: ListInvoiceReceiptsInput | null = null;
   createBillingAllocationsResult: readonly InvoiceBillingAllocationRecord[] | null = null;
   invoiceSettings: InvoiceSettingsRecord = {
     invoicePrefix: 'INV-',
@@ -876,6 +988,29 @@ class FakeInvoiceStore extends InvoiceStore {
 
   async allocateReceiptNumber(): Promise<string> {
     return `RCPT-${String(this.createdReceipts.length + 1).padStart(6, '0')}`;
+  }
+
+  async listReceipts(input: ListInvoiceReceiptsInput): Promise<readonly InvoiceReceiptRecord[]> {
+    this.lastListReceiptInput = input;
+
+    if (input.branchIds !== null && !input.branchIds.includes(branchId)) {
+      return [];
+    }
+
+    return this.createdReceipts.slice(0, input.limit);
+  }
+
+  async findReceiptWithBranch(
+    input: FindInvoiceReceiptInput,
+  ): Promise<InvoiceReceiptWithBranchRecord | null> {
+    const receipt = this.createdReceipts.find((current) => current.id === input.receiptId);
+
+    return receipt === undefined
+      ? null
+      : {
+          receipt,
+          branchId,
+        };
   }
 
   async insertStatusEvent(input: InsertInvoiceStatusEventInput): Promise<InvoiceStatusEventRecord> {

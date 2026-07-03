@@ -27,6 +27,7 @@ import type {
   CreateDraftInvoiceRequest,
   IssueInvoiceRequest,
   ListInvoicesQuery,
+  ListReceiptsQuery,
   VoidInvoiceRequest,
 } from '../api/invoice.schemas';
 import {
@@ -153,6 +154,18 @@ export interface InvoicePaymentMutationResponse {
   readonly invoice: InvoiceResponse;
 }
 
+export interface InvoiceReceiptListResponse {
+  readonly receipts: readonly InvoiceReceiptResponse[];
+}
+
+export interface InvoiceReceiptDetailResponse {
+  readonly receipt: InvoiceReceiptResponse;
+}
+
+export interface InvoiceReceiptPrintResponse {
+  readonly receipt: InvoiceReceiptResponse;
+}
+
 @Injectable()
 export class InvoicesService {
   constructor(
@@ -270,6 +283,56 @@ export class InvoicesService {
 
     return {
       status_events: statusEvents.map(toInvoiceStatusEventResponse),
+    };
+  }
+
+  async listReceipts(
+    query: ListReceiptsQuery,
+    session: TenantContextAuthenticatedSession,
+  ): Promise<InvoiceReceiptListResponse> {
+    const context = resolveTenantContextFromAuthenticatedSession(session);
+    const isShopOwner = await this.invoiceStore.isActiveShopOwner({
+      tenantId: context.tenantId,
+      userId: context.actorUserId,
+    });
+
+    assertTenantLifecycleAccess({
+      context,
+      isShopOwner,
+      action: TENANT_ACCESS_ACTIONS.OPERATIONAL_READ,
+    });
+    assertInvoicePermission(context, isShopOwner, 'receipts.read');
+
+    const receipts = await this.invoiceStore.listReceipts({
+      tenantId: context.tenantId,
+      branchIds: context.tenantWideBranchAccess ? null : context.assignedBranchIds,
+      limit: query.limit,
+    });
+
+    return {
+      receipts: receipts.map(toInvoiceReceiptResponse),
+    };
+  }
+
+  async getReceipt(
+    receiptId: string,
+    session: TenantContextAuthenticatedSession,
+  ): Promise<InvoiceReceiptDetailResponse> {
+    const receipt = await this.getAuthorizedReceipt(receiptId, session);
+
+    return {
+      receipt: toInvoiceReceiptResponse(receipt),
+    };
+  }
+
+  async getReceiptPrintMetadata(
+    receiptId: string,
+    session: TenantContextAuthenticatedSession,
+  ): Promise<InvoiceReceiptPrintResponse> {
+    const receipt = await this.getAuthorizedReceipt(receiptId, session);
+
+    return {
+      receipt: toInvoiceReceiptResponse(receipt),
     };
   }
 
@@ -776,6 +839,37 @@ export class InvoicesService {
 
       return response;
     });
+  }
+
+  private async getAuthorizedReceipt(
+    receiptId: string,
+    session: TenantContextAuthenticatedSession,
+  ): Promise<InvoiceReceiptRecord> {
+    const context = resolveTenantContextFromAuthenticatedSession(session);
+    const isShopOwner = await this.invoiceStore.isActiveShopOwner({
+      tenantId: context.tenantId,
+      userId: context.actorUserId,
+    });
+
+    assertTenantLifecycleAccess({
+      context,
+      isShopOwner,
+      action: TENANT_ACCESS_ACTIONS.OPERATIONAL_READ,
+    });
+    assertInvoicePermission(context, isShopOwner, 'receipts.read');
+
+    const receipt = await this.invoiceStore.findReceiptWithBranch({
+      tenantId: context.tenantId,
+      receiptId: receiptId.trim(),
+    });
+
+    if (receipt === null) {
+      throw GarageOsApiException.resourceNotFound('Receipt was not found.');
+    }
+
+    assertBranchAccessAllowed({ context, branchId: receipt.branchId });
+
+    return receipt.receipt;
   }
 
   private async transitionInvoiceWorkflow(input: {

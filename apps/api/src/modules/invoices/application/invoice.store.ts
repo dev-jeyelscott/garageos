@@ -222,6 +222,22 @@ export interface AllocateReceiptNumberInput {
   readonly tenantId: string;
 }
 
+export interface ListInvoiceReceiptsInput {
+  readonly tenantId: string;
+  readonly branchIds: readonly string[] | null;
+  readonly limit: number;
+}
+
+export interface FindInvoiceReceiptInput {
+  readonly tenantId: string;
+  readonly receiptId: string;
+}
+
+export interface InvoiceReceiptWithBranchRecord {
+  readonly receipt: InvoiceReceiptRecord;
+  readonly branchId: string;
+}
+
 export abstract class InvoiceStore {
   abstract isActiveShopOwner(input: {
     readonly tenantId: string;
@@ -316,6 +332,16 @@ export abstract class InvoiceStore {
     input: AllocateReceiptNumberInput,
     client?: DatabaseQueryClient,
   ): Promise<string | null>;
+
+  abstract listReceipts(
+    input: ListInvoiceReceiptsInput,
+    client?: DatabaseQueryClient,
+  ): Promise<readonly InvoiceReceiptRecord[]>;
+
+  abstract findReceiptWithBranch(
+    input: FindInvoiceReceiptInput,
+    client?: DatabaseQueryClient,
+  ): Promise<InvoiceReceiptWithBranchRecord | null>;
 
   abstract insertStatusEvent(
     input: InsertInvoiceStatusEventInput,

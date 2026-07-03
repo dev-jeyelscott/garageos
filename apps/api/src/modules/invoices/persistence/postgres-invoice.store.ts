@@ -17,13 +17,16 @@ import {
   type CreateInvoicePaymentInput,
   type CreateInvoiceReceiptInput,
   type FindInvoiceWithDetailsInput,
+  type FindInvoiceReceiptInput,
   type FindLatestInvoiceNumberForDateInput,
   type InvoiceDraftJobOrderLineRecord,
   type InvoiceDraftJobOrderRecord,
+  type InvoiceReceiptWithBranchRecord,
   type InvoiceSettingsRecord,
   type InsertInvoiceStatusEventInput,
   InvoiceStore,
   type ListInvoicesInput,
+  type ListInvoiceReceiptsInput,
   type LockInvoiceWithDetailsForUpdateInput,
   type ReplaceDraftInvoiceLinesInput,
   type UpdateBillingAllocationStatusesInput,
@@ -907,6 +910,53 @@ export class PostgresInvoiceStore extends InvoiceStore {
     return sequence === undefined ? null : buildReceiptNumber(Number(sequence));
   }
 
+  async listReceipts(
+    input: ListInvoiceReceiptsInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<readonly InvoiceReceiptRecord[]> {
+    const result = await client.query<InvoiceReceiptRow>(
+      `
+        select ${prefixColumns(INVOICE_RECEIPT_COLUMNS, 'r')}
+        from receipts r
+        join invoices i on i.tenant_id = r.tenant_id and i.id = r.invoice_id
+        where r.tenant_id = $1::uuid
+          and ($2::uuid[] is null or i.branch_id = any($2::uuid[]))
+        order by r.issued_at desc, r.id desc
+        limit $3
+      `,
+      [input.tenantId, input.branchIds, input.limit],
+    );
+
+    return result.rows.map(mapInvoiceReceiptRow);
+  }
+
+  async findReceiptWithBranch(
+    input: FindInvoiceReceiptInput,
+    client: DatabaseQueryClient = this.database,
+  ): Promise<InvoiceReceiptWithBranchRecord | null> {
+    const result = await client.query<InvoiceReceiptRow & { branch_id: string }>(
+      `
+        select
+          ${prefixColumns(INVOICE_RECEIPT_COLUMNS, 'r')},
+          i.branch_id
+        from receipts r
+        join invoices i on i.tenant_id = r.tenant_id and i.id = r.invoice_id
+        where r.tenant_id = $1::uuid
+          and r.id = $2::uuid
+        limit 1
+      `,
+      [input.tenantId, input.receiptId],
+    );
+    const row = result.rows[0];
+
+    return row === undefined
+      ? null
+      : {
+          receipt: mapInvoiceReceiptRow(row),
+          branchId: row.branch_id,
+        };
+  }
+
   async insertStatusEvent(
     input: InsertInvoiceStatusEventInput,
     client: DatabaseQueryClient = this.database,
@@ -1119,6 +1169,13 @@ function getRequiredRow<Row extends DatabaseRow>(
   }
 
   return row;
+}
+
+function prefixColumns(columns: string, tableAlias: string): string {
+  return columns
+    .split(',')
+    .map((column) => `${tableAlias}.${column.trim()}`)
+    .join(',\n');
 }
 
 function parseMoneyCents(value: string): bigint {

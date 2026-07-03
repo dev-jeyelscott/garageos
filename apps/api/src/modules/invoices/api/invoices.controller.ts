@@ -27,6 +27,8 @@ import {
   type IssueInvoiceRequest,
   listInvoicesQuerySchema,
   type ListInvoicesQuery,
+  listReceiptsQuerySchema,
+  type ListReceiptsQuery,
   voidInvoiceRequestSchema,
   type VoidInvoiceRequest,
 } from './invoice.schemas';
@@ -207,5 +209,45 @@ export class InvoicesController {
 
       throw error;
     }
+  }
+}
+
+@UseGuards(AccessTokenAuthGuard)
+@Controller('receipts')
+export class ReceiptsController {
+  constructor(
+    private readonly authService: AuthService,
+    private readonly invoicesService: InvoicesService,
+  ) {}
+
+  @Get()
+  async listReceipts(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Query(new ZodValidationPipe(listReceiptsQuerySchema))
+    query: ListReceiptsQuery,
+  ): ReturnType<InvoicesService['listReceipts']> {
+    const session = await this.authService.getAuthenticatedRouteSession(authorizationHeader);
+
+    return this.invoicesService.listReceipts(query, session.tenantContextSession);
+  }
+
+  @Get(':receipt_id')
+  async getReceipt(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('receipt_id') receiptId: string,
+  ): ReturnType<InvoicesService['getReceipt']> {
+    const session = await this.authService.getAuthenticatedRouteSession(authorizationHeader);
+
+    return this.invoicesService.getReceipt(receiptId, session.tenantContextSession);
+  }
+
+  @Get(':receipt_id/print')
+  async getReceiptPrintMetadata(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('receipt_id') receiptId: string,
+  ): ReturnType<InvoicesService['getReceiptPrintMetadata']> {
+    const session = await this.authService.getAuthenticatedRouteSession(authorizationHeader);
+
+    return this.invoicesService.getReceiptPrintMetadata(receiptId, session.tenantContextSession);
   }
 }
