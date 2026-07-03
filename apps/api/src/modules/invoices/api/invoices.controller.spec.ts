@@ -85,6 +85,37 @@ const REFUND_RESPONSE = {
 };
 
 describe('InvoicesController idempotency', () => {
+  it('restores the recorded HTTP status when replaying a draft invoice response', async () => {
+    const { invoicesController, invoicesService, idempotencyService } = createControllers();
+    const httpResponse = createHttpResponse();
+
+    vi.mocked(idempotencyService.begin).mockResolvedValueOnce({
+      type: 'replayed',
+      record: {
+        ...IDEMPOTENCY_RECORD,
+        status: 'succeeded',
+        responseStatusCode: 201,
+        responseBodyJson: DRAFT_RESPONSE,
+      },
+      responseStatusCode: 201,
+      responseBodyJson: DRAFT_RESPONSE,
+    });
+
+    const response = await invoicesController.createDraftInvoice(
+      'Bearer token',
+      'invoice-key',
+      {
+        job_order_ids: ['99999999-9999-4999-8999-999999999999'],
+      },
+      httpResponse,
+    );
+
+    expect(response).toEqual(DRAFT_RESPONSE);
+    expect(httpResponse.status).toHaveBeenCalledWith(201);
+    expect(invoicesService.createDraftInvoice).not.toHaveBeenCalled();
+    expect(idempotencyService.completeSucceeded).not.toHaveBeenCalled();
+  });
+
   it('preserves the original workflow error when idempotency failure cleanup fails', async () => {
     const { invoicesController, invoicesService, idempotencyService } = createControllers();
     const workflowError = new Error('draft failed');
@@ -93,9 +124,14 @@ describe('InvoicesController idempotency', () => {
     vi.mocked(idempotencyService.completeFailed).mockRejectedValueOnce(new Error('cleanup failed'));
 
     await expect(
-      invoicesController.createDraftInvoice('Bearer token', 'invoice-key', {
-        job_order_ids: ['99999999-9999-4999-8999-999999999999'],
-      }),
+      invoicesController.createDraftInvoice(
+        'Bearer token',
+        'invoice-key',
+        {
+          job_order_ids: ['99999999-9999-4999-8999-999999999999'],
+        },
+        createHttpResponse(),
+      ),
     ).rejects.toBe(workflowError);
 
     expect(idempotencyService.completeFailed).toHaveBeenCalledWith(
@@ -107,6 +143,7 @@ describe('InvoicesController idempotency', () => {
 describe('PaymentsRefundsController idempotency', () => {
   it('wraps refund creation in the documented idempotency scope', async () => {
     const { paymentsRefundsController, invoicesService, idempotencyService } = createControllers();
+    const httpResponse = createHttpResponse();
     const request = {
       amount: '120.00',
       reason: 'Customer returned unused part.',
@@ -119,9 +156,11 @@ describe('PaymentsRefundsController idempotency', () => {
       'refund-key',
       PAYMENT_ID,
       request,
+      httpResponse,
     );
 
     expect(response).toEqual(REFUND_RESPONSE);
+    expect(httpResponse.status).toHaveBeenCalledWith(201);
     expect(idempotencyService.begin).toHaveBeenCalledWith(
       expect.objectContaining({
         tenantId: TENANT_ID,
@@ -145,6 +184,42 @@ describe('PaymentsRefundsController idempotency', () => {
     );
   });
 
+  it('restores the recorded HTTP status when replaying a refund response', async () => {
+    const { paymentsRefundsController, invoicesService, idempotencyService } = createControllers();
+    const httpResponse = createHttpResponse();
+    const request = {
+      amount: '120.00',
+      reason: 'Customer returned unused part.',
+      collection_should_continue: true,
+      close_invoice_after_refund: false,
+    };
+
+    vi.mocked(idempotencyService.begin).mockResolvedValueOnce({
+      type: 'replayed',
+      record: {
+        ...IDEMPOTENCY_RECORD,
+        status: 'succeeded',
+        responseStatusCode: 201,
+        responseBodyJson: REFUND_RESPONSE,
+      },
+      responseStatusCode: 201,
+      responseBodyJson: REFUND_RESPONSE,
+    });
+
+    const response = await paymentsRefundsController.recordRefund(
+      'Bearer token',
+      'refund-key',
+      PAYMENT_ID,
+      request,
+      httpResponse,
+    );
+
+    expect(response).toEqual(REFUND_RESPONSE);
+    expect(httpResponse.status).toHaveBeenCalledWith(201);
+    expect(invoicesService.recordRefund).not.toHaveBeenCalled();
+    expect(idempotencyService.completeSucceeded).not.toHaveBeenCalled();
+  });
+
   it('preserves the original refund error when idempotency failure cleanup fails', async () => {
     const { paymentsRefundsController, invoicesService, idempotencyService } = createControllers();
     const workflowError = new Error('refund failed');
@@ -153,12 +228,18 @@ describe('PaymentsRefundsController idempotency', () => {
     vi.mocked(idempotencyService.completeFailed).mockRejectedValueOnce(new Error('cleanup failed'));
 
     await expect(
-      paymentsRefundsController.recordRefund('Bearer token', 'refund-key', PAYMENT_ID, {
-        amount: '120.00',
-        reason: 'Customer returned unused part.',
-        collection_should_continue: true,
-        close_invoice_after_refund: false,
-      }),
+      paymentsRefundsController.recordRefund(
+        'Bearer token',
+        'refund-key',
+        PAYMENT_ID,
+        {
+          amount: '120.00',
+          reason: 'Customer returned unused part.',
+          collection_should_continue: true,
+          close_invoice_after_refund: false,
+        },
+        createHttpResponse(),
+      ),
     ).rejects.toBe(workflowError);
 
     expect(idempotencyService.completeFailed).toHaveBeenCalledWith(
@@ -224,4 +305,18 @@ function createTenantSession(): TenantContextAuthenticatedSession {
     tenant_wide_branch_access: false,
     subscription_status_source: 'system_computed',
   };
+}
+
+interface PassthroughHttpResponse {
+  status(statusCode: number): unknown;
+}
+
+function createHttpResponse(): PassthroughHttpResponse {
+  const response: PassthroughHttpResponse = {
+    status: vi.fn(),
+  };
+
+  vi.mocked(response.status).mockReturnValue(response);
+
+  return response;
 }
