@@ -246,7 +246,7 @@
 - [x] Implement invoice cancel and void rules
 - [x] Implement payment creation
 - [x] Implement immutable receipt generation
-- [ ] Implement partial and split payments
+- [x] Implement partial and split payments
 - [x] Implement overpayment blocking
 - [ ] Implement refund creation
 - [ ] Implement refund inventory reversal where applicable
@@ -254,21 +254,6 @@
 - [ ] Implement AR balances/report basis
 - [ ] Implement financial immutability protections
 - [ ] Implement cashier mobile flows
-
-Completion notes:
-
-- 2026-07-03: Completed M9.06 invoice issue/cancel/void backend workflow. Verified existing API/service/store implementation for idempotent issue, cancel, and void actions; allocation final/release status transitions; status event writes; audit writes; and paid-invoice void blocking until payments are refunded.
-- Validation: `pnpm.cmd --filter @garageos/api test -- invoice` passed; `pnpm.cmd --filter @garageos/api typecheck` passed.
-- Files verified/changed: `apps/api/src/modules/invoices/api/invoices.controller.ts`, `apps/api/src/modules/invoices/api/invoice.schemas.ts`, `apps/api/src/modules/invoices/application/invoices.service.ts`, `apps/api/src/modules/invoices/application/invoices.service.spec.ts`, `apps/api/src/modules/invoices/persistence/postgres-invoice.store.ts`, `docs/progress-tracker.md`.
-- Next recommended task: M9.07 payment creation and overpayment blocking.
-- 2026-07-03: Completed M9.07 invoice payment creation and overpayment blocking backend workflow. Added `POST /api/v1/invoices/{invoice_id}/payments` with `payments.create` permission, idempotency wiring, tenant lifecycle and branch checks, locked invoice balance validation, payment persistence, required one-receipt creation, invoice paid/remaining/status recalculation, status events, and audit logging. Receipt creation is included because the documented payment API requires it; the dedicated M9.08 receipt task remains next for focused receipt immutability/query coverage.
-- Validation: `pnpm.cmd --filter @garageos/api test -- invoices.service` passed; `pnpm.cmd --filter @garageos/api typecheck` passed; `pnpm.cmd --filter @garageos/api lint` passed.
-- Files changed: `apps/api/src/shared/api/api-exception.ts`, `apps/api/src/shared/numbering/document-numbering.ts`, `apps/api/src/modules/invoices/api/invoices.controller.ts`, `apps/api/src/modules/invoices/api/invoice.schemas.ts`, `apps/api/src/modules/invoices/application/invoice.mappers.ts`, `apps/api/src/modules/invoices/application/invoice.records.ts`, `apps/api/src/modules/invoices/application/invoice.store.ts`, `apps/api/src/modules/invoices/application/invoices.service.ts`, `apps/api/src/modules/invoices/application/invoices.service.spec.ts`, `apps/api/src/modules/invoices/persistence/postgres-invoice.sql.ts`, `apps/api/src/modules/invoices/persistence/postgres-invoice.store.ts`, `docs/progress-tracker.md`.
-- Next recommended task: M9.08 immutable receipt generation hardening and coverage.
-- 2026-07-03: Completed M9.08 immutable receipt generation hardening and read workflow. Existing payment creation already generated one receipt per payment with tenant-wide receipt numbering and database one-to-one constraints; this slice added documented read-only receipt list/detail/print metadata endpoints, `receipts.read` permission enforcement, tenant lifecycle checks, branch-scoped receipt reads, and focused receipt regression coverage without adding update/delete receipt surfaces.
-- Validation: `pnpm.cmd --filter @garageos/api test -- invoices.service` passed; `pnpm.cmd --filter @garageos/api typecheck` passed; `pnpm.cmd --filter @garageos/api lint` passed.
-- Files changed: `apps/api/src/modules/invoices/api/invoices.controller.ts`, `apps/api/src/modules/invoices/api/invoice.schemas.ts`, `apps/api/src/modules/invoices/application/invoice.store.ts`, `apps/api/src/modules/invoices/application/invoices.service.ts`, `apps/api/src/modules/invoices/application/invoices.service.spec.ts`, `apps/api/src/modules/invoices/invoices.module.ts`, `apps/api/src/modules/invoices/persistence/postgres-invoice.store.ts`, `docs/progress-tracker.md`.
-- Next recommended task: M9.09 partial and split payment behavior.
 
 ## Milestone 10 — Expenses, Reminders, Notifications, Integrations
 

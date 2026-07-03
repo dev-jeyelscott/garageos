@@ -463,6 +463,91 @@ describe('InvoicesService', () => {
     });
   });
 
+  it('records partial and split payments as multiple payments with one receipt each', async () => {
+    const store = new FakeInvoiceStore();
+    const service = createService(store);
+    const draft = await service.createDraftInvoice(
+      {
+        job_order_ids: [jobOrderId],
+        invoice_date: createdAt,
+      },
+      createSession(),
+    );
+    await service.issueInvoice(draft.invoice.id, {}, createSession());
+
+    const partial = await service.recordPayment(
+      draft.invoice.id,
+      {
+        amount: '400.00',
+        payment_date: createdAt,
+        payment_method: 'cash',
+        reference_number: 'CASH-001',
+      },
+      createSession(['payments.create']),
+    );
+    const final = await service.recordPayment(
+      draft.invoice.id,
+      {
+        amount: '720.00',
+        payment_date: createdAt,
+        payment_method: 'bank_transfer',
+        reference_number: 'BANK-001',
+      },
+      createSession(['payments.create']),
+    );
+
+    expect(partial.invoice).toMatchObject({
+      status: 'partially_paid',
+      amount_paid: '400.00',
+      remaining_collectible_balance: '720.00',
+    });
+    expect(final.invoice).toMatchObject({
+      status: 'paid',
+      amount_paid: '1120.00',
+      remaining_collectible_balance: '0.00',
+    });
+    expect(store.createdPayments).toHaveLength(2);
+    expect(store.createdReceipts).toHaveLength(2);
+    expect(store.createdPayments).toEqual([
+      expect.objectContaining({
+        amount: '400.00',
+        paymentMethod: 'cash',
+        referenceNumber: 'CASH-001',
+      }),
+      expect.objectContaining({
+        amount: '720.00',
+        paymentMethod: 'bank_transfer',
+        referenceNumber: 'BANK-001',
+      }),
+    ]);
+    expect(store.createdReceipts).toEqual([
+      expect.objectContaining({
+        paymentId: store.createdPayments[0]?.id,
+        receiptNumber: 'RCPT-000001',
+        amount: '400.00',
+        paymentMethod: 'cash',
+      }),
+      expect.objectContaining({
+        paymentId: store.createdPayments[1]?.id,
+        receiptNumber: 'RCPT-000002',
+        amount: '720.00',
+        paymentMethod: 'bank_transfer',
+      }),
+    ]);
+    expect(store.statusEvents.slice(-2)).toEqual([
+      expect.objectContaining({
+        fromStatus: 'pending',
+        toStatus: 'partially_paid',
+        reason: 'invoice_payment_recorded',
+      }),
+      expect.objectContaining({
+        fromStatus: 'partially_paid',
+        toStatus: 'paid',
+        reason: 'invoice_payment_recorded',
+      }),
+    ]);
+  });
+
   it('lists immutable receipts for assigned branches only', async () => {
     const store = new FakeInvoiceStore();
     const service = createService(store);
