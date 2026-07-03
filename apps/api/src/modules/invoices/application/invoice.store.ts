@@ -154,6 +154,7 @@ export interface InsertInvoiceStatusEventInput {
 
 export interface ListInvoicesInput {
   readonly tenantId: string;
+  readonly branchIds: readonly string[] | null;
   readonly branchId?: string | null;
   readonly status?: InvoiceStatus | null;
   readonly customerId?: string | null;
@@ -283,6 +284,15 @@ export interface UpdateInvoiceRefundTotalsInput {
 export interface InventoryReversalTotalRecord {
   readonly jobOrderLineId: string;
   readonly quantityReturned: string;
+}
+
+export interface InvoiceInventoryConsumptionCostRecord {
+  readonly jobOrderLineId: string;
+  readonly productId: string;
+  readonly fifoLayerId: string;
+  readonly quantityConsumed: string;
+  readonly unitCost: string;
+  readonly consumedAt: Date;
 }
 
 export interface CreateInvoiceInventoryReversalInput {
@@ -443,6 +453,12 @@ export abstract class InvoiceStore {
     jobOrderLineIds: readonly string[],
     client?: DatabaseQueryClient,
   ): Promise<readonly InventoryReversalTotalRecord[]>;
+
+  abstract listJobOrderLineInventoryConsumptionCosts(
+    tenantId: string,
+    jobOrderLineIds: readonly string[],
+    client?: DatabaseQueryClient,
+  ): Promise<readonly InvoiceInventoryConsumptionCostRecord[]>;
 
   abstract createRefundInventoryReversals(
     input: CreateRefundInventoryReversalsInput,

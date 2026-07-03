@@ -62,6 +62,7 @@ import {
   type CreateInvoiceLineInput,
   type InvoiceDraftJobOrderLineRecord,
   type InvoiceDraftJobOrderRecord,
+  type InvoiceInventoryConsumptionCostRecord,
   type InvoiceSettingsRecord,
 } from './invoice.store';
 
@@ -250,6 +251,7 @@ export class InvoicesService {
 
     const invoices = await this.invoiceStore.listInvoices({
       tenantId: context.tenantId,
+      branchIds: context.tenantWideBranchAccess ? null : context.assignedBranchIds,
       branchId: query.branch_id ?? null,
       status: query.status ?? null,
       customerId: query.customer_id ?? null,
@@ -1362,15 +1364,26 @@ export class InvoicesService {
       }
     }
 
+    const consumptionCosts = await this.invoiceStore.listJobOrderLineInventoryConsumptionCosts(
+      input.context.tenantId,
+      jobOrderLineIds,
+      input.transaction,
+    );
+    const costsByJobOrderLineId = groupInventoryConsumptionCosts(consumptionCosts);
+    const reversalSegments = buildInventoryReversalSegments({
+      requestedLines,
+      costsByJobOrderLineId,
+      returnedByJobOrderLineId,
+    });
     const reversalRows = [];
 
-    for (const line of requestedLines) {
+    for (const segment of reversalSegments) {
       await this.stockBalancesService.incrementOnHandStock(
         {
           tenantId: input.context.tenantId,
           branchId: input.invoice.invoice.branchId,
-          productId: line.productId,
-          quantityReceived: line.quantityReturned,
+          productId: segment.productId,
+          quantityReceived: segment.quantityReturned,
         },
         input.transaction,
       );
@@ -1378,13 +1391,13 @@ export class InvoicesService {
         {
           tenantId: input.context.tenantId,
           branchId: input.invoice.invoice.branchId,
-          productId: line.productId,
-          quantityReceived: line.quantityReturned,
-          unitCost: line.invoiceLine.unitPrice,
+          productId: segment.productId,
+          quantityReceived: segment.quantityReturned,
+          unitCost: segment.unitCost,
           sourceTransactionType: input.transactionType,
           sourceTransactionId: input.sourceId,
           receivedAt: input.createdAt,
-          originalSourceLayerId: null,
+          originalSourceLayerId: segment.originalSourceLayerId,
         },
         input.transaction,
       );
@@ -1392,12 +1405,12 @@ export class InvoicesService {
         {
           tenantId: input.context.tenantId,
           branchId: input.invoice.invoice.branchId,
-          productId: line.productId,
+          productId: segment.productId,
           transactionType: input.transactionType,
-          quantityDeltaOnHand: line.quantityReturned,
+          quantityDeltaOnHand: segment.quantityReturned,
           quantityDeltaReserved: ZERO_QUANTITY,
-          unitCost: line.invoiceLine.unitPrice,
-          totalCost: multiplyQuantityByMoney(line.quantityReturned, line.invoiceLine.unitPrice),
+          unitCost: segment.unitCost,
+          totalCost: multiplyQuantityByMoney(segment.quantityReturned, segment.unitCost),
           sourceType: REVERSAL_SOURCE_TYPE,
           sourceId: input.sourceId,
           occurredAt: input.createdAt,
@@ -1408,9 +1421,9 @@ export class InvoicesService {
 
       reversalRows.push({
         id: randomUUID(),
-        jobOrderLineId: line.jobOrderLineId,
-        productId: line.productId,
-        quantityReturned: line.quantityReturned,
+        jobOrderLineId: segment.jobOrderLineId,
+        productId: segment.productId,
+        quantityReturned: segment.quantityReturned,
         inventoryLedgerEntryId: ledgerEntry.id,
         fifoLayerId: fifoLayer.id,
         createdAt: input.createdAt,
@@ -1435,6 +1448,122 @@ export class InvoicesService {
           input.transaction,
         );
   }
+}
+
+interface RequestedInventoryReversalLine {
+  readonly invoiceLine: InvoiceWithDetailsRecord['lines'][number];
+  readonly jobOrderLineId: string;
+  readonly productId: string;
+  readonly quantityReturned: string;
+}
+
+interface CostedInventoryReversalSegment {
+  readonly jobOrderLineId: string;
+  readonly productId: string;
+  readonly quantityReturned: string;
+  readonly unitCost: string;
+  readonly originalSourceLayerId: string;
+}
+
+function groupInventoryConsumptionCosts(
+  costs: readonly InvoiceInventoryConsumptionCostRecord[],
+): ReadonlyMap<string, readonly InvoiceInventoryConsumptionCostRecord[]> {
+  const grouped = new Map<string, InvoiceInventoryConsumptionCostRecord[]>();
+
+  for (const cost of costs) {
+    const group = grouped.get(cost.jobOrderLineId) ?? [];
+    group.push(cost);
+    grouped.set(cost.jobOrderLineId, group);
+  }
+
+  return grouped;
+}
+
+function buildInventoryReversalSegments(input: {
+  readonly requestedLines: readonly RequestedInventoryReversalLine[];
+  readonly costsByJobOrderLineId: ReadonlyMap<
+    string,
+    readonly InvoiceInventoryConsumptionCostRecord[]
+  >;
+  readonly returnedByJobOrderLineId: ReadonlyMap<string, bigint>;
+}): readonly CostedInventoryReversalSegment[] {
+  const segments: CostedInventoryReversalSegment[] = [];
+  const runningReturnedByJobOrderLineId = new Map(input.returnedByJobOrderLineId);
+
+  for (const requestedLine of input.requestedLines) {
+    const costs = input.costsByJobOrderLineId
+      .get(requestedLine.jobOrderLineId)
+      ?.filter((cost) => cost.productId === requestedLine.productId);
+
+    if (costs === undefined || costs.length === 0) {
+      throw GarageOsApiException.validationFailed([
+        {
+          field: 'inventory_reversal.lines',
+          code: 'inventory_reversal_original_cost_missing',
+          message: 'Original FIFO consumption costs are required before inventory can be returned.',
+        },
+      ]);
+    }
+
+    let quantityToReturn = parseQuantityThousandths(requestedLine.quantityReturned);
+    let quantityToSkip = runningReturnedByJobOrderLineId.get(requestedLine.jobOrderLineId) ?? 0n;
+
+    for (const cost of costs) {
+      const consumedQuantity = parseQuantityThousandths(cost.quantityConsumed);
+
+      if (quantityToSkip >= consumedQuantity) {
+        quantityToSkip -= consumedQuantity;
+        continue;
+      }
+
+      const availableFromCost = consumedQuantity - quantityToSkip;
+      const returnedFromCost =
+        availableFromCost < quantityToReturn ? availableFromCost : quantityToReturn;
+
+      if (returnedFromCost > 0n) {
+        segments.push({
+          jobOrderLineId: requestedLine.jobOrderLineId,
+          productId: requestedLine.productId,
+          quantityReturned: formatQuantityThousandths(returnedFromCost),
+          unitCost: cost.unitCost,
+          originalSourceLayerId: cost.fifoLayerId,
+        });
+        quantityToReturn -= returnedFromCost;
+      }
+
+      quantityToSkip = 0n;
+
+      if (quantityToReturn === 0n) {
+        break;
+      }
+    }
+
+    if (quantityToReturn > 0n) {
+      throw GarageOsApiException.validationFailed([
+        {
+          field: 'inventory_reversal.lines.return_quantity',
+          code: 'inventory_reversal_exceeds_consumed_fifo_quantity',
+          message:
+            'Returned quantity cannot exceed the FIFO-consumed quantity recorded for the job order line.',
+        },
+      ]);
+    }
+
+    runningReturnedByJobOrderLineId.set(
+      requestedLine.jobOrderLineId,
+      (runningReturnedByJobOrderLineId.get(requestedLine.jobOrderLineId) ?? 0n) +
+        parseQuantityThousandths(requestedLine.quantityReturned),
+    );
+  }
+
+  return segments;
+}
+
+function formatQuantityThousandths(value: bigint): string {
+  const wholePart = value / 1000n;
+  const fractionalPart = value % 1000n;
+
+  return `${wholePart.toString()}.${fractionalPart.toString().padStart(3, '0')}`;
 }
 
 function assertInvoicePermission(

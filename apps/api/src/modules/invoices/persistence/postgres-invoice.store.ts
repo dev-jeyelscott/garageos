@@ -40,6 +40,7 @@ import {
   type UpdateInvoicePaymentRefundableAmountInput,
   type UpdateInvoiceRefundTotalsInput,
   type UpdateInvoiceWorkflowStatusInput,
+  type InvoiceInventoryConsumptionCostRecord,
 } from '../application/invoice.store';
 import type {
   InvoiceBillingAllocationRecord,
@@ -1147,6 +1148,50 @@ export class PostgresInvoiceStore extends InvoiceStore {
     });
   }
 
+  async listJobOrderLineInventoryConsumptionCosts(
+    tenantId: string,
+    jobOrderLineIds: readonly string[],
+    client: DatabaseQueryClient = this.database,
+  ): Promise<readonly InvoiceInventoryConsumptionCostRecord[]> {
+    if (jobOrderLineIds.length === 0) {
+      return [];
+    }
+
+    const result = await client.query<{
+      source_id: string;
+      product_id: string;
+      fifo_layer_id: string;
+      quantity_consumed: string;
+      unit_cost: string;
+      consumed_at: Date;
+    }>(
+      `
+        select
+          source_id,
+          product_id,
+          fifo_layer_id,
+          quantity_consumed::text,
+          unit_cost::text,
+          consumed_at
+        from fifo_consumptions
+        where tenant_id = $1::uuid
+          and source_type = 'job_order_line'
+          and source_id = any($2::uuid[])
+        order by consumed_at asc, id asc
+      `,
+      [tenantId, jobOrderLineIds],
+    );
+
+    return result.rows.map((row) => ({
+      jobOrderLineId: row.source_id,
+      productId: row.product_id,
+      fifoLayerId: row.fifo_layer_id,
+      quantityConsumed: row.quantity_consumed,
+      unitCost: row.unit_cost,
+      consumedAt: row.consumed_at,
+    }));
+  }
+
   async createRefundInventoryReversals(
     input: CreateRefundInventoryReversalsInput,
     client: DatabaseQueryClient = this.database,
@@ -1333,16 +1378,18 @@ export class PostgresInvoiceStore extends InvoiceStore {
         select ${INVOICE_COLUMNS}
         from invoices
         where tenant_id = $1::uuid
-          and ($2::uuid is null or branch_id = $2::uuid)
-          and ($3::text is null or status = $3::text)
-          and ($4::uuid is null or customer_id = $4::uuid)
-          and ($5::date is null or invoice_date >= $5::date)
-          and ($6::date is null or invoice_date <= $6::date)
+          and ($2::uuid[] is null or branch_id = any($2::uuid[]))
+          and ($3::uuid is null or branch_id = $3::uuid)
+          and ($4::text is null or status = $4::text)
+          and ($5::uuid is null or customer_id = $5::uuid)
+          and ($6::date is null or invoice_date >= $6::date)
+          and ($7::date is null or invoice_date <= $7::date)
         order by invoice_date desc, created_at desc, id desc
-        limit $7
+        limit $8
       `,
       [
         input.tenantId,
+        input.branchIds,
         input.branchId ?? null,
         input.status ?? null,
         input.customerId ?? null,

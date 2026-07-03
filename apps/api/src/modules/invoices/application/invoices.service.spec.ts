@@ -36,6 +36,7 @@ import {
   type FindInvoiceReceiptInput,
   type InsertInvoiceStatusEventInput,
   type InventoryReversalTotalRecord,
+  type InvoiceInventoryConsumptionCostRecord,
   type InvoiceDraftJobOrderLineRecord,
   type InvoiceDraftJobOrderRecord,
   type InvoicePaymentWithInvoiceRecord,
@@ -1172,6 +1173,16 @@ class FakeInvoiceStore extends InvoiceStore {
   createdVoidInventoryReversals: readonly InvoiceInventoryReversalRecord[] = [];
   refundInventoryReversalTotals: readonly InventoryReversalTotalRecord[] = [];
   voidInventoryReversalTotals: readonly InventoryReversalTotalRecord[] = [];
+  inventoryConsumptionCosts: readonly InvoiceInventoryConsumptionCostRecord[] = [
+    {
+      jobOrderLineId,
+      productId: '88888888-8888-4888-8888-888888888888',
+      fifoLayerId: 'source-fifo-layer-1',
+      quantityConsumed: '1.000',
+      unitCost: '600.00',
+      consumedAt: createdAt,
+    },
+  ];
   lastListReceiptInput: ListInvoiceReceiptsInput | null = null;
   createBillingAllocationsResult: readonly InvoiceBillingAllocationRecord[] | null = null;
   invoiceSettings: InvoiceSettingsRecord = {
@@ -1536,6 +1547,15 @@ class FakeInvoiceStore extends InvoiceStore {
 
   async listVoidInventoryReversalTotals(): Promise<readonly InventoryReversalTotalRecord[]> {
     return this.voidInventoryReversalTotals;
+  }
+
+  async listJobOrderLineInventoryConsumptionCosts(
+    _tenantId: string,
+    jobOrderLineIds: readonly string[],
+  ): Promise<readonly InvoiceInventoryConsumptionCostRecord[]> {
+    const requestedIds = new Set(jobOrderLineIds);
+
+    return this.inventoryConsumptionCosts.filter((cost) => requestedIds.has(cost.jobOrderLineId));
   }
 
   async createRefundInventoryReversals(

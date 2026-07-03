@@ -490,12 +490,13 @@ describe('PostgresInvoiceStore', () => {
     expect(result).toMatchObject({ fromStatus: null, toStatus: 'draft' });
   });
 
-  it('lists invoices with branch, status, customer, date filters, and stable ordering', async () => {
+  it('lists invoices with branch scope, branch, status, customer, date filters, and stable ordering', async () => {
     const client = new RecordingDatabaseClient([[createInvoiceRow()]]);
     const store = new PostgresInvoiceStore(client);
 
     const result = await store.listInvoices({
       tenantId,
+      branchIds: [branchId],
       branchId,
       status: 'draft',
       customerId,
@@ -506,14 +507,16 @@ describe('PostgresInvoiceStore', () => {
 
     const sql = normalizeSql(client.queries[0]?.sql ?? '');
     expect(sql).toContain('where tenant_id = $1::uuid');
-    expect(sql).toContain('branch_id = $2::uuid');
-    expect(sql).toContain('status = $3::text');
-    expect(sql).toContain('customer_id = $4::uuid');
-    expect(sql).toContain('invoice_date >= $5::date');
-    expect(sql).toContain('invoice_date <= $6::date');
+    expect(sql).toContain('branch_id = any($2::uuid[])');
+    expect(sql).toContain('branch_id = $3::uuid');
+    expect(sql).toContain('status = $4::text');
+    expect(sql).toContain('customer_id = $5::uuid');
+    expect(sql).toContain('invoice_date >= $6::date');
+    expect(sql).toContain('invoice_date <= $7::date');
     expect(sql).toContain('order by invoice_date desc, created_at desc, id desc');
     expect(client.queries[0]?.values).toEqual([
       tenantId,
+      [branchId],
       branchId,
       'draft',
       customerId,

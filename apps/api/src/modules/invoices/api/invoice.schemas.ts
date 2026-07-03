@@ -3,6 +3,15 @@ import { z } from 'zod';
 import { INVOICE_STATUS_VALUES, PAYMENT_METHOD_VALUES } from '../application/invoice.records';
 
 const uuidSchema = z.string().uuid();
+const businessDateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, {
+    message: 'Business date must use YYYY-MM-DD format.',
+  })
+  .refine(isValidBusinessDate, {
+    message: 'Business date must be a valid calendar date.',
+  })
+  .transform((value) => new Date(`${value}T00:00:00.000Z`));
 const moneyAmountSchema = z.string().regex(/^\d+(\.\d{2})$/, {
   message: 'Money amount must use exactly 2 decimal places.',
 });
@@ -33,12 +42,43 @@ const refundReasonSchema = z
   .min(1, { message: 'Refund reason is required.' })
   .max(500);
 
+function isValidBusinessDate(value: string): boolean {
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+function validateDateRange(
+  value: {
+    readonly from_date?: Date | undefined;
+    readonly to_date?: Date | undefined;
+  },
+  context: z.RefinementCtx,
+): void {
+  if (
+    value.from_date !== undefined &&
+    value.to_date !== undefined &&
+    value.to_date < value.from_date
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['to_date'],
+      message: 'To date must be on or after from date.',
+    });
+  }
+}
+
 const inventoryReversalLineSchema = z.object({
   invoice_line_id: uuidSchema,
   product_id: uuidSchema,
-  return_quantity: z.string().regex(/^\d+(\.\d{3})$/, {
-    message: 'Return quantity must use exactly 3 decimal places.',
-  }),
+  return_quantity: z
+    .string()
+    .regex(/^\d+(\.\d{3})$/, {
+      message: 'Return quantity must use exactly 3 decimal places.',
+    })
+    .refine((value) => Number(value) > 0, {
+      message: 'Return quantity must be greater than zero.',
+    }),
 });
 
 const inventoryReversalRequestSchema = z.object({
@@ -61,14 +101,16 @@ const invoiceLevelDiscountSchema = z.discriminatedUnion('type', [
   }),
 ]);
 
-export const listInvoicesQuerySchema = z.object({
-  branch_id: uuidSchema.optional(),
-  status: z.enum(INVOICE_STATUS_VALUES).optional(),
-  customer_id: uuidSchema.optional(),
-  from_date: z.coerce.date().optional(),
-  to_date: z.coerce.date().optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(50),
-});
+export const listInvoicesQuerySchema = z
+  .object({
+    branch_id: uuidSchema.optional(),
+    status: z.enum(INVOICE_STATUS_VALUES).optional(),
+    customer_id: uuidSchema.optional(),
+    from_date: businessDateSchema.optional(),
+    to_date: businessDateSchema.optional(),
+    limit: z.coerce.number().int().min(1).max(100).default(50),
+  })
+  .superRefine(validateDateRange);
 
 export const listReceiptsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(50),
