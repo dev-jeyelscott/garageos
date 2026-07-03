@@ -116,6 +116,14 @@ const paymentMethodOptions: readonly {
   { value: 'other', label: 'Other' },
 ];
 
+function getDefaultRefundReceiptId(receipts: readonly InvoiceReceipt[]): string {
+  return (
+    receipts.find((receipt) => getReceiptRefundableEstimate({ receipt }) > 0)?.id ??
+    receipts[0]?.id ??
+    ''
+  );
+}
+
 export function InvoiceDetailScreen({ invoiceId }: InvoiceDetailScreenProps) {
   const targetInvoiceId = invoiceId.length > 0 ? invoiceId : null;
   const [refreshKey, setRefreshKey] = useState(0);
@@ -807,13 +815,14 @@ function InvoiceRefundPanel({
   readonly writeActionsAllowed: boolean;
   readonly onChanged: () => void;
 }) {
-  const [selectedReceiptId, setSelectedReceiptId] = useState(() => receipts[0]?.id ?? '');
+  const [selectedReceiptId, setSelectedReceiptId] = useState(() =>
+    getDefaultRefundReceiptId(receipts),
+  );
   const selectedReceipt =
     receipts.find((receipt) => receipt.id === selectedReceiptId) ?? receipts[0] ?? null;
-  const estimatedRefundableAmount =
-    selectedReceipt === null
-      ? 0
-      : getReceiptRefundableEstimate({ invoice, receipt: selectedReceipt });
+  const selectedReceiptRefundableAmount =
+    selectedReceipt === null ? 0 : getReceiptRefundableEstimate({ receipt: selectedReceipt });
+  const estimatedRefundableAmount = selectedReceiptRefundableAmount;
   const [amount, setAmount] = useState(() => estimatedRefundableAmount.toFixed(2));
   const [reason, setReason] = useState('');
   const [collectionShouldContinue, setCollectionShouldContinue] = useState(true);
@@ -821,9 +830,9 @@ function InvoiceRefundPanel({
   const [refundState, setRefundState] = useState<RefundState>({ status: 'idle' });
 
   useEffect(() => {
-    const firstReceiptId = receipts[0]?.id ?? '';
+    const defaultReceiptId = getDefaultRefundReceiptId(receipts);
     setSelectedReceiptId((current) =>
-      receipts.some((receipt) => receipt.id === current) ? current : firstReceiptId,
+      receipts.some((receipt) => receipt.id === current) ? current : defaultReceiptId,
     );
   }, [receipts]);
 
@@ -838,8 +847,13 @@ function InvoiceRefundPanel({
     isOffline,
     writeActionsAllowed,
   });
+  const selectedReceiptBlockedReason =
+    selectedReceipt !== null && selectedReceiptRefundableAmount <= 0
+      ? 'This receipt-backed payment has no refundable amount remaining.'
+      : null;
   const blockedReason =
     formBlockedReason ??
+    selectedReceiptBlockedReason ??
     (selectedReceipt === null
       ? 'No receipt-backed payment is available to refund.'
       : getInvoiceRefundBlockedReason({
@@ -852,7 +866,9 @@ function InvoiceRefundPanel({
           reason,
         }));
   const submitting = refundState.status === 'submitting';
-  const refundInputsDisabled = submitting || formBlockedReason !== null;
+  const receiptSelectDisabled = submitting || formBlockedReason !== null || receipts.length === 0;
+  const refundFieldsDisabled =
+    submitting || formBlockedReason !== null || selectedReceiptRefundableAmount <= 0;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -943,19 +959,24 @@ function InvoiceRefundPanel({
               <select
                 value={selectedReceipt?.id ?? ''}
                 onChange={(event) => setSelectedReceiptId(event.currentTarget.value)}
-                disabled={refundInputsDisabled || receipts.length === 0}
+                disabled={receiptSelectDisabled}
                 className="min-h-11 rounded-xl border border-input bg-background px-3 py-2 text-base text-foreground shadow-sm outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {receipts.length === 0 ? <option value="">No receipts</option> : null}
-                {receipts.map((receipt) => (
-                  <option key={receipt.id} value={receipt.id}>
-                    {receipt.receipt_number} / {formatMoney(receipt.amount)}
-                  </option>
-                ))}
+                {receipts.map((receipt) => {
+                  const refundableAmount = getReceiptRefundableEstimate({ receipt });
+
+                  return (
+                    <option key={receipt.id} value={receipt.id} disabled={refundableAmount <= 0}>
+                      {receipt.receipt_number} / paid {formatMoney(receipt.amount)} / available{' '}
+                      {formatMoney(refundableAmount.toFixed(2))}
+                    </option>
+                  );
+                })}
               </select>
             </label>
             <DetailField
-              label="Estimated refundable"
+              label="Available refundable"
               value={formatMoney(estimatedRefundableAmount.toFixed(2))}
             />
             <label className="grid gap-2">
@@ -966,7 +987,7 @@ function InvoiceRefundPanel({
                 step="0.01"
                 value={amount}
                 onChange={(event) => setAmount(event.currentTarget.value)}
-                disabled={refundInputsDisabled}
+                disabled={refundFieldsDisabled}
               />
             </label>
             <label className="grid gap-2">
@@ -974,7 +995,7 @@ function InvoiceRefundPanel({
               <Input
                 value={reason}
                 onChange={(event) => setReason(event.currentTarget.value)}
-                disabled={refundInputsDisabled}
+                disabled={refundFieldsDisabled}
               />
             </label>
           </div>
@@ -992,7 +1013,7 @@ function InvoiceRefundPanel({
                     setCloseInvoiceAfterRefund(false);
                   }
                 }}
-                disabled={refundInputsDisabled}
+                disabled={refundFieldsDisabled}
                 className="mt-1 h-4 w-4"
               />
               Continue collection after this refund.
@@ -1009,7 +1030,7 @@ function InvoiceRefundPanel({
                     setCollectionShouldContinue(false);
                   }
                 }}
-                disabled={refundInputsDisabled}
+                disabled={refundFieldsDisabled}
                 className="mt-1 h-4 w-4"
               />
               Close invoice after refund. Backend allows this only after all payment amounts are

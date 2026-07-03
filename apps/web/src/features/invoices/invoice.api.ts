@@ -94,21 +94,30 @@ export async function getInvoices({
 
 export async function getInvoice(invoiceId: string): Promise<InvoiceDetail> {
   const accessToken = await getAccessTokenOrRefresh();
-  const invoiceEnvelope = await getAuthJsonEnvelope<unknown>(
-    `/invoices/${encodeURIComponent(invoiceId)}`,
-    { accessToken },
-  );
+  const encodedInvoiceId = encodeURIComponent(invoiceId);
+  const invoiceEnvelope = await getAuthJsonEnvelope<unknown>(`/invoices/${encodedInvoiceId}`, {
+    accessToken,
+  });
   const statusEventsEnvelope = await getAuthJsonEnvelope<unknown>(
-    `/invoices/${encodeURIComponent(invoiceId)}/status-events`,
+    `/invoices/${encodedInvoiceId}/status-events`,
     { accessToken },
   );
   const receiptsEnvelope = await getAuthJsonEnvelope<unknown>('/receipts?limit=100', {
     accessToken,
   });
-  const receipts = normalizeReceiptListPayload(receiptsEnvelope.data, {
+  const paymentsEnvelope = await getAuthJsonEnvelope<unknown>(
+    `/invoices/${encodedInvoiceId}/payments?limit=100`,
+    { accessToken },
+  );
+  const invoiceReceipts = normalizeReceiptListPayload(receiptsEnvelope.data, {
     requestId: readMetaString(receiptsEnvelope.meta.request_id),
     correlationId: readMetaString(receiptsEnvelope.meta.correlation_id),
   }).filter((receipt) => receipt.invoice_id === invoiceId);
+  const payments = normalizePaymentListPayload(paymentsEnvelope.data, {
+    requestId: readMetaString(paymentsEnvelope.meta.request_id),
+    correlationId: readMetaString(paymentsEnvelope.meta.correlation_id),
+  });
+  const receipts = attachPaymentRefundableAmounts(invoiceReceipts, payments);
 
   return normalizeInvoiceDetailPayload(
     invoiceEnvelope.data,
@@ -326,6 +335,38 @@ export function normalizeReceiptListPayload(
   }
 
   throw toInvalidReceiptResponseError(meta);
+}
+
+export function normalizePaymentListPayload(
+  data: unknown,
+  meta: {
+    readonly requestId: string | null;
+    readonly correlationId: string | null;
+  },
+): readonly InvoicePayment[] {
+  if (Array.isArray(data)) {
+    const payments = normalizePaymentArray(data);
+
+    if (payments !== null) {
+      return payments;
+    }
+  }
+
+  if (isObjectRecord(data)) {
+    const candidates = [data.payments, data.items, data.results];
+
+    for (const candidate of candidates) {
+      if (Array.isArray(candidate)) {
+        const payments = normalizePaymentArray(candidate);
+
+        if (payments !== null) {
+          return payments;
+        }
+      }
+    }
+  }
+
+  throw toInvalidPaymentListResponseError(meta);
 }
 
 export function normalizePaymentMutationPayload(
@@ -715,6 +756,22 @@ function normalizePayment(value: unknown): InvoicePayment | null {
   };
 }
 
+function normalizePaymentArray(values: readonly unknown[]): readonly InvoicePayment[] | null {
+  const payments: InvoicePayment[] = [];
+
+  for (const value of values) {
+    const payment = normalizePayment(value);
+
+    if (payment === null) {
+      return null;
+    }
+
+    payments.push(payment);
+  }
+
+  return payments;
+}
+
 function normalizeReceiptArray(values: readonly unknown[]): readonly InvoiceReceipt[] | null {
   const receipts: InvoiceReceipt[] = [];
 
@@ -754,9 +811,26 @@ function normalizeReceipt(value: unknown): InvoiceReceipt | null {
     payment_id: value.payment_id,
     receipt_number: value.receipt_number,
     amount: readMoneyString(value.amount),
+    refundable_amount: readMoneyString(value.refundable_amount),
     payment_method: value.payment_method,
     issued_at: readString(value.issued_at),
   };
+}
+
+function attachPaymentRefundableAmounts(
+  receipts: readonly InvoiceReceipt[],
+  payments: readonly InvoicePayment[],
+): readonly InvoiceReceipt[] {
+  const paymentById = new Map(payments.map((payment) => [payment.id, payment]));
+
+  return receipts.map((receipt) => {
+    const payment = paymentById.get(receipt.payment_id);
+
+    return {
+      ...receipt,
+      refundable_amount: payment?.refundable_amount ?? receipt.refundable_amount,
+    };
+  });
 }
 
 function normalizeInvoicePagination(pagination: unknown): ApiPaginationMeta | null {
@@ -829,6 +903,23 @@ function toInvalidReceiptResponseError({
   return {
     code: 'invalid_api_response',
     message: 'The receipt response did not contain a valid receipt payload.',
+    status: 500,
+    details: [],
+    requestId,
+    correlationId,
+  };
+}
+
+function toInvalidPaymentListResponseError({
+  requestId,
+  correlationId,
+}: {
+  readonly requestId: string | null;
+  readonly correlationId: string | null;
+}): ApiClientError {
+  return {
+    code: 'invalid_api_response',
+    message: 'The payment list response did not contain a valid payment list payload.',
     status: 500,
     details: [],
     requestId,

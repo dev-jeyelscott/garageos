@@ -336,8 +336,12 @@ export function getInvoiceRefundBlockedReason({
     return 'Refund reason is required.';
   }
 
+  const maxRefundable = getReceiptRefundableAmount(receipt);
   const refundAmount = Number(amount);
-  const maxRefundable = getReceiptRefundableEstimate({ invoice, receipt });
+
+  if (maxRefundable <= 0) {
+    return 'This receipt-backed payment has no refundable amount remaining.';
+  }
 
   if (!Number.isFinite(refundAmount) || refundAmount <= 0) {
     return 'Refund amount must be greater than zero.';
@@ -369,26 +373,19 @@ export function buildInvoiceRefundInput({
   };
 }
 
+export function getReceiptRefundableAmount(receipt: InvoiceReceipt): number {
+  const refundableAmount = Number(receipt.refundable_amount);
+
+  return Number.isFinite(refundableAmount) ? Math.max(refundableAmount, 0) : 0;
+}
+
 export function getReceiptRefundableEstimate({
-  invoice,
   receipt,
 }: {
-  readonly invoice: InvoiceDetail;
+  readonly invoice?: InvoiceDetail;
   readonly receipt: InvoiceReceipt;
 }): number {
-  const receiptAmount = Number(receipt.amount);
-  const amountPaid = Number(invoice.amount_paid);
-  const amountRefunded = Number(invoice.amount_refunded);
-
-  if (!Number.isFinite(receiptAmount)) {
-    return 0;
-  }
-
-  if (!Number.isFinite(amountPaid) || !Number.isFinite(amountRefunded)) {
-    return Math.max(receiptAmount, 0);
-  }
-
-  return Math.max(Math.min(receiptAmount, amountPaid - amountRefunded), 0);
+  return getReceiptRefundableAmount(receipt);
 }
 
 export function mergeUniqueInvoices(

@@ -7,6 +7,7 @@ import {
   getInvoiceRefundBlockedReason,
   getInvoiceWorkflowBlockedReason,
   getReceiptRefundableEstimate,
+  toSafeErrorMessage,
 } from './invoice.ui';
 import type { InvoiceDetail, InvoiceReceipt } from './invoice.types';
 
@@ -54,6 +55,7 @@ const receipt = {
   payment_id: 'payment-1',
   receipt_number: 'RCT-20260703-000001',
   amount: '1120.00',
+  refundable_amount: '1120.00',
   payment_method: 'cash',
   issued_at: '2026-07-03T00:30:00.000Z',
 } satisfies InvoiceReceipt;
@@ -72,20 +74,80 @@ describe('invoice UI guards', () => {
     ).toBe('Paid invoices must be fully refunded before voiding.');
   });
 
-  it('limits refund amount to a conservative receipt-level refundable estimate', () => {
-    expect(getReceiptRefundableEstimate({ invoice, receipt })).toBe(1120);
+  it('uses payment-level refundable amount for split-payment receipt estimates', () => {
+    const fullyRefundedReceipt = {
+      ...receipt,
+      id: 'receipt-fully-refunded',
+      payment_id: 'payment-fully-refunded',
+      amount: '500.00',
+      refundable_amount: '0.00',
+    } satisfies InvoiceReceipt;
+    const refundableReceipt = {
+      ...receipt,
+      id: 'receipt-refundable',
+      payment_id: 'payment-refundable',
+      amount: '620.00',
+      refundable_amount: '620.00',
+    } satisfies InvoiceReceipt;
+    const splitPaymentInvoice = {
+      ...invoice,
+      amount_paid: '1120.00',
+      amount_refunded: '500.00',
+      receipts: [fullyRefundedReceipt, refundableReceipt],
+    } satisfies InvoiceDetail;
+
+    expect(
+      getReceiptRefundableEstimate({
+        invoice: splitPaymentInvoice,
+        receipt: fullyRefundedReceipt,
+      }),
+    ).toBe(0);
+    expect(
+      getReceiptRefundableEstimate({
+        invoice: splitPaymentInvoice,
+        receipt: refundableReceipt,
+      }),
+    ).toBe(620);
 
     expect(
       getInvoiceRefundBlockedReason({
-        invoice,
-        receipt,
+        invoice: splitPaymentInvoice,
+        receipt: fullyRefundedReceipt,
         session,
         isOffline: false,
         writeActionsAllowed: true,
-        amount: '1120.01',
+        amount: '1.00',
+        reason: 'Customer returned unused part.',
+      }),
+    ).toBe('This receipt-backed payment has no refundable amount remaining.');
+
+    expect(
+      getInvoiceRefundBlockedReason({
+        invoice: splitPaymentInvoice,
+        receipt: refundableReceipt,
+        session,
+        isOffline: false,
+        writeActionsAllowed: true,
+        amount: '620.01',
         reason: 'Customer returned unused part.',
       }),
     ).toBe('Refund amount cannot exceed the available refundable amount for this payment.');
+  });
+
+  it('surfaces safe backend refund-balance errors after stale UI state', () => {
+    expect(
+      toSafeErrorMessage(
+        {
+          code: 'refund_amount_exceeds_refundable',
+          message: 'Refund amount exceeds the selected payment refundable amount.',
+          status: 422,
+          details: [],
+          requestId: 'req_01J',
+          correlationId: 'corr_01J',
+        },
+        'Unable to record this refund.',
+      ),
+    ).toBe('Refund amount exceeds the selected payment refundable amount.');
   });
 
   it('builds a documented refund payload with reason and collection flags', () => {

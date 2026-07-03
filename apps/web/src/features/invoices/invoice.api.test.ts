@@ -59,6 +59,7 @@ const receipt = {
   amount: '560.00',
   payment_method: 'cash',
   issued_at: '2026-07-03T01:00:00.000Z',
+  refundable_amount: '0.00',
 };
 
 const refund = {

@@ -104,6 +104,7 @@ export interface InvoiceReceipt {
   readonly payment_id: string;
   readonly receipt_number: string;
   readonly amount: string;
+  readonly refundable_amount: string;
   readonly payment_method: InvoicePaymentMethod;
   readonly issued_at: string;
 }

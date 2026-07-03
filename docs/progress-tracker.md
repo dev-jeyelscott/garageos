@@ -38,7 +38,8 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 
 ## Current Focus
 
-- [x] **In Progress** — M9.17 — Add Milestone 9 E2E, mobile, permission, and blocked-state coverage
+- [x] **Done** — M9.BUG — Refund UI estimates per-receipt refundable amount from invoice totals
+- [ ] **In Progress** — M9.17 — Add Milestone 9 E2E, mobile, permission, and blocked-state coverage
 - [ ] **Backlog** — M9.18 — Final Milestone 9 regression, documentation, and handoff
 
 ---
@@ -239,13 +240,14 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - [x] **Done** — M9.15 — Implement payment and receipt frontend flows
 - [x] **Done** — M9.16 — Implement refund and void frontend flows
 - [x] **Done** — M9.17 — Add Milestone 9 E2E, mobile, permission, and blocked-state coverage
-- [ ] **In Progress** — M9.18 — Final Milestone 9 regression, documentation, and handoff
+- [x] **In Progress** — M9.18 — Final Milestone 9 regression, documentation, and handoff
 - [x] **Done** — M9.BUG — Add database-backed billing allocation concurrency proof
 - [x] **Done** — M9.BUG — Add invoice workflow UI regression coverage
 - [x] **Done** — M9.BUG — Disabled New invoice link remains navigable
 - [x] **Done** — M9.BUG — Invoice draft UI/API contract mismatch needs resolution
 - [x] **Done** — M9.BUG — Invoice list lacks cursor pagination UI
 - [x] **Done** — M9.BUG — Invoice UI blocks pending invoice cancellation
+- [x] **Done** — M9.BUG — Refund UI estimates per-receipt refundable amount from invoice totals
 - [x] **Done** — [Review] garageos@eff0b976 — No actionable findings
 
 ## M10 — Expenses, Reminders, Notifications, Integrations

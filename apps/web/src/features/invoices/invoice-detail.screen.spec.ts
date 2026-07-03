@@ -8,6 +8,7 @@ import {
   getInvoiceRefundBlockedReason,
   getInvoiceRefundFormBlockedReason,
   getInvoiceWorkflowBlockedReason,
+  getReceiptRefundableEstimate,
 } from './invoice.ui';
 import type { InvoiceDetail, InvoiceReceipt, InvoiceStatus } from './invoice.types';
 
@@ -68,6 +69,7 @@ const refundReceipt: InvoiceReceipt = {
   payment_id: 'payment-1',
   receipt_number: 'RCT-20260704-000001',
   amount: '1000.00',
+  refundable_amount: '1000.00',
   payment_method: 'cash',
   issued_at: '2026-07-04T01:00:00.000Z',
 };
@@ -292,11 +294,66 @@ describe('invoice refund guards', () => {
     ).toBe('Refund amount must be greater than zero.');
   });
 
-  it('blocks refund amounts above the available refundable amount', () => {
+  it('uses payment-level refundable amounts instead of invoice-level aggregates', () => {
+    const fullyRefundedReceipt = {
+      ...refundReceipt,
+      id: 'receipt-fully-refunded',
+      payment_id: 'payment-fully-refunded',
+      amount: '400.00',
+      refundable_amount: '0.00',
+    } satisfies InvoiceReceipt;
+    const refundableReceipt = {
+      ...refundReceipt,
+      id: 'receipt-refundable',
+      payment_id: 'payment-refundable',
+      amount: '600.00',
+      refundable_amount: '600.00',
+    } satisfies InvoiceReceipt;
+    const splitPaymentInvoice = buildInvoice({
+      amount_paid: '1000.00',
+      amount_refunded: '400.00',
+      receipts: [fullyRefundedReceipt, refundableReceipt],
+    });
+
+    expect(
+      getReceiptRefundableEstimate({
+        invoice: splitPaymentInvoice,
+        receipt: fullyRefundedReceipt,
+      }),
+    ).toBe(0);
+    expect(
+      getReceiptRefundableEstimate({
+        invoice: splitPaymentInvoice,
+        receipt: refundableReceipt,
+      }),
+    ).toBe(600);
     expect(
       getInvoiceRefundBlockedReason({
-        invoice: buildInvoice({ amount_paid: '1000.00', amount_refunded: '900.00' }),
-        receipt: refundReceipt,
+        invoice: splitPaymentInvoice,
+        receipt: fullyRefundedReceipt,
+        session: refundSession,
+        isOffline: false,
+        writeActionsAllowed: true,
+        amount: '1.00',
+        reason: 'Customer returned unused part.',
+      }),
+    ).toBe('This receipt-backed payment has no refundable amount remaining.');
+  });
+
+  it('blocks refund amounts above the selected payment refundable amount', () => {
+    const nearlyRefundedReceipt = {
+      ...refundReceipt,
+      refundable_amount: '100.00',
+    } satisfies InvoiceReceipt;
+
+    expect(
+      getInvoiceRefundBlockedReason({
+        invoice: buildInvoice({
+          amount_paid: '1000.00',
+          amount_refunded: '900.00',
+          receipts: [nearlyRefundedReceipt],
+        }),
+        receipt: nearlyRefundedReceipt,
         session: refundSession,
         isOffline: false,
         writeActionsAllowed: true,
