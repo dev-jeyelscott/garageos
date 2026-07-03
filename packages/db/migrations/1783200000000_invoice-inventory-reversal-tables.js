@@ -1,5 +1,30 @@
 exports.up = async (pgm) => {
   pgm.sql(`
+    do $$
+    begin
+      if not exists (
+        select 1
+        from pg_constraint
+        where conname = 'ux_inventory_ledger_entries_tenant_id_id'
+          and conrelid = 'inventory_ledger_entries'::regclass
+      ) then
+        alter table inventory_ledger_entries
+          add constraint ux_inventory_ledger_entries_tenant_id_id
+          unique (tenant_id, id);
+      end if;
+
+      if not exists (
+        select 1
+        from pg_constraint
+        where conname = 'ux_fifo_layers_tenant_id_id'
+          and conrelid = 'fifo_layers'::regclass
+      ) then
+        alter table fifo_layers
+          add constraint ux_fifo_layers_tenant_id_id
+          unique (tenant_id, id);
+      end if;
+    end $$;
+
     create table refund_inventory_reversals (
       id uuid primary key default gen_random_uuid(),
       tenant_id uuid not null references tenants(id),
@@ -89,5 +114,11 @@ exports.down = async (pgm) => {
     drop index if exists idx_refund_inventory_reversals_job_order_line;
     drop index if exists idx_refund_inventory_reversals_refund;
     drop table if exists refund_inventory_reversals;
+
+    alter table if exists fifo_layers
+      drop constraint if exists ux_fifo_layers_tenant_id_id;
+
+    alter table if exists inventory_ledger_entries
+      drop constraint if exists ux_inventory_ledger_entries_tenant_id_id;
   `);
 };
