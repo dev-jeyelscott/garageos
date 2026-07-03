@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { normalizeInvoiceDetailPayload, normalizeInvoiceListPayload } from './invoice.api';
+import {
+  normalizeInvoiceDetailPayload,
+  normalizeInvoiceListPayload,
+  normalizePaymentMutationPayload,
+  normalizeReceiptListPayload,
+} from './invoice.api';
 
 const meta = {
   requestId: 'req_test',
@@ -30,6 +35,28 @@ const invoice = {
   lock_version: 1,
   created_at: '2026-07-03T00:00:00.000Z',
   updated_at: '2026-07-03T00:00:00.000Z',
+};
+
+const payment = {
+  id: 'payment-1',
+  invoice_id: 'invoice-1',
+  amount: '560.00',
+  refundable_amount: '560.00',
+  payment_date: '2026-07-03',
+  payment_method: 'cash',
+  reference_number: 'OR-001',
+  notes: 'Down payment',
+  created_at: '2026-07-03T01:00:00.000Z',
+};
+
+const receipt = {
+  id: 'receipt-1',
+  invoice_id: 'invoice-1',
+  payment_id: 'payment-1',
+  receipt_number: 'RCT-20260703-000001',
+  amount: '560.00',
+  payment_method: 'cash',
+  issued_at: '2026-07-03T01:00:00.000Z',
 };
 
 describe('invoice api normalizers', () => {
@@ -79,12 +106,58 @@ describe('invoice api normalizers', () => {
           created_at: '2026-07-03T00:00:00.000Z',
         },
       ],
+      [],
       { requestId: 'req_test', correlationId: 'corr_test' },
     );
 
     expect(detail.job_order_ids).toEqual(['job-order-1']);
     expect(detail.lines).toHaveLength(1);
     expect(detail.status_events).toHaveLength(1);
+    expect(detail.receipts).toHaveLength(0);
+  });
+
+  it('normalizes payment mutation payloads with generated receipt and updated invoice', () => {
+    expect(
+      normalizePaymentMutationPayload(
+        {
+          payment,
+          receipt,
+          invoice: {
+            ...invoice,
+            status: 'partially_paid',
+            amount_paid: '560.00',
+            remaining_collectible_balance: '560.00',
+          },
+        },
+        { requestId: 'req_test', correlationId: 'corr_test' },
+      ),
+    ).toMatchObject({
+      payment: {
+        id: 'payment-1',
+        amount: '560.00',
+        payment_method: 'cash',
+      },
+      receipt: {
+        id: 'receipt-1',
+        receipt_number: 'RCT-20260703-000001',
+      },
+      invoice: {
+        id: 'invoice-1',
+        status: 'partially_paid',
+      },
+    });
+  });
+
+  it('normalizes receipt list payloads', () => {
+    expect(
+      normalizeReceiptListPayload(
+        { receipts: [receipt] },
+        {
+          requestId: 'req_test',
+          correlationId: 'corr_test',
+        },
+      ),
+    ).toEqual([receipt]);
   });
 
   it('throws a stable client error for invalid invoice list payloads', () => {

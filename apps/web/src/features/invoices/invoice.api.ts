@@ -8,11 +8,16 @@ import { type ApiClientError, type ApiPaginationMeta } from '../../lib/api-envel
 import { invoiceListPageSize } from './invoice.defaults';
 import type {
   CreateDraftInvoiceInput,
+  CreateInvoicePaymentInput,
   InvoiceDetail,
   InvoiceLineItem,
   InvoiceListFilters,
   InvoiceListItem,
   InvoiceListResult,
+  InvoicePayment,
+  InvoicePaymentMethod,
+  InvoicePaymentMutationResult,
+  InvoiceReceipt,
   InvoiceStatus,
   InvoiceStatusEvent,
   InvoiceWorkflowReasonInput,
@@ -71,10 +76,18 @@ export async function getInvoice(invoiceId: string): Promise<InvoiceDetail> {
     `/invoices/${encodeURIComponent(invoiceId)}/status-events`,
     { accessToken },
   );
+  const receiptsEnvelope = await getAuthJsonEnvelope<unknown>('/receipts?limit=100', {
+    accessToken,
+  });
+  const receipts = normalizeReceiptListPayload(receiptsEnvelope.data, {
+    requestId: readMetaString(receiptsEnvelope.meta.request_id),
+    correlationId: readMetaString(receiptsEnvelope.meta.correlation_id),
+  }).filter((receipt) => receipt.invoice_id === invoiceId);
 
   return normalizeInvoiceDetailPayload(
     invoiceEnvelope.data,
     normalizeStatusEventsPayload(statusEventsEnvelope.data),
+    receipts,
     {
       requestId: readMetaString(invoiceEnvelope.meta.request_id),
       correlationId: readMetaString(invoiceEnvelope.meta.correlation_id),
@@ -94,7 +107,38 @@ export async function createDraftInvoice({
     requiresAuth: true,
   });
 
-  return normalizeInvoiceDetailPayload(data, [], { requestId: null, correlationId: null });
+  return normalizeInvoiceDetailPayload(data, [], [], { requestId: null, correlationId: null });
+}
+
+export async function recordInvoicePayment({
+  invoiceId,
+  input,
+  idempotencyKey,
+}: {
+  readonly invoiceId: string;
+  readonly input: CreateInvoicePaymentInput;
+  readonly idempotencyKey: string;
+}): Promise<InvoicePaymentMutationResult> {
+  const data = await postAuthJson<unknown>(
+    `/invoices/${encodeURIComponent(invoiceId)}/payments`,
+    input,
+    { idempotencyKey, requiresAuth: true },
+  );
+
+  return normalizePaymentMutationPayload(data, { requestId: null, correlationId: null });
+}
+
+export async function getReceiptPrintMetadata(receiptId: string): Promise<InvoiceReceipt> {
+  const accessToken = await getAccessTokenOrRefresh();
+  const envelope = await getAuthJsonEnvelope<unknown>(
+    `/receipts/${encodeURIComponent(receiptId)}/print`,
+    { accessToken },
+  );
+
+  return normalizeReceiptDetailPayload(envelope.data, {
+    requestId: readMetaString(envelope.meta.request_id),
+    correlationId: readMetaString(envelope.meta.correlation_id),
+  });
 }
 
 export async function issueInvoice({
@@ -110,7 +154,7 @@ export async function issueInvoice({
     { idempotencyKey, requiresAuth: true },
   );
 
-  return normalizeInvoiceDetailPayload(data, [], { requestId: null, correlationId: null });
+  return normalizeInvoiceDetailPayload(data, [], [], { requestId: null, correlationId: null });
 }
 
 export async function cancelInvoice({
@@ -128,7 +172,7 @@ export async function cancelInvoice({
     { idempotencyKey, requiresAuth: true },
   );
 
-  return normalizeInvoiceDetailPayload(data, [], { requestId: null, correlationId: null });
+  return normalizeInvoiceDetailPayload(data, [], [], { requestId: null, correlationId: null });
 }
 
 export async function voidInvoice({
@@ -146,7 +190,7 @@ export async function voidInvoice({
     { idempotencyKey, requiresAuth: true },
   );
 
-  return normalizeInvoiceDetailPayload(data, [], { requestId: null, correlationId: null });
+  return normalizeInvoiceDetailPayload(data, [], [], { requestId: null, correlationId: null });
 }
 
 export function normalizeInvoiceListPayload(
@@ -182,6 +226,7 @@ export function normalizeInvoiceListPayload(
 export function normalizeInvoiceDetailPayload(
   data: unknown,
   statusEvents: readonly InvoiceStatusEvent[],
+  receipts: readonly InvoiceReceipt[],
   meta: {
     readonly requestId: string | null;
     readonly correlationId: string | null;
@@ -190,7 +235,7 @@ export function normalizeInvoiceDetailPayload(
   const detail = normalizeInvoiceDetail(data, statusEvents);
 
   if (detail !== null) {
-    return detail;
+    return { ...detail, receipts };
   }
 
   if (isObjectRecord(data)) {
@@ -200,12 +245,100 @@ export function normalizeInvoiceDetailPayload(
       const nestedDetail = normalizeInvoiceDetail(candidate, statusEvents);
 
       if (nestedDetail !== null) {
-        return nestedDetail;
+        return { ...nestedDetail, receipts };
       }
     }
   }
 
   throw toInvalidInvoiceDetailResponseError(meta);
+}
+
+export function normalizeReceiptListPayload(
+  data: unknown,
+  meta: {
+    readonly requestId: string | null;
+    readonly correlationId: string | null;
+  },
+): readonly InvoiceReceipt[] {
+  if (Array.isArray(data)) {
+    const receipts = normalizeReceiptArray(data);
+
+    if (receipts !== null) {
+      return receipts;
+    }
+  }
+
+  if (isObjectRecord(data)) {
+    const candidates = [data.receipts, data.items, data.results];
+
+    for (const candidate of candidates) {
+      if (Array.isArray(candidate)) {
+        const receipts = normalizeReceiptArray(candidate);
+
+        if (receipts !== null) {
+          return receipts;
+        }
+      }
+    }
+  }
+
+  throw toInvalidReceiptResponseError(meta);
+}
+
+export function normalizePaymentMutationPayload(
+  data: unknown,
+  meta: {
+    readonly requestId: string | null;
+    readonly correlationId: string | null;
+  },
+): InvoicePaymentMutationResult {
+  const result = normalizePaymentMutation(data);
+
+  if (result !== null) {
+    return result;
+  }
+
+  if (isObjectRecord(data)) {
+    const candidates = [data.invoice_payment, data.payment_result, data.result, data.item];
+
+    for (const candidate of candidates) {
+      const nestedResult = normalizePaymentMutation(candidate);
+
+      if (nestedResult !== null) {
+        return nestedResult;
+      }
+    }
+  }
+
+  throw toInvalidPaymentResponseError(meta);
+}
+
+function normalizeReceiptDetailPayload(
+  data: unknown,
+  meta: {
+    readonly requestId: string | null;
+    readonly correlationId: string | null;
+  },
+): InvoiceReceipt {
+  const receipt = normalizeReceipt(data);
+
+  if (receipt !== null) {
+    return receipt;
+  }
+
+  if (isObjectRecord(data)) {
+    const candidates = [data.receipt, data.item, data.result];
+
+    for (const candidate of candidates) {
+      const nestedReceipt = normalizeReceipt(candidate);
+
+      if (nestedReceipt !== null) {
+        return nestedReceipt;
+      }
+    }
+  }
+
+  throw toInvalidReceiptResponseError(meta);
 }
 
 function readInvoiceArray(data: Record<string, unknown>): readonly InvoiceListItem[] | null {
@@ -259,6 +392,7 @@ function normalizeInvoiceDetail(
     job_order_ids: normalizeStringArray(value.job_order_ids ?? value.jobOrderIds),
     lines: normalizeInvoiceLines(value.lines),
     status_events: statusEvents,
+    receipts: [],
   };
 }
 
@@ -368,6 +502,94 @@ function normalizeStatusEvent(value: unknown): InvoiceStatusEvent | null {
   };
 }
 
+function normalizePaymentMutation(value: unknown): InvoicePaymentMutationResult | null {
+  if (!isObjectRecord(value)) {
+    return null;
+  }
+
+  const payment = normalizePayment(value.payment);
+  const receipt = normalizeReceipt(value.receipt);
+  const invoice = normalizeInvoiceListItem(value.invoice);
+
+  if (payment === null || receipt === null || invoice === null) {
+    return null;
+  }
+
+  return { payment, receipt, invoice };
+}
+
+function normalizePayment(value: unknown): InvoicePayment | null {
+  if (!isObjectRecord(value)) {
+    return null;
+  }
+
+  if (
+    !(
+      typeof value.id === 'string' &&
+      typeof value.invoice_id === 'string' &&
+      isPaymentMethod(value.payment_method)
+    )
+  ) {
+    return null;
+  }
+
+  return {
+    id: value.id,
+    invoice_id: value.invoice_id,
+    amount: readMoneyString(value.amount),
+    refundable_amount: readMoneyString(value.refundable_amount),
+    payment_date: readString(value.payment_date),
+    payment_method: value.payment_method,
+    reference_number: readNullableString(value.reference_number),
+    notes: readNullableString(value.notes),
+    created_at: readString(value.created_at),
+  };
+}
+
+function normalizeReceiptArray(values: readonly unknown[]): readonly InvoiceReceipt[] | null {
+  const receipts: InvoiceReceipt[] = [];
+
+  for (const value of values) {
+    const receipt = normalizeReceipt(value);
+
+    if (receipt === null) {
+      return null;
+    }
+
+    receipts.push(receipt);
+  }
+
+  return receipts;
+}
+
+function normalizeReceipt(value: unknown): InvoiceReceipt | null {
+  if (!isObjectRecord(value)) {
+    return null;
+  }
+
+  if (
+    !(
+      typeof value.id === 'string' &&
+      typeof value.invoice_id === 'string' &&
+      typeof value.payment_id === 'string' &&
+      typeof value.receipt_number === 'string' &&
+      isPaymentMethod(value.payment_method)
+    )
+  ) {
+    return null;
+  }
+
+  return {
+    id: value.id,
+    invoice_id: value.invoice_id,
+    payment_id: value.payment_id,
+    receipt_number: value.receipt_number,
+    amount: readMoneyString(value.amount),
+    payment_method: value.payment_method,
+    issued_at: readString(value.issued_at),
+  };
+}
+
 function normalizeInvoicePagination(pagination: unknown): ApiPaginationMeta | null {
   if (!isObjectRecord(pagination)) {
     return null;
@@ -421,6 +643,40 @@ function toInvalidInvoiceDetailResponseError({
   return {
     code: 'invalid_api_response',
     message: 'The invoice response did not contain a valid invoice payload.',
+    status: 500,
+    details: [],
+    requestId,
+    correlationId,
+  };
+}
+
+function toInvalidReceiptResponseError({
+  requestId,
+  correlationId,
+}: {
+  readonly requestId: string | null;
+  readonly correlationId: string | null;
+}): ApiClientError {
+  return {
+    code: 'invalid_api_response',
+    message: 'The receipt response did not contain a valid receipt payload.',
+    status: 500,
+    details: [],
+    requestId,
+    correlationId,
+  };
+}
+
+function toInvalidPaymentResponseError({
+  requestId,
+  correlationId,
+}: {
+  readonly requestId: string | null;
+  readonly correlationId: string | null;
+}): ApiClientError {
+  return {
+    code: 'invalid_api_response',
+    message: 'The payment response did not contain a valid payment and receipt payload.',
     status: 500,
     details: [],
     requestId,
@@ -508,6 +764,18 @@ function isInvoiceStatus(value: unknown): value is InvoiceStatus {
     value === 'cancelled' ||
     value === 'voided' ||
     value === 'refunded'
+  );
+}
+
+function isPaymentMethod(value: unknown): value is InvoicePaymentMethod {
+  return (
+    value === 'cash' ||
+    value === 'gcash' ||
+    value === 'maya' ||
+    value === 'bank_transfer' ||
+    value === 'credit_card' ||
+    value === 'check' ||
+    value === 'other'
   );
 }
 

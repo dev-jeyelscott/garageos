@@ -9,6 +9,7 @@ import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
   Input,
@@ -24,8 +25,22 @@ import { getCurrentSession } from '../auth/queries/get-current-session.query';
 import type { AuthSessionResponseData } from '../auth/types/auth-session';
 
 import { InvoiceStatusBadge } from './components/invoice-list-results';
-import { cancelInvoice, getInvoice, issueInvoice, voidInvoice } from './invoice.api';
-import type { InvoiceDetail, InvoiceDetailState, InvoiceLineItem } from './invoice.types';
+import {
+  cancelInvoice,
+  getInvoice,
+  getReceiptPrintMetadata,
+  issueInvoice,
+  recordInvoicePayment,
+  voidInvoice,
+} from './invoice.api';
+import type {
+  CreateInvoicePaymentInput,
+  InvoiceDetail,
+  InvoiceDetailState,
+  InvoiceLineItem,
+  InvoicePaymentMethod,
+  InvoiceReceipt,
+} from './invoice.types';
 import {
   canUseInvoiceWriteActions,
   generateIdempotencyKey,
@@ -57,6 +72,30 @@ type WorkflowState =
       readonly detail: string | null;
       readonly code: string | null;
     };
+
+type PaymentState =
+  | { readonly status: 'idle' }
+  | { readonly status: 'submitting' }
+  | { readonly status: 'success'; readonly receiptNumber: string }
+  | {
+      readonly status: 'error';
+      readonly message: string;
+      readonly detail: string | null;
+      readonly code: string | null;
+    };
+
+const paymentMethodOptions: readonly {
+  readonly value: InvoicePaymentMethod;
+  readonly label: string;
+}[] = [
+  { value: 'cash', label: 'Cash' },
+  { value: 'gcash', label: 'GCash' },
+  { value: 'maya', label: 'Maya' },
+  { value: 'bank_transfer', label: 'Bank transfer' },
+  { value: 'credit_card', label: 'Credit card' },
+  { value: 'check', label: 'Check' },
+  { value: 'other', label: 'Other' },
+];
 
 export function InvoiceDetailScreen({ invoiceId }: InvoiceDetailScreenProps) {
   const targetInvoiceId = invoiceId.length > 0 ? invoiceId : null;
@@ -327,6 +366,14 @@ function InvoiceDetailView({
         writeActionsAllowed={writeActionsAllowed}
         onChanged={onChanged}
       />
+      <InvoicePaymentPanel
+        invoice={invoice}
+        session={session}
+        isOffline={isOffline}
+        writeActionsAllowed={writeActionsAllowed}
+        onChanged={onChanged}
+      />
+      <InvoiceReceiptsPanel receipts={invoice.receipts} />
       <InvoiceSummaryCard invoice={invoice} />
       <InvoiceLineItems lines={invoice.lines} />
       <InvoiceStatusHistory invoice={invoice} />
@@ -519,6 +566,270 @@ function InvoiceWorkflowActions({
             {submitting && workflowState.action === 'void' ? 'Voiding...' : 'Void invoice'}
           </Button>
         </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+function InvoicePaymentPanel({
+  invoice,
+  session,
+  isOffline,
+  writeActionsAllowed,
+  onChanged,
+}: {
+  readonly invoice: InvoiceDetail;
+  readonly session: AuthSessionResponseData | null;
+  readonly isOffline: boolean;
+  readonly writeActionsAllowed: boolean;
+  readonly onChanged: () => void;
+}) {
+  const [amount, setAmount] = useState(invoice.remaining_collectible_balance);
+  const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [paymentMethod, setPaymentMethod] = useState<InvoicePaymentMethod>('cash');
+  const [referenceNumber, setReferenceNumber] = useState('');
+  const [notes, setNotes] = useState('');
+  const [paymentState, setPaymentState] = useState<PaymentState>({ status: 'idle' });
+  const blockedReason = getPaymentBlockedReason({
+    invoice,
+    session,
+    isOffline,
+    writeActionsAllowed,
+    amount,
+    paymentDate,
+  });
+  const submitting = paymentState.status === 'submitting';
+
+  useEffect(() => {
+    setAmount(invoice.remaining_collectible_balance);
+  }, [invoice.id, invoice.remaining_collectible_balance]);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (blockedReason !== null) {
+      setPaymentState({
+        status: 'error',
+        message: blockedReason,
+        detail: null,
+        code: 'forbidden',
+      });
+      return;
+    }
+
+    setPaymentState({ status: 'submitting' });
+
+    try {
+      const result = await recordInvoicePayment({
+        invoiceId: invoice.id,
+        input: buildPaymentInput({
+          amount,
+          paymentDate,
+          paymentMethod,
+          referenceNumber,
+          notes,
+        }),
+        idempotencyKey: generateIdempotencyKey('invoice-payment'),
+      });
+
+      setPaymentState({
+        status: 'success',
+        receiptNumber: result.receipt.receipt_number,
+      });
+      setReferenceNumber('');
+      setNotes('');
+      onChanged();
+    } catch (error) {
+      setPaymentState({
+        status: 'error',
+        message: toSafeErrorMessage(error, 'Unable to record this payment.'),
+        detail: toSafeErrorDetail(error),
+        code: getApiErrorCode(error),
+      });
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Payments</CardTitle>
+        <CardDescription>
+          Record manual customer payments against the remaining collectible balance.
+        </CardDescription>
+      </CardHeader>
+      <form onSubmit={handleSubmit}>
+        <CardContent className="grid gap-4">
+          {blockedReason === null ? null : (
+            <Alert>
+              <p className="text-sm leading-6">{blockedReason}</p>
+            </Alert>
+          )}
+
+          {paymentState.status === 'success' ? (
+            <Alert>
+              <p className="text-sm leading-6">
+                Payment recorded. Receipt {paymentState.receiptNumber} is available below.
+              </p>
+            </Alert>
+          ) : null}
+
+          {paymentState.status === 'error' ? (
+            <Alert variant="destructive">
+              <p className="text-sm font-bold">{paymentState.message}</p>
+              {paymentState.code === null ? null : (
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  Error code: {paymentState.code}
+                </p>
+              )}
+              {paymentState.detail === null ? null : (
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  {paymentState.detail}
+                </p>
+              )}
+            </Alert>
+          ) : null}
+
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <DetailField
+              label="Remaining"
+              value={formatMoney(invoice.remaining_collectible_balance)}
+            />
+            <label className="grid gap-2">
+              <span className="text-sm font-bold text-foreground">Amount</span>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={amount}
+                onChange={(event) => setAmount(event.currentTarget.value)}
+                disabled={submitting || blockedReason !== null}
+              />
+            </label>
+            <label className="grid gap-2">
+              <span className="text-sm font-bold text-foreground">Payment date</span>
+              <Input
+                type="date"
+                value={paymentDate}
+                onChange={(event) => setPaymentDate(event.currentTarget.value)}
+                disabled={submitting || blockedReason !== null}
+              />
+            </label>
+            <label className="grid gap-2">
+              <span className="text-sm font-bold text-foreground">Payment method</span>
+              <select
+                value={paymentMethod}
+                onChange={(event) =>
+                  setPaymentMethod(event.currentTarget.value as InvoicePaymentMethod)
+                }
+                disabled={submitting || blockedReason !== null}
+                className="min-h-11 rounded-xl border border-input bg-background px-3 py-2 text-base text-foreground shadow-sm outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {paymentMethodOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="grid gap-2">
+              <span className="text-sm font-bold text-foreground">Reference number</span>
+              <Input
+                value={referenceNumber}
+                onChange={(event) => setReferenceNumber(event.currentTarget.value)}
+                disabled={submitting || blockedReason !== null}
+              />
+            </label>
+            <label className="grid gap-2">
+              <span className="text-sm font-bold text-foreground">Notes</span>
+              <Input
+                value={notes}
+                onChange={(event) => setNotes(event.currentTarget.value)}
+                disabled={submitting || blockedReason !== null}
+              />
+            </label>
+          </div>
+        </CardContent>
+        <CardFooter>
+          <Button type="submit" disabled={submitting || blockedReason !== null}>
+            {submitting ? 'Recording...' : 'Record payment'}
+          </Button>
+        </CardFooter>
+      </form>
+    </Card>
+  );
+}
+
+function InvoiceReceiptsPanel({ receipts }: { readonly receipts: readonly InvoiceReceipt[] }) {
+  const [printState, setPrintState] = useState<
+    | { readonly status: 'idle' }
+    | { readonly status: 'loading'; readonly receiptId: string }
+    | { readonly status: 'error'; readonly message: string; readonly detail: string | null }
+  >({ status: 'idle' });
+
+  async function handlePrint(receiptId: string) {
+    setPrintState({ status: 'loading', receiptId });
+
+    try {
+      await getReceiptPrintMetadata(receiptId);
+      setPrintState({ status: 'idle' });
+      window.print();
+    } catch (error) {
+      setPrintState({
+        status: 'error',
+        message: toSafeErrorMessage(error, 'Unable to load receipt print metadata.'),
+        detail: toSafeErrorDetail(error),
+      });
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Receipts</CardTitle>
+        <CardDescription>
+          Immutable receipt records generated from invoice payments.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-3">
+        {printState.status === 'error' ? (
+          <Alert variant="destructive">
+            <p className="text-sm font-bold">{printState.message}</p>
+            {printState.detail === null ? null : (
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">{printState.detail}</p>
+            )}
+          </Alert>
+        ) : null}
+
+        {receipts.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No receipts were returned.</p>
+        ) : (
+          receipts.map((receipt) => (
+            <div
+              key={receipt.id}
+              className="grid gap-3 rounded-xl border border-border bg-muted/40 p-3 md:grid-cols-[1fr_auto] md:items-center"
+            >
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                <DetailField label="Receipt" value={receipt.receipt_number} />
+                <DetailField label="Amount" value={formatMoney(receipt.amount)} />
+                <DetailField label="Method" value={formatStatusLabel(receipt.payment_method)} />
+                <DetailField label="Issued" value={formatDateTime(receipt.issued_at)} />
+              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={printState.status === 'loading' && printState.receiptId === receipt.id}
+                onClick={() => void handlePrint(receipt.id)}
+              >
+                {printState.status === 'loading' && printState.receiptId === receipt.id
+                  ? 'Loading...'
+                  : 'Print'}
+              </Button>
+            </div>
+          ))
+        )}
       </CardContent>
     </Card>
   );
@@ -737,4 +1048,94 @@ function getWorkflowBlockedReason({
   }
 
   return null;
+}
+
+function getPaymentBlockedReason({
+  invoice,
+  session,
+  isOffline,
+  writeActionsAllowed,
+  amount,
+  paymentDate,
+}: {
+  readonly invoice: InvoiceDetail;
+  readonly session: AuthSessionResponseData | null;
+  readonly isOffline: boolean;
+  readonly writeActionsAllowed: boolean;
+  readonly amount: string;
+  readonly paymentDate: string;
+}): string | null {
+  if (session === null) {
+    return null;
+  }
+
+  if (!hasPermission(session, 'payments.create')) {
+    return 'Your tenant session does not include payments.create permission.';
+  }
+
+  if (!hasPermission(session, 'receipts.read')) {
+    return 'Your tenant session does not include receipts.read permission.';
+  }
+
+  if (isOffline) {
+    return 'Reconnect before recording payments. Offline mode is read-only.';
+  }
+
+  if (session.access.read_only === true) {
+    return 'This tenant is read-only. Payment writes are blocked.';
+  }
+
+  if (!writeActionsAllowed) {
+    return 'Payment recording is blocked by the current tenant session.';
+  }
+
+  if (!isCollectibleInvoiceStatus(invoice.status)) {
+    return 'Only pending, partially paid, or overdue invoices can receive payments.';
+  }
+
+  if (paymentDate.length === 0) {
+    return 'Payment date is required.';
+  }
+
+  const paymentAmount = Number(amount);
+  const remainingBalance = Number(invoice.remaining_collectible_balance);
+
+  if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
+    return 'Payment amount must be greater than zero.';
+  }
+
+  if (Number.isFinite(remainingBalance) && paymentAmount > remainingBalance) {
+    return 'Payment amount cannot exceed the remaining collectible balance.';
+  }
+
+  return null;
+}
+
+function buildPaymentInput({
+  amount,
+  paymentDate,
+  paymentMethod,
+  referenceNumber,
+  notes,
+}: {
+  readonly amount: string;
+  readonly paymentDate: string;
+  readonly paymentMethod: InvoicePaymentMethod;
+  readonly referenceNumber: string;
+  readonly notes: string;
+}): CreateInvoicePaymentInput {
+  const trimmedReference = referenceNumber.trim();
+  const trimmedNotes = notes.trim();
+
+  return {
+    amount: Number(amount).toFixed(2),
+    payment_date: paymentDate,
+    payment_method: paymentMethod,
+    ...(trimmedReference.length > 0 ? { reference_number: trimmedReference } : {}),
+    ...(trimmedNotes.length > 0 ? { notes: trimmedNotes } : {}),
+  };
+}
+
+function isCollectibleInvoiceStatus(status: InvoiceDetail['status']): boolean {
+  return status === 'pending' || status === 'partially_paid' || status === 'overdue';
 }

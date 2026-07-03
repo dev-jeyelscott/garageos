@@ -16,6 +16,15 @@ export type InvoiceBranchFilter = 'all' | string;
 
 export type InvoiceDiscountType = 'none' | 'fixed' | 'percentage';
 
+export type InvoicePaymentMethod =
+  | 'cash'
+  | 'gcash'
+  | 'maya'
+  | 'bank_transfer'
+  | 'credit_card'
+  | 'check'
+  | 'other';
+
 export interface InvoiceListFilters {
   readonly status: InvoiceStatusFilter;
   readonly branch_id: InvoiceBranchFilter;
@@ -77,10 +86,33 @@ export interface InvoiceStatusEvent {
   readonly created_at: string;
 }
 
+export interface InvoicePayment {
+  readonly id: string;
+  readonly invoice_id: string;
+  readonly amount: string;
+  readonly refundable_amount: string;
+  readonly payment_date: string;
+  readonly payment_method: InvoicePaymentMethod;
+  readonly reference_number: string | null;
+  readonly notes: string | null;
+  readonly created_at: string;
+}
+
+export interface InvoiceReceipt {
+  readonly id: string;
+  readonly invoice_id: string;
+  readonly payment_id: string;
+  readonly receipt_number: string;
+  readonly amount: string;
+  readonly payment_method: InvoicePaymentMethod;
+  readonly issued_at: string;
+}
+
 export interface InvoiceDetail extends InvoiceListItem {
   readonly job_order_ids: readonly string[];
   readonly lines: readonly InvoiceLineItem[];
   readonly status_events: readonly InvoiceStatusEvent[];
+  readonly receipts: readonly InvoiceReceipt[];
 }
 
 export interface InvoiceListResult {
@@ -105,6 +137,20 @@ export interface CreateDraftInvoiceInput {
 
 export interface InvoiceWorkflowReasonInput {
   readonly reason: string;
+}
+
+export interface CreateInvoicePaymentInput {
+  readonly amount: string;
+  readonly payment_date: string;
+  readonly payment_method: InvoicePaymentMethod;
+  readonly reference_number?: string;
+  readonly notes?: string;
+}
+
+export interface InvoicePaymentMutationResult {
+  readonly payment: InvoicePayment;
+  readonly receipt: InvoiceReceipt;
+  readonly invoice: InvoiceListItem;
 }
 
 export type InvoiceListState =
