@@ -26,15 +26,15 @@ import {
 import type {
   InvoiceBranchFilter,
   InvoiceListFilters,
-  InvoiceListItem,
   InvoiceListState,
   InvoiceStatusFilter,
 } from './invoice.types';
 import {
-  canUseInvoiceWriteActions,
+  canCreateDraftInvoice,
   canViewInvoices,
   getApiErrorCode,
   hasPermission,
+  mergeUniqueInvoices,
   toSafeErrorDetail,
   toSafeErrorMessage,
   useNetworkStatus,
@@ -95,7 +95,6 @@ export function InvoiceListScreen() {
   const canReadInvoices = hasPermission(session, 'invoices.read');
   const canCreateInvoices = hasPermission(session, 'invoices.create');
   const canAccessInvoices = canViewInvoices(session);
-  const writeActionsAllowed = canUseInvoiceWriteActions({ session, networkStatus });
 
   useEffect(() => {
     if (!canAccessInvoices) {
@@ -232,7 +231,7 @@ export function InvoiceListScreen() {
   const branchOptions = session?.branches ?? [];
   const shouldShowBranchFilter =
     session?.tenant_wide_branch_access === true || branchOptions.length > 1;
-  const isCreateInvoiceBlocked = !canCreateInvoices || !writeActionsAllowed;
+  const isCreateInvoiceBlocked = !canCreateDraftInvoice({ session, networkStatus });
   const canLoadMoreInvoices =
     invoiceListState.pagination?.has_more === true &&
     invoiceListState.pagination.next_cursor !== null &&
@@ -438,21 +437,4 @@ export function InvoiceListScreen() {
       </Card>
     </div>
   );
-
-  function mergeUniqueInvoices(
-    currentInvoices: readonly InvoiceListItem[],
-    nextInvoices: readonly InvoiceListItem[],
-  ): readonly InvoiceListItem[] {
-    const seenInvoiceIds = new Set(currentInvoices.map((invoice) => invoice.id));
-    const mergedInvoices = [...currentInvoices];
-
-    for (const invoice of nextInvoices) {
-      if (!seenInvoiceIds.has(invoice.id)) {
-        seenInvoiceIds.add(invoice.id);
-        mergedInvoices.push(invoice);
-      }
-    }
-
-    return mergedInvoices;
-  }
 }

@@ -5,9 +5,16 @@ import { useEffect, useState } from 'react';
 import { isApiClientError, type ApiClientError } from '../../lib/api-envelope';
 import type { AuthSessionResponseData } from '../auth/types/auth-session';
 
-import type { InvoiceStatus } from './invoice.types';
+import type {
+  CreateInvoicePaymentInput,
+  InvoiceDetail,
+  InvoiceListItem,
+  InvoicePaymentMethod,
+  InvoiceStatus,
+} from './invoice.types';
 
 export type NetworkStatus = 'online' | 'offline';
+export type InvoiceWorkflowAction = 'issue' | 'cancel' | 'void';
 
 export function useNetworkStatus(): NetworkStatus {
   const [isOnline, setIsOnline] = useState(() =>
@@ -65,8 +72,189 @@ export function canUseInvoiceWriteActions({
   );
 }
 
+export function canCreateDraftInvoice({
+  session,
+  networkStatus,
+}: {
+  readonly session: AuthSessionResponseData | null;
+  readonly networkStatus: NetworkStatus;
+}): boolean {
+  return (
+    hasPermission(session, 'invoices.create') &&
+    canUseInvoiceWriteActions({ session, networkStatus })
+  );
+}
+
 export function canEnterInvoiceCancelReason(invoiceStatus: InvoiceStatus): boolean {
   return invoiceStatus === 'draft' || invoiceStatus === 'pending';
+}
+
+export function getInvoiceWorkflowBlockedReason({
+  action,
+  invoice,
+  session,
+  isOffline,
+  writeActionsAllowed,
+  reason,
+}: {
+  readonly action: InvoiceWorkflowAction;
+  readonly invoice: InvoiceDetail;
+  readonly session: AuthSessionResponseData | null;
+  readonly isOffline: boolean;
+  readonly writeActionsAllowed: boolean;
+  readonly reason: string;
+}): string | null {
+  const permission =
+    action === 'issue'
+      ? 'invoices.issue'
+      : action === 'cancel'
+        ? 'invoices.cancel'
+        : 'invoices.void';
+
+  if (session === null) {
+    return null;
+  }
+
+  if (!hasPermission(session, permission)) {
+    return `Your tenant session does not include ${permission} permission.`;
+  }
+
+  if (isOffline) {
+    return 'Reconnect before using invoice workflow actions. Offline mode is read-only.';
+  }
+
+  if (session.access.read_only === true) {
+    return 'This tenant is read-only. Operational invoice writes are blocked.';
+  }
+
+  if (!writeActionsAllowed) {
+    return 'Invoice workflow actions are blocked by the current tenant session.';
+  }
+
+  if (isFinalWorkflowBlockedInvoiceStatus(invoice.status)) {
+    return 'Cancelled, voided, and refunded invoices cannot use workflow actions.';
+  }
+
+  if (action === 'issue' && invoice.status !== 'draft') {
+    return 'Only draft invoices can be issued.';
+  }
+
+  if (action === 'cancel' && invoice.status !== 'draft' && invoice.status !== 'pending') {
+    return 'Only draft or pending zero-payment invoices can be cancelled.';
+  }
+
+  if ((action === 'cancel' || action === 'void') && reason.trim().length === 0) {
+    return 'A reason is required for this invoice workflow action.';
+  }
+
+  if (action === 'void' && invoice.status === 'draft') {
+    return 'Draft invoices cannot be voided.';
+  }
+
+  return null;
+}
+
+export function getInvoicePaymentBlockedReason({
+  invoice,
+  session,
+  isOffline,
+  writeActionsAllowed,
+  amount,
+  paymentDate,
+}: {
+  readonly invoice: InvoiceDetail;
+  readonly session: AuthSessionResponseData | null;
+  readonly isOffline: boolean;
+  readonly writeActionsAllowed: boolean;
+  readonly amount: string;
+  readonly paymentDate: string;
+}): string | null {
+  if (session === null) {
+    return null;
+  }
+
+  if (!hasPermission(session, 'payments.create')) {
+    return 'Your tenant session does not include payments.create permission.';
+  }
+
+  if (!hasPermission(session, 'receipts.read')) {
+    return 'Your tenant session does not include receipts.read permission.';
+  }
+
+  if (isOffline) {
+    return 'Reconnect before recording payments. Offline mode is read-only.';
+  }
+
+  if (session.access.read_only === true) {
+    return 'This tenant is read-only. Payment writes are blocked.';
+  }
+
+  if (!writeActionsAllowed) {
+    return 'Payment recording is blocked by the current tenant session.';
+  }
+
+  if (!isCollectibleInvoiceStatus(invoice.status)) {
+    return 'Only pending, partially paid, or overdue invoices can receive payments.';
+  }
+
+  if (paymentDate.length === 0) {
+    return 'Payment date is required.';
+  }
+
+  const paymentAmount = Number(amount);
+  const remainingBalance = Number(invoice.remaining_collectible_balance);
+
+  if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
+    return 'Payment amount must be greater than zero.';
+  }
+
+  if (Number.isFinite(remainingBalance) && paymentAmount > remainingBalance) {
+    return 'Payment amount cannot exceed the remaining collectible balance.';
+  }
+
+  return null;
+}
+
+export function buildInvoicePaymentInput({
+  amount,
+  paymentDate,
+  paymentMethod,
+  referenceNumber,
+  notes,
+}: {
+  readonly amount: string;
+  readonly paymentDate: string;
+  readonly paymentMethod: InvoicePaymentMethod;
+  readonly referenceNumber: string;
+  readonly notes: string;
+}): CreateInvoicePaymentInput {
+  const trimmedReference = referenceNumber.trim();
+  const trimmedNotes = notes.trim();
+
+  return {
+    amount: Number(amount).toFixed(2),
+    payment_date: paymentDate,
+    payment_method: paymentMethod,
+    ...(trimmedReference.length > 0 ? { reference_number: trimmedReference } : {}),
+    ...(trimmedNotes.length > 0 ? { notes: trimmedNotes } : {}),
+  };
+}
+
+export function mergeUniqueInvoices(
+  currentInvoices: readonly InvoiceListItem[],
+  nextInvoices: readonly InvoiceListItem[],
+): readonly InvoiceListItem[] {
+  const seenInvoiceIds = new Set(currentInvoices.map((invoice) => invoice.id));
+  const mergedInvoices = [...currentInvoices];
+
+  for (const invoice of nextInvoices) {
+    if (!seenInvoiceIds.has(invoice.id)) {
+      seenInvoiceIds.add(invoice.id);
+      mergedInvoices.push(invoice);
+    }
+  }
+
+  return mergedInvoices;
 }
 
 export function toSafeErrorMessage(error: unknown, fallback: string): string {
@@ -125,4 +313,12 @@ export function generateIdempotencyKey(prefix: string): string {
   }
 
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function isFinalWorkflowBlockedInvoiceStatus(status: InvoiceStatus): boolean {
+  return status === 'cancelled' || status === 'voided' || status === 'refunded';
+}
+
+function isCollectibleInvoiceStatus(status: InvoiceDetail['status']): boolean {
+  return status === 'pending' || status === 'partially_paid' || status === 'overdue';
 }
