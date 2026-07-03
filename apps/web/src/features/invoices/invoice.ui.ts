@@ -5,6 +5,8 @@ import { useEffect, useState } from 'react';
 import { isApiClientError, type ApiClientError } from '../../lib/api-envelope';
 import type { AuthSessionResponseData } from '../auth/types/auth-session';
 
+import type { InvoiceStatus } from './invoice.types';
+
 export type NetworkStatus = 'online' | 'offline';
 
 export function useNetworkStatus(): NetworkStatus {
@@ -61,6 +63,10 @@ export function canUseInvoiceWriteActions({
     session.access.read_only !== true &&
     networkStatus === 'online'
   );
+}
+
+export function canEnterInvoiceCancelReason(invoiceStatus: InvoiceStatus): boolean {
+  return invoiceStatus === 'draft' || invoiceStatus === 'pending';
 }
 
 export function toSafeErrorMessage(error: unknown, fallback: string): string {

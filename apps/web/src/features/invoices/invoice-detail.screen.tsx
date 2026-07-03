@@ -42,6 +42,7 @@ import type {
   InvoiceReceipt,
 } from './invoice.types';
 import {
+  canEnterInvoiceCancelReason,
   canUseInvoiceWriteActions,
   generateIdempotencyKey,
   getApiErrorCode,
@@ -484,7 +485,10 @@ function InvoiceWorkflowActions({
     writeActionsAllowed,
     reason: voidReason,
   });
+
   const submitting = workflowState.status === 'submitting';
+
+  const canEnterCancelReason = canEnterInvoiceCancelReason(invoice.status);
 
   return (
     <Card>
@@ -531,7 +535,7 @@ function InvoiceWorkflowActions({
             <Input
               value={cancelReason}
               onChange={(event) => setCancelReason(event.currentTarget.value)}
-              disabled={submitting || invoice.status !== 'draft'}
+              disabled={submitting || !canEnterCancelReason}
             />
           </label>
           {cancelBlockedReason === null ? null : (
