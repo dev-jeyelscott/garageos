@@ -9,7 +9,9 @@ import { invoiceListPageSize } from './invoice.defaults';
 import type {
   CreateDraftInvoiceInput,
   CreateInvoicePaymentInput,
+  CreateInvoiceRefundInput,
   InvoiceDetail,
+  InvoiceInventoryReversal,
   InvoiceLineItem,
   InvoiceListFilters,
   InvoiceListItem,
@@ -18,6 +20,8 @@ import type {
   InvoicePaymentMethod,
   InvoicePaymentMutationResult,
   InvoiceReceipt,
+  InvoiceRefund,
+  InvoiceRefundMutationResult,
   InvoiceStatus,
   InvoiceStatusEvent,
   InvoiceWorkflowReasonInput,
@@ -148,6 +152,23 @@ export async function recordInvoicePayment({
   );
 
   return normalizePaymentMutationPayload(data, { requestId: null, correlationId: null });
+}
+export async function recordPaymentRefund({
+  paymentId,
+  input,
+  idempotencyKey,
+}: {
+  readonly paymentId: string;
+  readonly input: CreateInvoiceRefundInput;
+  readonly idempotencyKey: string;
+}): Promise<InvoiceRefundMutationResult> {
+  const data = await postAuthJson<unknown>(
+    `/payments/${encodeURIComponent(paymentId)}/refunds`,
+    input,
+    { idempotencyKey, requiresAuth: true },
+  );
+
+  return normalizeRefundMutationPayload(data, { requestId: null, correlationId: null });
 }
 
 export async function getReceiptPrintMetadata(receiptId: string): Promise<InvoiceReceipt> {
@@ -333,6 +354,34 @@ export function normalizePaymentMutationPayload(
   }
 
   throw toInvalidPaymentResponseError(meta);
+}
+
+export function normalizeRefundMutationPayload(
+  data: unknown,
+  meta: {
+    readonly requestId: string | null;
+    readonly correlationId: string | null;
+  },
+): InvoiceRefundMutationResult {
+  const result = normalizeRefundMutation(data);
+
+  if (result !== null) {
+    return result;
+  }
+
+  if (isObjectRecord(data)) {
+    const candidates = [data.invoice_refund, data.refund_result, data.result, data.item];
+
+    for (const candidate of candidates) {
+      const nestedResult = normalizeRefundMutation(candidate);
+
+      if (nestedResult !== null) {
+        return nestedResult;
+      }
+    }
+  }
+
+  throw toInvalidRefundResponseError(meta);
 }
 
 function normalizeReceiptDetailPayload(
@@ -540,6 +589,104 @@ function normalizePaymentMutation(value: unknown): InvoicePaymentMutationResult 
   return { payment, receipt, invoice };
 }
 
+function normalizeRefundMutation(value: unknown): InvoiceRefundMutationResult | null {
+  if (!isObjectRecord(value)) {
+    return null;
+  }
+
+  const refund = normalizeRefund(value.refund);
+  const payment = normalizePayment(value.payment);
+  const invoice = normalizeInvoiceListItem(value.invoice);
+  const inventoryReversals = normalizeInventoryReversalArray(value.inventory_reversals);
+
+  if (refund === null || payment === null || invoice === null || inventoryReversals === null) {
+    return null;
+  }
+
+  return { refund, payment, invoice, inventory_reversals: inventoryReversals };
+}
+
+function normalizeRefund(value: unknown): InvoiceRefund | null {
+  if (!isObjectRecord(value)) {
+    return null;
+  }
+
+  if (
+    !(
+      typeof value.id === 'string' &&
+      typeof value.invoice_id === 'string' &&
+      typeof value.payment_id === 'string' &&
+      typeof value.reason === 'string' &&
+      isRefundStatus(value.status)
+    )
+  ) {
+    return null;
+  }
+
+  return {
+    id: value.id,
+    invoice_id: value.invoice_id,
+    payment_id: value.payment_id,
+    amount: readMoneyString(value.amount),
+    reason: value.reason,
+    collection_should_continue: value.collection_should_continue === true,
+    close_invoice_after_refund: value.close_invoice_after_refund === true,
+    inventory_reversal_selected: value.inventory_reversal_selected === true,
+    status: value.status,
+    created_at: readString(value.created_at),
+  };
+}
+
+function normalizeInventoryReversalArray(
+  value: unknown,
+): readonly InvoiceInventoryReversal[] | null {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const reversals: InvoiceInventoryReversal[] = [];
+
+  for (const item of value) {
+    const reversal = normalizeInventoryReversal(item);
+
+    if (reversal === null) {
+      return null;
+    }
+
+    reversals.push(reversal);
+  }
+
+  return reversals;
+}
+
+function normalizeInventoryReversal(value: unknown): InvoiceInventoryReversal | null {
+  if (!isObjectRecord(value)) {
+    return null;
+  }
+
+  if (
+    !(
+      typeof value.id === 'string' &&
+      typeof value.job_order_line_id === 'string' &&
+      typeof value.product_id === 'string' &&
+      typeof value.inventory_ledger_entry_id === 'string' &&
+      typeof value.fifo_layer_id === 'string'
+    )
+  ) {
+    return null;
+  }
+
+  return {
+    id: value.id,
+    job_order_line_id: value.job_order_line_id,
+    product_id: value.product_id,
+    quantity_returned: readQuantityString(value.quantity_returned),
+    inventory_ledger_entry_id: value.inventory_ledger_entry_id,
+    fifo_layer_id: value.fifo_layer_id,
+    created_at: readString(value.created_at),
+  };
+}
+
 function normalizePayment(value: unknown): InvoicePayment | null {
   if (!isObjectRecord(value)) {
     return null;
@@ -706,6 +853,23 @@ function toInvalidPaymentResponseError({
   };
 }
 
+function toInvalidRefundResponseError({
+  requestId,
+  correlationId,
+}: {
+  readonly requestId: string | null;
+  readonly correlationId: string | null;
+}): ApiClientError {
+  return {
+    code: 'invalid_api_response',
+    message: 'The refund response did not contain a valid refund, payment, and invoice payload.',
+    status: 500,
+    details: [],
+    requestId,
+    correlationId,
+  };
+}
+
 function readNestedName(
   value: Record<string, unknown>,
   nestedKey: string,
@@ -799,6 +963,10 @@ function isPaymentMethod(value: unknown): value is InvoicePaymentMethod {
     value === 'check' ||
     value === 'other'
   );
+}
+
+function isRefundStatus(value: unknown): value is InvoiceRefund['status'] {
+  return value === 'posted' || value === 'voided';
 }
 
 function isObjectRecord(value: unknown): value is Record<string, unknown> {

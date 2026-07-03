@@ -153,6 +153,55 @@ export interface InvoicePaymentMutationResult {
   readonly invoice: InvoiceListItem;
 }
 
+export interface InvoiceInventoryReversalLineInput {
+  readonly invoice_line_id: string;
+  readonly product_id: string;
+  readonly return_quantity: string;
+}
+
+export interface InvoiceInventoryReversalInput {
+  readonly selected: boolean;
+  readonly lines: readonly InvoiceInventoryReversalLineInput[];
+}
+
+export interface CreateInvoiceRefundInput {
+  readonly amount: string;
+  readonly reason: string;
+  readonly collection_should_continue: boolean;
+  readonly close_invoice_after_refund: boolean;
+  readonly inventory_reversal?: InvoiceInventoryReversalInput;
+}
+
+export interface InvoiceRefund {
+  readonly id: string;
+  readonly invoice_id: string;
+  readonly payment_id: string;
+  readonly amount: string;
+  readonly reason: string;
+  readonly collection_should_continue: boolean;
+  readonly close_invoice_after_refund: boolean;
+  readonly inventory_reversal_selected: boolean;
+  readonly status: 'posted' | 'voided';
+  readonly created_at: string;
+}
+
+export interface InvoiceInventoryReversal {
+  readonly id: string;
+  readonly job_order_line_id: string;
+  readonly product_id: string;
+  readonly quantity_returned: string;
+  readonly inventory_ledger_entry_id: string;
+  readonly fifo_layer_id: string;
+  readonly created_at: string;
+}
+
+export interface InvoiceRefundMutationResult {
+  readonly refund: InvoiceRefund;
+  readonly payment: InvoicePayment;
+  readonly invoice: InvoiceListItem;
+  readonly inventory_reversals: readonly InvoiceInventoryReversal[];
+}
+
 export type InvoiceListState =
   | {
       readonly status: 'idle' | 'loading';

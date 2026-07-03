@@ -31,6 +31,7 @@ import {
   getReceiptPrintMetadata,
   issueInvoice,
   recordInvoicePayment,
+  recordPaymentRefund,
   voidInvoice,
 } from './invoice.api';
 import type {
@@ -42,11 +43,14 @@ import type {
 } from './invoice.types';
 import {
   buildInvoicePaymentInput,
+  buildInvoiceRefundInput,
   canEnterInvoiceCancelReason,
   canUseInvoiceWriteActions,
   generateIdempotencyKey,
   getApiErrorCode,
   getInvoicePaymentBlockedReason,
+  getInvoiceRefundBlockedReason,
+  getReceiptRefundableEstimate,
   getInvoiceWorkflowBlockedReason,
   hasPermission,
   toSafeErrorDetail,
@@ -80,6 +84,17 @@ type PaymentState =
   | { readonly status: 'idle' }
   | { readonly status: 'submitting' }
   | { readonly status: 'success'; readonly receiptNumber: string }
+  | {
+      readonly status: 'error';
+      readonly message: string;
+      readonly detail: string | null;
+      readonly code: string | null;
+    };
+
+type RefundState =
+  | { readonly status: 'idle' }
+  | { readonly status: 'submitting' }
+  | { readonly status: 'success'; readonly refundAmount: string }
   | {
       readonly status: 'error';
       readonly message: string;
@@ -376,6 +391,14 @@ function InvoiceDetailView({
         writeActionsAllowed={writeActionsAllowed}
         onChanged={onChanged}
       />
+      <InvoiceRefundPanel
+        invoice={invoice}
+        receipts={invoice.receipts}
+        session={session}
+        isOffline={isOffline}
+        writeActionsAllowed={writeActionsAllowed}
+        onChanged={onChanged}
+      />
       <InvoiceReceiptsPanel receipts={invoice.receipts} />
       <InvoiceSummaryCard invoice={invoice} />
       <InvoiceLineItems lines={invoice.lines} />
@@ -497,8 +520,8 @@ function InvoiceWorkflowActions({
       <CardHeader>
         <CardTitle>Workflow actions</CardTitle>
         <CardDescription>
-          Issue, cancel, and void are explicit invoice workflow actions. Payment and refund UI are
-          intentionally outside this slice.
+          Issue, cancel, and void are explicit invoice workflow actions. Paid invoices must be fully
+          refunded before voiding.
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
@@ -761,6 +784,240 @@ function InvoicePaymentPanel({
         <CardFooter>
           <Button type="submit" disabled={submitting || blockedReason !== null}>
             {submitting ? 'Recording...' : 'Record payment'}
+          </Button>
+        </CardFooter>
+      </form>
+    </Card>
+  );
+}
+
+function InvoiceRefundPanel({
+  invoice,
+  receipts,
+  session,
+  isOffline,
+  writeActionsAllowed,
+  onChanged,
+}: {
+  readonly invoice: InvoiceDetail;
+  readonly receipts: readonly InvoiceReceipt[];
+  readonly session: AuthSessionResponseData | null;
+  readonly isOffline: boolean;
+  readonly writeActionsAllowed: boolean;
+  readonly onChanged: () => void;
+}) {
+  const [selectedReceiptId, setSelectedReceiptId] = useState(() => receipts[0]?.id ?? '');
+  const selectedReceipt =
+    receipts.find((receipt) => receipt.id === selectedReceiptId) ?? receipts[0] ?? null;
+  const estimatedRefundableAmount =
+    selectedReceipt === null
+      ? 0
+      : getReceiptRefundableEstimate({ invoice, receipt: selectedReceipt });
+  const [amount, setAmount] = useState(() => estimatedRefundableAmount.toFixed(2));
+  const [reason, setReason] = useState('');
+  const [collectionShouldContinue, setCollectionShouldContinue] = useState(true);
+  const [closeInvoiceAfterRefund, setCloseInvoiceAfterRefund] = useState(false);
+  const [refundState, setRefundState] = useState<RefundState>({ status: 'idle' });
+
+  useEffect(() => {
+    const firstReceiptId = receipts[0]?.id ?? '';
+    setSelectedReceiptId((current) =>
+      receipts.some((receipt) => receipt.id === current) ? current : firstReceiptId,
+    );
+  }, [receipts]);
+
+  useEffect(() => {
+    setAmount(estimatedRefundableAmount.toFixed(2));
+  }, [estimatedRefundableAmount, selectedReceipt?.id]);
+
+  const blockedReason =
+    selectedReceipt === null
+      ? 'No receipt-backed payment is available to refund.'
+      : getInvoiceRefundBlockedReason({
+          invoice,
+          receipt: selectedReceipt,
+          session,
+          isOffline,
+          writeActionsAllowed,
+          amount,
+          reason,
+        });
+  const submitting = refundState.status === 'submitting';
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (selectedReceipt === null || blockedReason !== null) {
+      setRefundState({
+        status: 'error',
+        message: blockedReason ?? 'No receipt-backed payment is available to refund.',
+        detail: null,
+        code: 'forbidden',
+      });
+      return;
+    }
+
+    setRefundState({ status: 'submitting' });
+
+    try {
+      const result = await recordPaymentRefund({
+        paymentId: selectedReceipt.payment_id,
+        input: buildInvoiceRefundInput({
+          amount,
+          reason,
+          collectionShouldContinue,
+          closeInvoiceAfterRefund,
+        }),
+        idempotencyKey: generateIdempotencyKey('payment-refund'),
+      });
+
+      setRefundState({
+        status: 'success',
+        refundAmount: result.refund.amount,
+      });
+      setReason('');
+      onChanged();
+    } catch (error) {
+      setRefundState({
+        status: 'error',
+        message: toSafeErrorMessage(error, 'Unable to record this refund.'),
+        detail: toSafeErrorDetail(error),
+        code: getApiErrorCode(error),
+      });
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Refunds</CardTitle>
+        <CardDescription>
+          Record correction-only refunds against receipt-backed payments. Receipt records remain
+          immutable; the backend remains authoritative for exact refundable balances.
+        </CardDescription>
+      </CardHeader>
+      <form onSubmit={handleSubmit}>
+        <CardContent className="grid gap-4">
+          {blockedReason === null ? null : (
+            <Alert>
+              <p className="text-sm leading-6">{blockedReason}</p>
+            </Alert>
+          )}
+
+          {refundState.status === 'success' ? (
+            <Alert>
+              <p className="text-sm leading-6">
+                Refund recorded for {formatMoney(refundState.refundAmount)}. Invoice details are
+                refreshing.
+              </p>
+            </Alert>
+          ) : null}
+
+          {refundState.status === 'error' ? (
+            <Alert variant="destructive">
+              <p className="text-sm font-bold">{refundState.message}</p>
+              {refundState.code === null ? null : (
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  Error code: {refundState.code}
+                </p>
+              )}
+              {refundState.detail === null ? null : (
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">{refundState.detail}</p>
+              )}
+            </Alert>
+          ) : null}
+
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <label className="grid gap-2">
+              <span className="text-sm font-bold text-foreground">Payment / receipt</span>
+              <select
+                value={selectedReceipt?.id ?? ''}
+                onChange={(event) => setSelectedReceiptId(event.currentTarget.value)}
+                disabled={submitting || receipts.length === 0}
+                className="min-h-11 rounded-xl border border-input bg-background px-3 py-2 text-base text-foreground shadow-sm outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {receipts.length === 0 ? <option value="">No receipts</option> : null}
+                {receipts.map((receipt) => (
+                  <option key={receipt.id} value={receipt.id}>
+                    {receipt.receipt_number} / {formatMoney(receipt.amount)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <DetailField
+              label="Estimated refundable"
+              value={formatMoney(estimatedRefundableAmount.toFixed(2))}
+            />
+            <label className="grid gap-2">
+              <span className="text-sm font-bold text-foreground">Refund amount</span>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={amount}
+                onChange={(event) => setAmount(event.currentTarget.value)}
+                disabled={submitting || selectedReceipt === null}
+              />
+            </label>
+            <label className="grid gap-2">
+              <span className="text-sm font-bold text-foreground">Refund reason</span>
+              <Input
+                value={reason}
+                onChange={(event) => setReason(event.currentTarget.value)}
+                disabled={submitting || selectedReceipt === null}
+              />
+            </label>
+          </div>
+
+          <div className="grid gap-3 rounded-xl border border-border bg-muted/40 p-3 md:grid-cols-2">
+            <label className="flex items-start gap-3 text-sm leading-6 text-foreground">
+              <input
+                type="checkbox"
+                checked={collectionShouldContinue}
+                onChange={(event) => {
+                  const checked = event.currentTarget.checked;
+                  setCollectionShouldContinue(checked);
+
+                  if (checked) {
+                    setCloseInvoiceAfterRefund(false);
+                  }
+                }}
+                disabled={submitting || selectedReceipt === null}
+                className="mt-1 h-4 w-4"
+              />
+              Continue collection after this refund.
+            </label>
+            <label className="flex items-start gap-3 text-sm leading-6 text-foreground">
+              <input
+                type="checkbox"
+                checked={closeInvoiceAfterRefund}
+                onChange={(event) => {
+                  const checked = event.currentTarget.checked;
+                  setCloseInvoiceAfterRefund(checked);
+
+                  if (checked) {
+                    setCollectionShouldContinue(false);
+                  }
+                }}
+                disabled={submitting || selectedReceipt === null}
+                className="mt-1 h-4 w-4"
+              />
+              Close invoice after refund. Backend allows this only after all payment amounts are
+              refunded.
+            </label>
+          </div>
+
+          <Alert>
+            <p className="text-sm leading-6">
+              Inventory reversal inputs are intentionally not shown here because this detail screen
+              does not expose safe return candidates per payment. Refund inventory reversal remains
+              backend-authoritative when an API client supplies documented reversal lines.
+            </p>
+          </Alert>
+        </CardContent>
+        <CardFooter>
+          <Button type="submit" variant="secondary" disabled={submitting || blockedReason !== null}>
+            {submitting ? 'Recording refund...' : 'Record refund'}
           </Button>
         </CardFooter>
       </form>

@@ -5,6 +5,7 @@ import {
   normalizeInvoiceDetailPayload,
   normalizeInvoiceListPayload,
   normalizePaymentMutationPayload,
+  normalizeRefundMutationPayload,
   normalizeReceiptListPayload,
 } from './invoice.api';
 
@@ -58,6 +59,19 @@ const receipt = {
   amount: '560.00',
   payment_method: 'cash',
   issued_at: '2026-07-03T01:00:00.000Z',
+};
+
+const refund = {
+  id: 'refund-1',
+  invoice_id: 'invoice-1',
+  payment_id: 'payment-1',
+  amount: '100.00',
+  reason: 'Customer returned unused part.',
+  collection_should_continue: true,
+  close_invoice_after_refund: false,
+  inventory_reversal_selected: false,
+  status: 'posted',
+  created_at: '2026-07-03T02:00:00.000Z',
 };
 
 describe('invoice api normalizers', () => {
@@ -190,6 +204,44 @@ describe('invoice api normalizers', () => {
         id: 'invoice-1',
         status: 'partially_paid',
       },
+    });
+  });
+
+  it('normalizes refund mutation payloads with updated payment and invoice state', () => {
+    expect(
+      normalizeRefundMutationPayload(
+        {
+          refund,
+          payment: {
+            ...payment,
+            refundable_amount: '460.00',
+          },
+          invoice: {
+            ...invoice,
+            status: 'partially_paid',
+            amount_paid: '560.00',
+            amount_refunded: '100.00',
+            remaining_collectible_balance: '660.00',
+          },
+          inventory_reversals: [],
+        },
+        { requestId: 'req_test', correlationId: 'corr_test' },
+      ),
+    ).toMatchObject({
+      refund: {
+        id: 'refund-1',
+        amount: '100.00',
+        status: 'posted',
+      },
+      payment: {
+        id: 'payment-1',
+        refundable_amount: '460.00',
+      },
+      invoice: {
+        id: 'invoice-1',
+        amount_refunded: '100.00',
+      },
+      inventory_reversals: [],
     });
   });
 

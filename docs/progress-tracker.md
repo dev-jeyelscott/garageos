@@ -254,8 +254,6 @@
 - [x] Implement AR balances/report basis
 - [x] Implement financial immutability protections
 - [x] Implement cashier mobile flows
-  - [x] M9.14 invoice frontend list/detail/draft/issue/cancel/void flows completed on 2026-07-03. Files changed: `apps/web/app/(tenant)/invoices/page.tsx`, `apps/web/app/(tenant)/invoices/new/page.tsx`, `apps/web/app/(tenant)/invoices/[invoice_id]/page.tsx`, `apps/web/src/features/invoices/*`, `apps/web/src/features/app-shell/constants/tenant-route.constants.ts`. Validation passed: `pnpm.cmd --filter @garageos/web typecheck`; `pnpm.cmd --filter @garageos/web test`; `pnpm.cmd --filter @garageos/web lint`.
-  - [x] M9.15 payment and receipt frontend flows completed on 2026-07-03. Files changed: `apps/web/src/features/invoices/invoice.types.ts`, `apps/web/src/features/invoices/invoice.api.ts`, `apps/web/src/features/invoices/invoice-detail.screen.tsx`, `apps/web/src/features/invoices/invoice.api.test.ts`. Validation passed: `pnpm.cmd --filter @garageos/web test -- invoice.api.test.ts`; `pnpm.cmd --filter @garageos/web typecheck`; `pnpm.cmd --filter @garageos/web lint`. Notes: payment submit remains backend-authoritative, client blocks obvious overpayment/offline/read-only states, and receipt list filtering is client-side because the current receipt list endpoint only documents `limit`.
 - [ ] Next recommended task: M9.16 refund and void frontend flows.
 
 ## Milestone 10 — Expenses, Reminders, Notifications, Integrations

@@ -7,9 +7,11 @@ import type { AuthSessionResponseData } from '../auth/types/auth-session';
 
 import type {
   CreateInvoicePaymentInput,
+  CreateInvoiceRefundInput,
   InvoiceDetail,
   InvoiceListItem,
   InvoicePaymentMethod,
+  InvoiceReceipt,
   InvoiceStatus,
 } from './invoice.types';
 
@@ -151,6 +153,18 @@ export function getInvoiceWorkflowBlockedReason({
     return 'Draft invoices cannot be voided.';
   }
 
+  const amountPaid = Number(invoice.amount_paid);
+  const amountRefunded = Number(invoice.amount_refunded);
+
+  if (
+    action === 'void' &&
+    Number.isFinite(amountPaid) &&
+    Number.isFinite(amountRefunded) &&
+    amountPaid > amountRefunded
+  ) {
+    return 'Paid invoices must be fully refunded before voiding.';
+  }
+
   return null;
 }
 
@@ -238,6 +252,106 @@ export function buildInvoicePaymentInput({
     ...(trimmedReference.length > 0 ? { reference_number: trimmedReference } : {}),
     ...(trimmedNotes.length > 0 ? { notes: trimmedNotes } : {}),
   };
+}
+
+export function getInvoiceRefundBlockedReason({
+  invoice,
+  receipt,
+  session,
+  isOffline,
+  writeActionsAllowed,
+  amount,
+  reason,
+}: {
+  readonly invoice: InvoiceDetail;
+  readonly receipt: InvoiceReceipt;
+  readonly session: AuthSessionResponseData | null;
+  readonly isOffline: boolean;
+  readonly writeActionsAllowed: boolean;
+  readonly amount: string;
+  readonly reason: string;
+}): string | null {
+  if (session === null) {
+    return null;
+  }
+
+  if (!hasPermission(session, 'payments.refund') && !hasPermission(session, 'invoices.refund')) {
+    return 'Your tenant session does not include payments.refund or invoices.refund permission.';
+  }
+
+  if (isOffline) {
+    return 'Reconnect before recording refunds. Offline mode is read-only.';
+  }
+
+  if (session.access.read_only === true) {
+    return 'This tenant is read-only. Refund writes are blocked.';
+  }
+
+  if (!writeActionsAllowed) {
+    return 'Refund recording is blocked by the current tenant session.';
+  }
+
+  if (invoice.status === 'draft' || invoice.status === 'cancelled' || invoice.status === 'voided') {
+    return 'Only issued invoices with refundable payments can receive refunds.';
+  }
+
+  if (reason.trim().length === 0) {
+    return 'Refund reason is required.';
+  }
+
+  const refundAmount = Number(amount);
+  const maxRefundable = getReceiptRefundableEstimate({ invoice, receipt });
+
+  if (!Number.isFinite(refundAmount) || refundAmount <= 0) {
+    return 'Refund amount must be greater than zero.';
+  }
+
+  if (refundAmount > maxRefundable) {
+    return 'Refund amount cannot exceed the available refundable amount for this payment.';
+  }
+
+  return null;
+}
+
+export function buildInvoiceRefundInput({
+  amount,
+  reason,
+  collectionShouldContinue,
+  closeInvoiceAfterRefund,
+}: {
+  readonly amount: string;
+  readonly reason: string;
+  readonly collectionShouldContinue: boolean;
+  readonly closeInvoiceAfterRefund: boolean;
+}): CreateInvoiceRefundInput {
+  return {
+    amount: Number(amount).toFixed(2),
+    reason: reason.trim(),
+    collection_should_continue: collectionShouldContinue,
+    close_invoice_after_refund: closeInvoiceAfterRefund,
+  };
+}
+
+export function getReceiptRefundableEstimate({
+  invoice,
+  receipt,
+}: {
+  readonly invoice: InvoiceDetail;
+  readonly receipt: InvoiceReceipt;
+}): number {
+  const receiptAmount = Number(receipt.amount);
+  const amountPaid = Number(invoice.amount_paid);
+  const amountRefunded = Number(invoice.amount_refunded);
+
+  if (!Number.isFinite(receiptAmount)) {
+    return 0;
+  }
+
+  if (!Number.isFinite(amountPaid) || !Number.isFinite(amountRefunded)) {
+    return Math.max(receiptAmount, 0);
+  }
+
+  return Math.max(Math.min(receiptAmount, amountPaid - amountRefunded), 0);
 }
 
 export function mergeUniqueInvoices(
