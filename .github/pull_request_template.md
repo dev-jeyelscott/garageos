@@ -110,6 +110,38 @@ Do not claim security or E2E coverage unless real underlying scripts/tests exist
 -->
 ```
 
+## UI Evidence
+
+Attach screenshots, recordings, or written UI verification notes for UI-facing changes.
+
+```text
+<!-- Required for UI changes.
+Examples:
+- Mobile screenshot of the updated screen
+- Desktop screenshot if applicable
+- Short recording for workflow/state changes
+- Notes for loading, empty, forbidden, read-only, offline, or conflict states
+
+If this PR has no UI changes, write: Not applicable — no UI changes.
+-->
+```
+
+## Rollback Notes
+
+Describe the rollback plan or explain why rollback is not needed.
+
+```text
+<!-- Required for all PRs.
+Examples:
+- Revert this PR if validation fails after merge.
+- Disable the feature flag if applicable.
+- Roll back the migration using the documented down migration.
+- Not applicable — docs-only change with no runtime impact.
+
+Do not leave this blank.
+-->
+```
+
 ## Architecture / Implementation Checklist
 
 - [ ] Follows existing repository patterns.
