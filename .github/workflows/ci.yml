@@ -141,6 +141,9 @@ jobs:
           echo "PostgreSQL did not become ready in time."
           exit 1
 
+      - name: Apply database migrations
+        run: pnpm db:migrate
+
       - name: Install Playwright browser dependencies
         if: matrix.profile == 'full'
         run: pnpm exec playwright install --with-deps chromium
