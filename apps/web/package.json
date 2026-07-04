@@ -7,7 +7,7 @@
     "build": "next build",
     "lint": "pnpm -r lint",
     "start": "next start --port 3000",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
   },
