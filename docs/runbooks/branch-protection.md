@@ -241,7 +241,7 @@ Every PR should include evidence for:
 - AI reviewer notes.
 - Rollback notes.
 
-The PR template enforces these fields.
+The PR template prompts contributors to provide these fields. Branch protection, required checks, and human review are responsible for enforcing that the evidence is complete before merge.
 
 A PR with missing source-alignment or validation evidence should not be merged until the evidence is added or a clear waiver is documented.
 
