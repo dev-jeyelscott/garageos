@@ -11,8 +11,8 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 | Status                  |   Cards |
 | ----------------------- | ------: |
 | Done                    |     180 |
-| In Progress             |       2 |
-| Ready                   |       1 |
+| In Progress             |       1 |
+| Ready                   |       2 |
 | Backlog                 |     109 |
 | **Total tracked cards** | **292** |
 
@@ -39,11 +39,11 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 
 ## Current Focus
 
-- [ ] **Ready** — ENG-LOOP-01 — Add PR template and branch protection checklist
+- [ ] **In Progress** — ENG-LOOP-01 — Add PR template and branch protection checklist
 - [x] **Done** — CI — Add OpenAI AI reviewer to pull request pipeline
 - [x] **Done** — M9.17 — Add Milestone 9 E2E, mobile, permission, and blocked-state coverage
 - [ ] **In Progress** — M9.18 — Final Milestone 9 regression, documentation, and handoff
-- [ ] **In Progress** — SEC — Add OWASP ZAP baseline security scan pipeline
+- [ ] **Ready** — SEC — Add OWASP ZAP baseline security scan pipeline
 - [ ] **Backlog** — M10.01 — Implement expense categories
 
 ---
@@ -66,7 +66,7 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - [x] **Done** — M0.14 — Create baseline QA automation structure
 - [x] **Done** — M0 — Project Foundation and Engineering Decisions
 - [x] **Done** — CI — Add OpenAI AI reviewer to pull request pipeline
-- [ ] **Ready** — ENG-LOOP-01 — Add PR template and branch protection checklist
+- [ ] **In Progress** — ENG-LOOP-01 — Add PR template and branch protection checklist
 
 ## M1 — Database Foundation and Core Migrations
 
