@@ -1,160 +1,266 @@
-## Notion Ticket
+# GarageOS Pull Request
 
-<!-- Required: paste the Notion ticket title and URL. -->
+## Summary
 
-- Ticket:
-
-## Goal
-
-<!-- Required: what problem does this PR solve? Keep this source-aligned and narrow. -->
+Describe what changed and why.
 
 ```text
-
+<!-- Example:
+Adds validation profile scripts and documents the GarageOS risk-class matrix for PR validation evidence.
+-->
 ```
 
-## Scope
+## Linked Ticket / Task
 
-<!-- Required: list what changed in this PR. -->
+- Notion ticket:
+- Branch:
+- Commit message:
 
-- [ ] Backend/API
-- [ ] Database/migrations/seeds
-- [ ] Frontend/UI
-- [ ] Tests/QA
-- [ ] CI/CD/tooling
-- [ ] Documentation/runbooks
-- [ ] Other:
+## Source Alignment
 
-## Source Docs Reviewed
-
-<!-- Required: check only the docs actually reviewed for this PR. -->
+Check every source document that applies to this PR.
 
 - [ ] `requirements-v2.4.md`
 - [ ] `database-design.md`
 - [ ] `database-schema.md`
 - [ ] `architecture.md`
 - [ ] `api-contracts.md`
-- [ ] `permission-matrix.md`
-- [ ] `ux-sreen-map.md`
 - [ ] `qa-acceptance-test-plan.md`
-- [ ] `requirements-traceability-matrix.md`
-- [ ] `tech-stack.md`
-- [ ] `garageos-architecture-records.md`
 - [ ] `garageos-build-roadmap-v1.3.md`
-- [ ] `Working-Instructions.txt`
-- [ ] Not applicable: docs-only/tooling-only change with rationale below
+- [ ] `permission-matrix.md`
+- [ ] `requirements-traceability-matrix.md`
+- [ ] `garageos-architecture-records.md`
+- [ ] `docs/engineering/validation-profiles.md`
+- [ ] Not applicable / docs-only change
 
-Rationale if any source doc is not applicable:
-
-```text
-
-```
-
-## Documentation Alignment
-
-<!-- Required: confirm this PR implements only documented behavior. -->
-
-- [ ] This PR follows the project documentation as the source of truth.
-- [ ] This PR does not introduce undocumented product behavior.
-- [ ] This PR does not add excluded capabilities.
-- [ ] Any missing or unclear behavior was handled as a ticket, clarification, or ADR instead of being invented.
-
-## Affected Areas
-
-<!-- Required: check all affected areas. -->
-
-- [ ] Architecture
-- [ ] Database
-- [ ] API contracts
-- [ ] Services/application logic
-- [ ] UI/routes/components
-- [ ] Permissions/RBAC/branch access
-- [ ] Tenant lifecycle/subscription gates
-- [ ] Offline/read-only behavior
-- [ ] Financial/inventory immutability
-- [ ] Background jobs
-- [ ] Observability/logging
-- [ ] Testing/QA
-- [ ] Documentation only
-- [ ] Other:
-
-## Risk Class
-
-<!-- Required: select one. Use the highest applicable class. -->
-
-- [ ] R0 — Documentation-only, comments, or non-runtime metadata
-- [ ] R1 — Low-risk tooling, UI copy, tests, or isolated non-critical code
-- [ ] R2 — Standard feature or bug fix with limited module impact
-- [ ] R3 — High-risk auth, authorization, tenant isolation, financial, inventory, migration, CI/CD, background job, or data integrity change
-- [ ] R4 — Production-critical, irreversible, destructive, security-sensitive, or cross-cutting architectural change
-
-Risk rationale:
+Source-alignment notes:
 
 ```text
-
+<!-- Explain how this PR stays within documented GarageOS scope. -->
 ```
 
-## Validation Commands Run
+## Scope Control
 
-<!-- Required: paste exact commands. Use N/A only with rationale. -->
+- [ ] This PR implements only documented behavior.
+- [ ] This PR does not introduce undocumented routes, fields, permissions, modules, workflows, or product behavior.
+- [ ] This PR does not introduce excluded GarageOS scope such as native apps, offline writes, customer portal, standalone POS, payroll, full accounting, automated subscription collection, or 2FA.
+- [ ] This PR does not remove or weaken existing CI gates.
+- [ ] This PR does not include unrelated cleanup or broad refactoring.
+
+Scope notes:
+
+```text
+<!-- Call out any intentional limits or deferred work. -->
+```
+
+## Risk Class and Validation Profile
+
+Select the highest applicable risk class.
+
+- [ ] R0 — Docs-only
+- [ ] R1 — Tooling / CI metadata
+- [ ] R2 — Web UI only
+- [ ] R3 — API / service logic
+- [ ] R4 — Database / persistence
+- [ ] R5 — Auth / tenant / RBAC / branch / plan gates
+- [ ] R6 — Financial / inventory / workflow-critical
+- [ ] R7 — Background jobs / exports / operational reliability
+- [ ] R8 — Release candidate / milestone closure
+
+Reason for selected risk class:
+
+```text
+<!-- Explain why this risk class applies. If multiple areas are touched, choose the highest applicable class. -->
+```
+
+Required validation reference:
+
+- `docs/engineering/validation-profiles.md`
+
+## Validation Evidence
+
+Paste exact commands run and results.
 
 ```bash
-
+# Example:
+# pnpm validate:quick
+# pnpm validate:web
+# pnpm validate:api
+# pnpm validate:db
+# pnpm validate:full
 ```
 
-## Validation Results
-
-<!-- Required: paste pass/fail result summary and any relevant output. -->
+Validation result summary:
 
 ```text
-
+<!-- Example:
+pnpm validate:quick ✅ passed
+pnpm validate:web ✅ passed
+pnpm validate:api ✅ passed
+pnpm validate:db ✅ passed
+pnpm validate:full ✅ passed
+-->
 ```
 
-## UI Evidence
-
-<!-- Required for UI changes. Attach screenshots/recordings or write N/A with rationale. -->
-
-- [ ] Mobile viewport checked
-- [ ] Desktop viewport checked
-- [ ] Loading/empty/error/forbidden/offline/read-only states checked where applicable
-- [ ] Not applicable
-
-Evidence / notes:
+Pending or unavailable validation:
 
 ```text
-
+<!-- If a profile is not implemented yet, explain why and what evidence was used instead.
+Do not claim security or E2E coverage unless real underlying scripts/tests exist.
+-->
 ```
 
-## AI Reviewer Notes
+## Architecture / Implementation Checklist
 
-<!-- Required once AI reviewer has run. AI review is advisory and does not replace CI or human review. -->
+- [ ] Follows existing repository patterns.
+- [ ] Preserves modular monolith boundaries.
+- [ ] Avoids duplicate logic.
+- [ ] Avoids unnecessary abstractions.
+- [ ] Keeps command/write logic separate from query/read logic where applicable.
+- [ ] Uses documented API envelope and error semantics where applicable.
+- [ ] Uses documented enum values and DTO field naming where applicable.
+- [ ] Handles errors, conflicts, validation failures, and blocked states where applicable.
 
-- [ ] AI reviewer completed
-- [ ] Findings reviewed
-- [ ] No actionable findings
-- [ ] Actionable findings addressed
-- [ ] Actionable findings intentionally deferred with rationale
-- [ ] Not applicable / did not run
-
-Notes:
+Implementation notes:
 
 ```text
-
+<!-- Mention affected modules, packages, or decisions. -->
 ```
 
-## Rollback Notes
+## Security and Access Control
 
-<!-- Required: how can this change be safely reverted? -->
+Check all that apply.
+
+- [ ] Tenant isolation is preserved.
+- [ ] Branch access is preserved.
+- [ ] Permission checks are preserved.
+- [ ] Tenant lifecycle/subscription gates are preserved.
+- [ ] Platform support access remains audited and explicit.
+- [ ] No secrets, tokens, passwords, credentials, or sensitive payloads are logged.
+- [ ] No sensitive data is exposed in API responses, audit payloads, exports, errors, or UI.
+- [ ] Not applicable.
+
+Security notes:
 
 ```text
+<!-- Include security-sensitive behavior or reasons this is not applicable. -->
+```
 
+## Database / Data Integrity
+
+Check all that apply.
+
+- [ ] No schema changes.
+- [ ] Migration order is safe.
+- [ ] Tenant-owned tables include tenant scoping where applicable.
+- [ ] Branch-specific records include branch scoping where applicable.
+- [ ] Constraints/indexes preserve documented invariants.
+- [ ] Critical writes are transactional.
+- [ ] Idempotency is preserved where required.
+- [ ] Optimistic locking or row locking is preserved where required.
+- [ ] Financial, receipt, refund, inventory ledger, FIFO, and audit immutability are preserved.
+- [ ] Not applicable.
+
+Database notes:
+
+```text
+<!-- Include migration, repository, seed, constraint, or rollback notes. -->
+```
+
+## API Contract
+
+Check all that apply.
+
+- [ ] API response envelope is preserved.
+- [ ] API error envelope is preserved.
+- [ ] Standard error codes are used.
+- [ ] Required permissions are enforced.
+- [ ] Branch access is enforced for branch-scoped resources.
+- [ ] Tenant context is resolved from session, not arbitrary client input.
+- [ ] Idempotency key behavior is preserved for critical writes.
+- [ ] Pagination/filtering/search behavior remains documented and indexed where applicable.
+- [ ] Not applicable.
+
+API notes:
+
+```text
+<!-- Mention affected endpoints, DTOs, guards, or tests. -->
+```
+
+## UI / UX
+
+Check all that apply.
+
+- [ ] Mobile-first layout remains usable.
+- [ ] Loading state is handled.
+- [ ] Empty state is handled.
+- [ ] Forbidden state is handled.
+- [ ] Read-only tenant state is handled.
+- [ ] Offline read-only state is handled.
+- [ ] Validation errors are clear and actionable.
+- [ ] Conflict/version errors are recoverable.
+- [ ] Permission-aware UI does not replace backend authorization.
+- [ ] Not applicable.
+
+UI notes:
+
+```text
+<!-- Mention affected screens, components, routes, or states. -->
+```
+
+## Observability / Operations
+
+Check all that apply.
+
+- [ ] Correlation/request IDs are preserved where applicable.
+- [ ] Structured logs do not leak sensitive data.
+- [ ] Background job status/failure visibility is preserved where applicable.
+- [ ] Retry/idempotency behavior is preserved for workers/jobs where applicable.
+- [ ] No deployment, secret, environment, or runbook changes.
+- [ ] Runbook/docs updated where needed.
+- [ ] Not applicable.
+
+Operations notes:
+
+```text
+<!-- Mention monitoring, logs, job behavior, environment config, or runbook changes. -->
+```
+
+## Tests Added or Updated
+
+- [ ] Unit tests
+- [ ] Integration tests
+- [ ] API contract tests
+- [ ] Database/repository tests
+- [ ] Security/access-control tests
+- [ ] Concurrency/idempotency tests
+- [ ] E2E tests
+- [ ] Documentation-only / no tests required
+
+Test notes:
+
+```text
+<!-- Explain why the selected tests are sufficient for this risk class. -->
+```
+
+## Reviewer Notes
+
+Specific areas reviewers should inspect:
+
+```text
+<!-- Example:
+- Confirm validation profiles do not overclaim coverage.
+- Confirm package scripts compose only real existing commands.
+- Confirm docs preserve CI and human review authority.
+-->
 ```
 
 ## Final Merge Checklist
 
-- [ ] PR targets the correct base branch.
-- [ ] PR is from a dedicated task branch.
-- [ ] Scope matches the Notion ticket.
-- [ ] CI status checks passed.
-- [ ] Database/migration validation passed or is not applicable.
-- [ ] Conversations are resolved.
-- [ ] Human final merge decision is preserved.
+- [ ] CI passed.
+- [ ] Required validation evidence is included above.
+- [ ] Risk class is selected and justified.
+- [ ] Source alignment is documented.
+- [ ] No Critical or High findings remain unresolved.
+- [ ] Human reviewer approval is still required.
+- [ ] I understand AI review is advisory only and does not replace deterministic CI or human review.

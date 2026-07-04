@@ -40,6 +40,7 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 ## Current Focus
 
 - [x] **Done** — ENG-LOOP-01 — Add PR template and branch protection checklist
+- [ ] **In Progress** — ENG-LOOP-02 — Add validation profiles and risk-class matrix
 - [x] **Done** — CI — Add OpenAI AI reviewer to pull request pipeline
 - [x] **Done** — M9.17 — Add Milestone 9 E2E, mobile, permission, and blocked-state coverage
 - [ ] **In Progress** — M9.18 — Final Milestone 9 regression, documentation, and handoff
@@ -66,7 +67,8 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - [x] **Done** — M0.14 — Create baseline QA automation structure
 - [x] **Done** — M0 — Project Foundation and Engineering Decisions
 - [x] **Done** — CI — Add OpenAI AI reviewer to pull request pipeline
-- [ ] **In Progress** — ENG-LOOP-01 — Add PR template and branch protection checklist
+- [x] **Done** — ENG-LOOP-01 — Add PR template and branch protection checklist
+- [ ] **In Progress** — ENG-LOOP-02 — Add validation profiles and risk-class matrix
 
 ## M1 — Database Foundation and Core Migrations
 
