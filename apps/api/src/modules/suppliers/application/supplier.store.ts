@@ -3,13 +3,7 @@ import type { DatabaseQueryClient } from '../../../shared/database/database-clie
 export type SupplierStatus = 'active' | 'inactive';
 export type SupplierStatusFilter = SupplierStatus | 'all';
 export type SupplierPaymentMethod =
-  | 'cash'
-  | 'gcash'
-  | 'maya'
-  | 'bank_transfer'
-  | 'credit_card'
-  | 'check'
-  | 'other';
+  'cash' | 'gcash' | 'maya' | 'bank_transfer' | 'credit_card' | 'check' | 'other';
 
 export interface ShopOwnerCheckInput {
   readonly tenantId: string;

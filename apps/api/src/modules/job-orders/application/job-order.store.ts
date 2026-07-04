@@ -1,12 +1,7 @@
 import type { DatabaseQueryClient } from '../../../shared/database/database-client';
 
 export type JobOrderStatus =
-  | 'pending'
-  | 'in_progress'
-  | 'waiting_for_parts'
-  | 'completed'
-  | 'released'
-  | 'cancelled';
+  'pending' | 'in_progress' | 'waiting_for_parts' | 'completed' | 'released' | 'cancelled';
 
 export type JobOrderLineType = 'service' | 'labor' | 'part';
 

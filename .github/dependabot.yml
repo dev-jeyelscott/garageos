@@ -12,6 +12,8 @@ updates:
       day: 'monday'
       time: '09:00'
       timezone: 'Asia/Manila'
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     versioning-strategy: increase-if-necessary
     commit-message:
@@ -40,6 +42,8 @@ updates:
       day: 'monday'
       time: '09:30'
       timezone: 'Asia/Manila'
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     commit-message:
       prefix: 'chore(actions)'

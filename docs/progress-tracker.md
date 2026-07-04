@@ -454,4 +454,5 @@ pnpm validate:security
 - `.github/workflows/static-security-analysis.yml`
 - `docs/engineering/security-automation.md`
 - `docs/progress-tracker.md`
+
 <!-- ENG-LOOP-09:END -->

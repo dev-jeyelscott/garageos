@@ -5,12 +5,7 @@ import { Badge, ButtonLink, Card, cn } from '../../components/ui';
 import type { AuthSessionResponseData, AuthTenantStatus } from '../auth/types/auth-session';
 
 export type AppModule =
-  | 'dashboard'
-  | 'branches'
-  | 'employees'
-  | 'roles'
-  | 'customers'
-  | 'customer_tags';
+  'dashboard' | 'branches' | 'employees' | 'roles' | 'customers' | 'customer_tags';
 
 export interface TenantShellSession {
   readonly session: AuthSessionResponseData;

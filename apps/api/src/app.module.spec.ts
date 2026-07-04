@@ -12,24 +12,21 @@ import { RequestContextMiddleware } from './shared/observability/request-context
 describe('AppModule', () => {
   it('wires the health controller through the real application module', () => {
     const controllers = Reflect.getMetadata(MODULE_METADATA.CONTROLLERS, AppModule) as
-      | unknown[]
-      | undefined;
+      unknown[] | undefined;
 
     expect(controllers).toContain(HealthController);
   });
 
   it('wires the platform module through the real application module', () => {
     const imports = Reflect.getMetadata(MODULE_METADATA.IMPORTS, AppModule) as
-      | unknown[]
-      | undefined;
+      unknown[] | undefined;
 
     expect(imports).toContain(PlatformModule);
   });
 
   it('wires the branch module through the real application module', () => {
     const imports = Reflect.getMetadata(MODULE_METADATA.IMPORTS, AppModule) as
-      | unknown[]
-      | undefined;
+      unknown[] | undefined;
 
     expect(imports).toContain(BranchModule);
   });

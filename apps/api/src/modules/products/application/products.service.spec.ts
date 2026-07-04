@@ -231,36 +231,34 @@ function createService(): {
 } {
   const store = new FakeProductStore();
   const auditService = {
-    record: vi.fn(
-      async (input: unknown): Promise<AuditLogRecord> => ({
-        id: 'audit-id',
-        tenantId: TENANT_ID,
-        actorUserId: USER_ID,
-        actorType:
-          typeof input === 'object' && input !== null && 'actorType' in input
-            ? (input.actorType as 'tenant_user')
-            : 'tenant_user',
-        supportAccessSessionId: null,
-        action:
-          typeof input === 'object' && input !== null && 'action' in input
-            ? String(input.action)
-            : 'test.audit',
-        entityType:
-          typeof input === 'object' && input !== null && 'entityType' in input
-            ? String(input.entityType)
-            : 'test',
-        entityId: null,
-        branchId: null,
-        beforeJson: null,
-        afterJson: null,
-        metadataJson: null,
-        reason: null,
-        ipAddress: null,
-        userAgent: null,
-        retentionClass: 'standard_3_year',
-        createdAt: NOW,
-      }),
-    ),
+    record: vi.fn(async (input: unknown): Promise<AuditLogRecord> => ({
+      id: 'audit-id',
+      tenantId: TENANT_ID,
+      actorUserId: USER_ID,
+      actorType:
+        typeof input === 'object' && input !== null && 'actorType' in input
+          ? (input.actorType as 'tenant_user')
+          : 'tenant_user',
+      supportAccessSessionId: null,
+      action:
+        typeof input === 'object' && input !== null && 'action' in input
+          ? String(input.action)
+          : 'test.audit',
+      entityType:
+        typeof input === 'object' && input !== null && 'entityType' in input
+          ? String(input.entityType)
+          : 'test',
+      entityId: null,
+      branchId: null,
+      beforeJson: null,
+      afterJson: null,
+      metadataJson: null,
+      reason: null,
+      ipAddress: null,
+      userAgent: null,
+      retentionClass: 'standard_3_year',
+      createdAt: NOW,
+    })),
   } as unknown as AuditService;
 
   return {

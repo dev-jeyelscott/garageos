@@ -8,3 +8,6 @@ allowBuilds:
 overrides:
   multer: ^2.2.0
   postcss: 8.5.15
+minimumReleaseAge: 10080
+trustPolicy: no-downgrade
+blockExoticSubdeps: true

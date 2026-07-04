@@ -48,10 +48,7 @@ export interface MotorcycleResponse {
 
 export interface MotorcycleDuplicateWarningResponse {
   readonly type:
-    | 'similar_plate_number'
-    | 'similar_engine_number'
-    | 'similar_chassis_number'
-    | 'similar_model';
+    'similar_plate_number' | 'similar_engine_number' | 'similar_chassis_number' | 'similar_model';
   readonly motorcycle_id: string;
   readonly brand: string;
   readonly model: string;

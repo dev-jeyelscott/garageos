@@ -82,3 +82,16 @@ After pushing, verify these GitHub Actions checks:
 | Static analysis produces false positives.           | Use narrow suppressions with justification; do not disable broad rule families without review.                    |
 | Security automation duplicates existing validation. | Keep `validate:security` as the canonical project profile and use workflow automation to enforce it continuously. |
 | Private repository lacks GitHub Advanced Security.  | Use pnpm audit and Semgrep instead of requiring CodeQL/dependency-review features.                                |
+
+<!-- ENG-LOOP-09-SEMGREP-HARDENING -->
+
+## Semgrep Supply-Chain Hardening Follow-up
+
+The static security workflow intentionally treats supply-chain hygiene findings as blocking. If Semgrep flags GitHub Actions mutable tags, dependency cooldown policy, workflow-level secret scope, or pnpm release-age/trust settings, fix those controls rather than weakening the scan.
+
+Current hardening baseline:
+
+- GitHub Actions should be pinned to immutable 40-character commit SHAs.
+- Dependabot update entries should include a 7-day cooldown.
+- Secrets should be scoped to the narrowest required step.
+- pnpm workspace security settings should include `minimumReleaseAge`, `trustPolicy`, and `blockExoticSubdeps`.

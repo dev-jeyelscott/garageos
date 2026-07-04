@@ -1,8 +1,5 @@
 export type TenantPlannedRouteKey =
-  | 'job-orders'
-  | 'customers'
-  | 'inventory-stock-balances'
-  | 'more';
+  'job-orders' | 'customers' | 'inventory-stock-balances' | 'more';
 
 export interface TenantPlannedRouteConfig {
   readonly title: string;

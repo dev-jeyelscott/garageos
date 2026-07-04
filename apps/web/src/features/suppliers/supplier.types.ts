@@ -3,13 +3,7 @@ import type { ApiPaginationMeta } from '../../lib/api-envelope';
 export type SupplierStatus = 'active' | 'inactive';
 export type SupplierStatusFilter = 'all' | SupplierStatus;
 export type SupplierPaymentMethod =
-  | 'cash'
-  | 'gcash'
-  | 'maya'
-  | 'bank_transfer'
-  | 'credit_card'
-  | 'check'
-  | 'other';
+  'cash' | 'gcash' | 'maya' | 'bank_transfer' | 'credit_card' | 'check' | 'other';
 
 export interface SupplierListFilters {
   readonly q: string;

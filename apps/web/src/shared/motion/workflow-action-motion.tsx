@@ -6,10 +6,7 @@ import { cn } from '../../components/ui';
 import { MotionSafe } from './motion-safe';
 
 export type WorkflowActionMotionState =
-  | 'idle'
-  | 'emphasis'
-  | 'server_confirmed_success'
-  | 'blocked';
+  'idle' | 'emphasis' | 'server_confirmed_success' | 'blocked';
 
 export interface WorkflowActionMotionProps extends HTMLAttributes<HTMLDivElement> {
   children: ReactNode;

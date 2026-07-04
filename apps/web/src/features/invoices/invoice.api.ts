@@ -513,16 +513,14 @@ function normalizeInvoiceListItem(value: unknown): InvoiceListItem | null {
     return null;
   }
 
-  if (
-    !(
-      typeof value.id === 'string' &&
-      typeof value.branch_id === 'string' &&
-      typeof value.customer_id === 'string' &&
-      typeof value.invoice_number === 'string' &&
-      typeof value.invoice_date === 'string' &&
-      isInvoiceStatus(value.status)
-    )
-  ) {
+  if (!(
+    typeof value.id === 'string' &&
+    typeof value.branch_id === 'string' &&
+    typeof value.customer_id === 'string' &&
+    typeof value.invoice_number === 'string' &&
+    typeof value.invoice_date === 'string' &&
+    isInvoiceStatus(value.status)
+  )) {
     return null;
   }
 
@@ -652,15 +650,13 @@ function normalizeRefund(value: unknown): InvoiceRefund | null {
     return null;
   }
 
-  if (
-    !(
-      typeof value.id === 'string' &&
-      typeof value.invoice_id === 'string' &&
-      typeof value.payment_id === 'string' &&
-      typeof value.reason === 'string' &&
-      isRefundStatus(value.status)
-    )
-  ) {
+  if (!(
+    typeof value.id === 'string' &&
+    typeof value.invoice_id === 'string' &&
+    typeof value.payment_id === 'string' &&
+    typeof value.reason === 'string' &&
+    isRefundStatus(value.status)
+  )) {
     return null;
   }
 
@@ -705,15 +701,13 @@ function normalizeInventoryReversal(value: unknown): InvoiceInventoryReversal | 
     return null;
   }
 
-  if (
-    !(
-      typeof value.id === 'string' &&
-      typeof value.job_order_line_id === 'string' &&
-      typeof value.product_id === 'string' &&
-      typeof value.inventory_ledger_entry_id === 'string' &&
-      typeof value.fifo_layer_id === 'string'
-    )
-  ) {
+  if (!(
+    typeof value.id === 'string' &&
+    typeof value.job_order_line_id === 'string' &&
+    typeof value.product_id === 'string' &&
+    typeof value.inventory_ledger_entry_id === 'string' &&
+    typeof value.fifo_layer_id === 'string'
+  )) {
     return null;
   }
 
@@ -733,13 +727,11 @@ function normalizePayment(value: unknown): InvoicePayment | null {
     return null;
   }
 
-  if (
-    !(
-      typeof value.id === 'string' &&
-      typeof value.invoice_id === 'string' &&
-      isPaymentMethod(value.payment_method)
-    )
-  ) {
+  if (!(
+    typeof value.id === 'string' &&
+    typeof value.invoice_id === 'string' &&
+    isPaymentMethod(value.payment_method)
+  )) {
     return null;
   }
 
@@ -793,15 +785,13 @@ function normalizeReceipt(value: unknown): InvoiceReceipt | null {
     return null;
   }
 
-  if (
-    !(
-      typeof value.id === 'string' &&
-      typeof value.invoice_id === 'string' &&
-      typeof value.payment_id === 'string' &&
-      typeof value.receipt_number === 'string' &&
-      isPaymentMethod(value.payment_method)
-    )
-  ) {
+  if (!(
+    typeof value.id === 'string' &&
+    typeof value.invoice_id === 'string' &&
+    typeof value.payment_id === 'string' &&
+    typeof value.receipt_number === 'string' &&
+    isPaymentMethod(value.payment_method)
+  )) {
     return null;
   }
 
