@@ -42,7 +42,9 @@
     "validate:db": "node packages/db/scripts/validate-migration-order.cjs && pnpm db:validate",
     "validate:security": "pnpm --dir apps/api test:security && pnpm audit --audit-level high",
     "validate:e2e": "pnpm test:e2e",
-    "validate:full": "pnpm validate:quick && pnpm validate:web && pnpm validate:api && pnpm validate:db && pnpm validate:security && pnpm validate:e2e"
+    "validate:full": "pnpm validate:quick && pnpm validate:web && pnpm validate:api && pnpm validate:db && pnpm validate:security && pnpm validate:e2e",
+    "validate:pr-evidence": "node ./.github/scripts/validate-pr-evidence.cjs",
+    "test:pr-evidence": "node ./.github/scripts/validate-pr-evidence.test.cjs"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,json,md,yml,yaml}": [
