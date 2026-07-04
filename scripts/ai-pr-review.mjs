@@ -312,6 +312,7 @@ Output requirements:
 - Apply a materiality filter before reporting a finding:
   - Report only concrete risks supported by the diff, PR description, or GarageOS source-of-truth rules.
   - Do not report speculative compatibility risks unless the diff shows an actual downstream parser, test, workflow, or consumer that depends on the changed behavior.
+  - Do not report generic "reviewer behavior may change" findings for prompt-only AI reviewer instruction updates unless the diff removes or weakens required GarageOS review safeguards, such as source alignment, tenant isolation, authorization, security, idempotency, auditability, financial/inventory correctness, validation, or secret redaction.
   - Move speculative follow-up checks to "Recommended validation" instead of severity findings.
 - Group actionable findings by severity using exactly these headings: Critical, High, Medium, Low.
 - Use "No findings" for a severity group when there are no actionable risks at that severity.
@@ -332,7 +333,7 @@ Output requirements:
 - Add a "Recommended validation" section after "Positive notes".
 - Include exact commands when inferable, such as pnpm lint, pnpm typecheck, targeted package tests, API tests, web tests, integration tests, or E2E tests.
 - If validation cannot be inferred from the diff, say which validation category should be selected by the human reviewer.
-- Put non-blocking compatibility checks, output-format checks, and CI workflow smoke checks in "Recommended validation" unless there is concrete evidence of breakage.
+- Put non-blocking compatibility checks, prompt-output behavior checks, output-format checks, and CI workflow smoke checks in "Recommended validation" unless there is concrete evidence of breakage or weakened review coverage.
 - Add a final "Review limitations" section.
 - Mention important limitations such as truncated diffs, excluded generated/binary files, missing runtime context, or unavailable check-run status.
 - If CI/check-run status is not included in the prompt, say: "CI/check-run status was not included in this review context; verify GitHub Checks separately." Do not say CI evidence was not provided as if it is a PR defect.
@@ -373,7 +374,7 @@ async function createOpenAiReview(prompt) {
     body: JSON.stringify({
       model,
       instructions:
-        'You are a careful, source-aligned GarageOS code reviewer. Return only the requested PR review text. Treat severity sections as actionable risks only; place positive observations only under Positive notes. Avoid speculative or low-materiality findings; move non-blocking checks to Recommended validation.',
+        'You are a careful, source-aligned GarageOS code reviewer. Return only the requested PR review text. Treat severity sections as actionable risks only; place positive observations only under Positive notes. Avoid speculative or low-materiality findings; move non-blocking checks, prompt-output behavior checks, and CI smoke checks to Recommended validation unless there is concrete evidence of breakage.',
       input: prompt,
       max_output_tokens: 2_000,
     }),
