@@ -34,7 +34,12 @@
     "dev:db": "docker compose up -d postgres",
     "dev:db:down": "docker compose down",
     "dev:db:reset": "docker compose down -v && docker compose up -d postgres",
-    "dev:db:logs": "docker compose logs -f postgres"
+    "dev:db:logs": "docker compose logs -f postgres",
+    "validate:quick": "pnpm format:check && pnpm lint && pnpm typecheck",
+    "validate:web": "pnpm --filter @garageos/web lint && pnpm --filter @garageos/web typecheck && pnpm --filter @garageos/web test",
+    "validate:api": "pnpm --filter @garageos/api lint && pnpm --filter @garageos/api typecheck && pnpm --filter @garageos/api test",
+    "validate:db": "node packages/db/scripts/validate-migration-order.cjs && pnpm db:validate",
+    "validate:full": "pnpm validate:quick && pnpm test && pnpm validate:db && pnpm audit:deps"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,json,md,yml,yaml}": [
