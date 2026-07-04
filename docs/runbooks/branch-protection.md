@@ -1,24 +1,26 @@
 # GarageOS Branch Protection Runbook
 
 **Status:** Source-aligned engineering runbook  
-**Scope:** Manual GitHub branch protection setup for `main` and `develop`  
-**Task:** ENG-LOOP-01 — Add PR template and branch protection checklist
+**Scope:** Manual GitHub branch protection setup and verification for `main` and `develop`  
+**Task:** ENG-LOOP-06 — Enforce branch protection for `main` and `develop`  
+**Repository:** `dev-jeyelscott/garageos`  
+**Last Updated:** 2026-07-05
 
 ---
 
 ## 1. Purpose
 
-This runbook defines the recommended GitHub branch protection settings for GarageOS.
+This runbook defines the required GitHub branch protection settings for GarageOS.
 
 The goal is to make the engineering delivery loop safer by requiring:
 
 - Dedicated task branches.
-- Pull requests before merging.
-- Deterministic CI checks.
-- Visible advisory AI review.
-- Conversation resolution.
+- Pull requests before merging into `develop` or `main`.
+- Stable deterministic validation checks before merge.
+- Conversation resolution before merge.
 - Human final merge decision.
 - Protection against force pushes and branch deletion.
+- Clear evidence for manual branch protection configuration.
 
 This runbook is documentation only. Branch protection must be configured manually by a repository owner or administrator in GitHub repository settings.
 
@@ -34,6 +36,8 @@ GarageOS development must remain:
 - Validation-driven.
 - Human-reviewed before merge.
 - Protected from undocumented scope expansion.
+
+Branch protection supports the GarageOS engineering foundation by ensuring that code reaches `develop` and `main` only through controlled pull request paths and passing validation gates.
 
 The AI PR reviewer is advisory. It may produce findings and risk classification, but it must not be the only reviewer and must not blindly approve production merges.
 
@@ -53,6 +57,7 @@ Do not use this runbook to:
 - Mutate GitHub repository settings through repository code.
 - Configure production deployment rules.
 - Replace module-specific validation requirements.
+- Replace GitHub repository owner/admin review of branch protection settings.
 
 ---
 
@@ -81,8 +86,18 @@ test/<short-task-name>
 For this task:
 
 ```text
-chore/eng-loop-pr-template-branch-protection
+chore/eng-loop-branch-protection
 ```
+
+After ENG-LOOP-06 is complete, Milestone 10 and later development should use:
+
+```text
+develop
+  ^ task branch
+  ^ pull request
+```
+
+Do not continue feature work directly on `main`.
 
 ---
 
@@ -108,157 +123,53 @@ git push -u origin develop
 
 Open or update a test pull request into `develop` and confirm the expected checks appear.
 
-Expected checks may appear in GitHub using workflow/job names such as:
+Expected stable validation checks:
 
 ```text
-CI / Quality Gate
-CI / Database Gate
-AI PR Review / Advisory AI PR Review
+validation-quick
+validation-security
+validation-e2e
 ```
 
-If GitHub displays a shorter or slightly different check name, use the exact visible name shown in the pull request checks UI.
+Use the exact visible check names shown in the GitHub pull request checks UI.
 
-### Important Note About `develop`
+Do not configure package script names as required checks. These are validation commands, not necessarily GitHub check names:
 
-Do not require a check on `develop` until that check appears on a pull request targeting `develop`.
+```text
+pnpm validate:quick
+pnpm validate:security
+pnpm validate:e2e
+```
 
-If `CI / Quality Gate` or `CI / Database Gate` does not appear on a `develop` pull request, update the CI workflow trigger in a separate source-aligned task before making those checks required.
+### Important Note About Required Checks
+
+A GitHub required check should be enabled only after GitHub has seen that check on a pull request for the target branch.
+
+If any required check does not appear on a pull request targeting `develop` or `main`, update the workflow trigger in a separate source-aligned task before making that check required.
+
+Avoid requiring checks that are skipped by path filters, draft-only conditions, or branch-only workflow rules. A skipped required check can leave a pull request blocked.
 
 ---
 
-## 6. Recommended Protection for `develop`
+## 6. Required Check Policy
 
-Use this for day-to-day task branches.
+### Required Deterministic Checks
 
-GitHub path:
-
-```text
-Repository → Settings → Branches → Branch protection rules → Add branch ruleset/rule
-```
-
-Branch name pattern:
+These checks are authoritative once configured:
 
 ```text
-develop
+validation-quick
+validation-security
+validation-e2e
 ```
 
-Recommended settings:
+These checks are expected to map to the repository validation profiles:
 
-- [ ] Require a pull request before merging.
-- [ ] Require status checks to pass before merging.
-- [ ] Require branches to be up to date before merging if merge conflicts or stale checks become a recurring issue.
-- [ ] Require conversation resolution before merging.
-- [ ] Block force pushes.
-- [ ] Block branch deletion.
-- [ ] Keep human final merge decision.
-- [ ] Do not allow bypass unless explicitly needed for repository administrators.
-
-Recommended required checks after they are visible and stable:
-
-```text
-CI / Quality Gate
-CI / Database Gate
+```bash
+pnpm validate:quick
+pnpm validate:security
+pnpm validate:e2e
 ```
-
-Recommended advisory check:
-
-```text
-AI PR Review / Advisory AI PR Review
-```
-
-The AI PR Review check may remain non-required at first. Make it required only after it proves stable and does not create flaky merge blockers.
-
-For solo development, required approval count may remain `0` initially while still requiring pull requests, checks, and conversation resolution.
-
-When additional collaborators join, increase required approvals to at least `1`.
-
----
-
-## 7. Recommended Protection for `main`
-
-Use this for release/stable integration.
-
-GitHub path:
-
-```text
-Repository → Settings → Branches → Branch protection rules → Add branch ruleset/rule
-```
-
-Branch name pattern:
-
-```text
-main
-```
-
-Recommended settings:
-
-- [ ] Require a pull request before merging.
-- [ ] Require status checks to pass before merging.
-- [ ] Require conversation resolution before merging.
-- [ ] Block force pushes.
-- [ ] Block branch deletion.
-- [ ] Prefer PRs from `develop` into `main`.
-- [ ] Keep human final merge decision.
-- [ ] Do not allow bypass unless explicitly needed for emergency repository administration.
-
-Recommended required checks after they are visible and stable:
-
-```text
-CI / Quality Gate
-CI / Database Gate
-```
-
-Recommended advisory check:
-
-```text
-AI PR Review / Advisory AI PR Review
-```
-
-For `main`, prefer stricter controls than `develop`.
-
-Recommended approval policy:
-
-- Solo development stage: approvals may remain `0` if no second human reviewer is available.
-- Multi-developer stage: require at least `1` approval.
-- Pre-production or production stage: require at least `1` approval and require stale approvals to be dismissed after new commits.
-
----
-
-## 8. Pull Request Evidence Requirements
-
-Every PR should include evidence for:
-
-- Notion ticket.
-- Goal.
-- Scope.
-- Source docs reviewed.
-- Documentation alignment.
-- Affected areas.
-- Risk class.
-- Validation commands run.
-- Validation results.
-- Screenshots or recordings for UI changes.
-- AI reviewer notes.
-- Rollback notes.
-
-The PR template prompts contributors to provide these fields. Branch protection, required checks, and human review are responsible for enforcing that the evidence is complete before merge.
-
-A PR with missing source-alignment or validation evidence should not be merged until the evidence is added or a clear waiver is documented.
-
----
-
-## 9. Required Status Check Guidance
-
-### Deterministic Checks
-
-These checks should be treated as authoritative once configured:
-
-```text
-CI / Quality Gate
-CI / Database Gate
-```
-
-The current CI gate should validate the relevant baseline checks such as formatting, linting, typechecking, tests, build, dependency audit, migrations, seeds, and schema validation.
 
 ### Advisory Checks
 
@@ -286,27 +197,232 @@ AI review should not:
 - Replace human final decision.
 - Become required before it is stable.
 
+Recommended ENG-LOOP-06 policy:
+
+- Require `validation-quick`.
+- Require `validation-security`.
+- Require `validation-e2e`.
+- Keep AI review advisory until it proves stable and non-flaky.
+
 ---
 
-## 10. Manual Validation Procedure
+## 7. Recommended Protection for `develop`
 
-After adding or changing the PR template and protection settings:
+Use this for day-to-day task branches.
+
+GitHub path:
+
+```text
+Repository → Settings → Branches → Branch protection rules → Add branch ruleset/rule
+```
+
+Branch name pattern:
+
+```text
+develop
+```
+
+Recommended settings:
+
+- [ ] Require a pull request before merging.
+- [ ] Require status checks to pass before merging.
+- [ ] Require branches to be up to date before merging.
+- [ ] Require conversation resolution before merging.
+- [ ] Require linear history if compatible with the project merge strategy.
+- [ ] Block force pushes.
+- [ ] Block branch deletion.
+- [ ] Keep human final merge decision.
+- [ ] Do not allow bypass unless explicitly needed for repository administrators.
+
+Required checks after they are visible and stable:
+
+```text
+validation-quick
+validation-security
+validation-e2e
+```
+
+Recommended advisory check:
+
+```text
+AI PR Review / Advisory AI PR Review
+```
+
+For solo development, required approval count may remain `0` initially while still requiring pull requests, checks, and conversation resolution.
+
+When additional collaborators join, increase required approvals to at least `1`.
+
+---
+
+## 8. Recommended Protection for `main`
+
+Use this for release/stable integration.
+
+GitHub path:
+
+```text
+Repository → Settings → Branches → Branch protection rules → Add branch ruleset/rule
+```
+
+Branch name pattern:
+
+```text
+main
+```
+
+Recommended settings:
+
+- [ ] Require a pull request before merging.
+- [ ] Require status checks to pass before merging.
+- [ ] Require branches to be up to date before merging.
+- [ ] Require conversation resolution before merging.
+- [ ] Require linear history if compatible with the project merge strategy.
+- [ ] Block force pushes.
+- [ ] Block branch deletion.
+- [ ] Prefer PRs from `develop` into `main`.
+- [ ] Keep human final merge decision.
+- [ ] Do not allow bypass unless explicitly needed for emergency repository administration.
+
+Required checks after they are visible and stable:
+
+```text
+validation-quick
+validation-security
+validation-e2e
+```
+
+Recommended advisory check:
+
+```text
+AI PR Review / Advisory AI PR Review
+```
+
+For `main`, prefer stricter controls than `develop`.
+
+Recommended approval policy:
+
+- Solo development stage: approvals may remain `0` if no second human reviewer is available.
+- Multi-developer stage: require at least `1` approval.
+- Pre-production or production stage: require at least `1` approval and require stale approvals to be dismissed after new commits.
+
+---
+
+## 9. Solo Developer Policy
+
+GarageOS is currently in solo-development mode.
+
+Recommended solo-development branch protection:
+
+- Require pull requests.
+- Require stable validation checks.
+- Require conversation resolution.
+- Block force pushes.
+- Block branch deletion.
+- Keep required human approval count at `0` until another trusted reviewer is available.
+
+Do not enable a required approval count of `1` unless another collaborator can review and approve pull requests. Otherwise, the repository owner may block their own delivery loop.
+
+---
+
+## 10. Pull Request Evidence Requirements
+
+Every PR should include evidence for:
+
+- Notion ticket.
+- Goal.
+- Scope.
+- Source docs reviewed.
+- Documentation alignment.
+- Affected areas.
+- Risk class.
+- Validation commands run.
+- Validation results.
+- Screenshots or recordings for UI changes.
+- AI reviewer notes, when available.
+- Rollback notes.
+
+The PR template prompts contributors to provide these fields. Branch protection, required checks, and human review are responsible for enforcing that the evidence is complete before merge.
+
+A PR with missing source-alignment or validation evidence should not be merged until the evidence is added or a clear waiver is documented.
+
+---
+
+## 11. ENG-LOOP-06 Manual Configuration Evidence
+
+Record evidence after configuring branch protection in GitHub.
+
+Date configured: `YYYY-MM-DD`  
+Repository: `dev-jeyelscott/garageos`  
+Configured by: `<repository owner/admin>`
+
+### Protected Branches
+
+| Branch    | Protected | PR Required | Required Checks                                             | Up-to-date Required | Force Push Blocked | Delete Blocked | Evidence                             |
+| --------- | --------- | ----------- | ----------------------------------------------------------- | ------------------- | ------------------ | -------------- | ------------------------------------ |
+| `main`    | Pending   | Pending     | `validation-quick`, `validation-security`, `validation-e2e` | Pending             | Pending            | Pending        | Pending GitHub settings verification |
+| `develop` | Pending   | Pending     | `validation-quick`, `validation-security`, `validation-e2e` | Pending             | Pending            | Pending        | Pending GitHub settings verification |
+
+### Verification Notes
+
+Replace this checklist with completed evidence after GitHub configuration:
+
+- [ ] Confirmed `main` has branch protection enabled.
+- [ ] Confirmed `develop` has branch protection enabled.
+- [ ] Confirmed required checks use stable GitHub Actions check names.
+- [ ] Confirmed direct pushes to protected branches are blocked or avoided by enforced policy.
+- [ ] Confirmed force pushes are blocked.
+- [ ] Confirmed branch deletions are blocked.
+- [ ] Confirmed PR conversation resolution is required.
+- [ ] Confirmed pull requests cannot merge until required validation checks pass.
+
+### Validation Commands
+
+Run these commands from the repository root after updating this runbook:
+
+```bash
+pnpm validate:quick
+pnpm validate:security
+pnpm validate:e2e
+```
+
+### Validation Result
+
+```text
+Pending local validation.
+```
+
+When validation passes, replace the result with:
+
+```text
+pnpm validate:quick: PASS
+pnpm validate:security: PASS
+pnpm validate:e2e: PASS
+```
+
+---
+
+## 12. Manual Validation Procedure
+
+After adding or changing branch protection settings:
 
 1. Push a dedicated task branch.
 2. Open a test pull request into `develop`.
 3. Confirm the PR template appears automatically.
 4. Fill in the PR template fields.
 5. Confirm required checks are visible.
-6. Confirm AI PR Review appears when configured and eligible.
-7. Confirm conversations must be resolved before merge.
-8. Confirm direct commits to protected branches are blocked or avoided by policy.
-9. Confirm force pushes are disabled.
-10. Confirm branch deletion is disabled.
-11. Repeat the critical checks for `main`.
+6. Confirm `validation-quick` is required.
+7. Confirm `validation-security` is required.
+8. Confirm `validation-e2e` is required.
+9. Confirm AI PR Review appears when configured and eligible.
+10. Confirm conversations must be resolved before merge.
+11. Confirm direct commits to protected branches are blocked or avoided by enforced policy.
+12. Confirm force pushes are disabled.
+13. Confirm branch deletion is disabled.
+14. Repeat the critical checks for `main`.
 
 ---
 
-## 11. Troubleshooting
+## 13. Troubleshooting
 
 ### PR Template Does Not Appear
 
@@ -329,6 +445,7 @@ Confirm:
 - The workflow file is present on the base branch.
 - The job name shown in GitHub matches the required check name.
 - The PR is not a draft if the workflow skips draft PRs.
+- The workflow is not skipped by path filters or branch conditions.
 
 ### AI PR Review Does Not Run
 
@@ -352,16 +469,71 @@ For solo development, keep approval count at `0` while still requiring:
 
 Increase approval requirements later when another human reviewer is available.
 
+### Required Check Blocks Merge Forever
+
+If a required check remains pending indefinitely:
+
+1. Confirm the check actually runs on pull requests targeting the branch.
+2. Confirm the workflow is not skipped.
+3. Confirm the required check name exactly matches the GitHub UI.
+4. Remove the unstable required check temporarily only through manual repository admin action.
+5. Create a follow-up Notion ticket to stabilize the workflow.
+
 ---
 
-## 12. Completion Criteria
+## 14. Completion Criteria
 
-This runbook is complete when:
+ENG-LOOP-06 is complete when:
 
-- `.github/pull_request_template.md` exists.
-- New GitHub pull requests automatically show the PR template.
-- Branch protection guidance exists for `main` and `develop`.
-- The runbook states GitHub branch protection is manual.
-- AI review is documented as advisory.
-- Deterministic CI and human final merge decision remain authoritative.
-- No repository settings are changed by code.
+- `main` has branch protection configured.
+- `develop` has branch protection configured.
+- Pull requests are required before merging to `main`.
+- Pull requests are required before merging to `develop`.
+- Required checks are configured using stable check names:
+  - `validation-quick`
+  - `validation-security`
+  - `validation-e2e`
+- Conversation resolution is required.
+- Force pushes are blocked.
+- Branch deletion is blocked.
+- Evidence is recorded in this runbook.
+- Validation commands pass:
+  - `pnpm validate:quick`
+  - `pnpm validate:security`
+  - `pnpm validate:e2e`
+- `docs/progress-tracker.md` is updated.
+- Notion ENG-LOOP-06 is moved to Done.
+
+---
+
+## 15. Suggested Commit Message
+
+```text
+docs: update branch protection runbook for stable validation gates
+```
+
+---
+
+## 16. Next-Chat Handoff Prompt
+
+Use this prompt after applying this runbook update and completing manual GitHub branch protection:
+
+```md
+ENG-LOOP-06 branch protection has been configured manually for main and develop.
+
+Evidence recorded:
+
+- docs/runbooks/branch-protection.md updated with protected branch settings and validation evidence.
+
+Validation results:
+
+- pnpm validate:quick: PASS
+- pnpm validate:security: PASS
+- pnpm validate:e2e: PASS
+
+Next:
+
+1. Update docs/progress-tracker.md to mark ENG-LOOP-06 Done.
+2. Update Notion ENG-LOOP-06 to Done.
+3. Identify the next ENG-LOOP ticket.
+```

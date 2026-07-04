@@ -1,6 +1,6 @@
 # GarageOS Progress Tracker
 
-**Last Notion alignment:** 2026-07-04  
+**Last Notion alignment:** 2026-07-05  
 **Source of truth:** Notion database `GarageOS — Full Build Task Tracker`  
 **Repository path:** `docs/progress-tracker.md`
 
@@ -10,32 +10,32 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 
 | Status                  |   Cards |
 | ----------------------- | ------: |
-| Done                    |     183 |
+| Done                    |     184 |
 | In Progress             |       2 |
 | Ready                   |       1 |
 | Backlog                 |     109 |
-| **Total tracked cards** | **295** |
+| **Total tracked cards** | **296** |
 
 ## Milestone Status Summary
 
-| Milestone    | Status Summary                    | Notes                                                    |
-| ------------ | --------------------------------- | -------------------------------------------------------- |
-| M0           | 20 Done, 1 In Progress            | ENG-LOOP-05 active; ENG-LOOP-03 and ENG-LOOP-04 complete |
-| M1           | 18 Done                           | Complete                                                 |
-| M2           | 21 Done                           | Complete                                                 |
-| M3           | 19 Done                           | Complete                                                 |
-| M4           | 15 Done                           | Complete                                                 |
-| M5           | 16 Done                           | Complete                                                 |
-| M6           | 16 Done                           | Complete                                                 |
-| M7           | 16 Done                           | Complete                                                 |
-| M8           | 14 Done                           | Complete                                                 |
-| M9           | 25 Done, 1 In Progress, 0 Backlog | Current active milestone                                 |
-| M10          | 16 Backlog                        | Not started                                              |
-| M11          | 18 Backlog                        | Not started                                              |
-| M12          | 16 Backlog                        | Not started                                              |
-| M13          | 19 Backlog, 1 Ready               | Security hardening follow-up ready                       |
-| M14          | 40 Backlog                        | Not started                                              |
-| No milestone | 1 Done                            | Review record                                            |
+| Milestone    | Status Summary                    | Notes                                                        |
+| ------------ | --------------------------------- | ------------------------------------------------------------ |
+| M0           | 21 Done, 1 In Progress            | ENG-LOOP-01 through ENG-LOOP-05 complete; ENG-LOOP-06 active |
+| M1           | 18 Done                           | Complete                                                     |
+| M2           | 21 Done                           | Complete                                                     |
+| M3           | 19 Done                           | Complete                                                     |
+| M4           | 15 Done                           | Complete                                                     |
+| M5           | 16 Done                           | Complete                                                     |
+| M6           | 16 Done                           | Complete                                                     |
+| M7           | 16 Done                           | Complete                                                     |
+| M8           | 14 Done                           | Complete                                                     |
+| M9           | 25 Done, 1 In Progress, 0 Backlog | Current active milestone                                     |
+| M10          | 16 Backlog                        | Not started                                                  |
+| M11          | 18 Backlog                        | Not started                                                  |
+| M12          | 16 Backlog                        | Not started                                                  |
+| M13          | 19 Backlog, 1 Ready               | Security hardening follow-up ready                           |
+| M14          | 40 Backlog                        | Not started                                                  |
+| No milestone | 1 Done                            | Review record                                                |
 
 ## Current Focus
 
@@ -43,7 +43,8 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - [x] **Done** — ENG-LOOP-02 — Add validation profiles and risk-class matrix
 - [x] **Done** — ENG-LOOP-03 — Add dedicated security validation profile
 - [x] **Done** — ENG-LOOP-04 — Add E2E validation profile
-- [ ] **In Progress** — ENG-LOOP-05 — Wire validation profiles into GitHub Actions
+- [x] **Done** — ENG-LOOP-05 — Wire validation profiles into GitHub Actions
+- [ ] **In Progress** — ENG-LOOP-06 — Enforce branch protection for main and develop
 - [x] **Done** — CI — Add OpenAI AI reviewer to pull request pipeline
 - [x] **Done** — M9.17 — Add Milestone 9 E2E, mobile, permission, and blocked-state coverage
 - [ ] **In Progress** — M9.18 — Final Milestone 9 regression, documentation, and handoff
@@ -74,7 +75,8 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - [x] **Done** — ENG-LOOP-02 — Add validation profiles and risk-class matrix
 - [x] **Done** — ENG-LOOP-03 — Add dedicated security validation profile
 - [x] **Done** — ENG-LOOP-04 — Add E2E validation profile
-- [ ] **In Progress** — ENG-LOOP-05 — Wire validation profiles into GitHub Actions
+- [x] **Done** — ENG-LOOP-05 — Wire validation profiles into GitHub Actions
+- [ ] **In Progress** — ENG-LOOP-06 — Enforce branch protection for main and develop
 
 ## M1 — Database Foundation and Core Migrations
 
@@ -404,3 +406,5 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - 2026-07-04: ENG-LOOP-04 completed after adding the Playwright-backed `validate:e2e` profile. Local validation passed, including `pnpm validate:e2e`; initial scope is real mobile PWA smoke coverage only and must not be treated as broad authenticated workflow E2E coverage until those workflows are automated with deterministic fixtures.
 - 2026-07-04: ENG-LOOP-05 moved to In Progress for branch `chore/eng-loop-ci-validation-gates`; tracker updated to reflect GitHub Actions validation-profile wiring and stable CI check-name documentation.
 - 2026-07-04: ENG-LOOP-05 moved to In Progress for wiring validation profiles into GitHub Actions. PR #11 AI review reported no Critical or High findings; Medium follow-ups are being addressed before merge.
+- 2026-07-05: ENG-LOOP-05 completed after wiring validation profiles into GitHub Actions. Tracker updated to mark the validation-profile CI wiring as Done and to reduce active M0 engineering-loop work.
+- 2026-07-05: ENG-LOOP-06 moved to In Progress for branch `chore/eng-loop-branch-protection`; tracker updated to reflect manual branch protection enforcement work for `main` and `develop` using stable required validation check names.
