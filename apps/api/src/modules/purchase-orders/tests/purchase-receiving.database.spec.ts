@@ -275,9 +275,19 @@ class PurchaseReceivingDatabaseHarness {
           product_id,
           ordered_quantity,
           received_quantity,
-          unit_cost
+          unit_cost,
+          line_total
         )
-        values ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::numeric(14,3), $6::numeric(14,3), 100.00)
+        values (
+          $1::uuid,
+          $2::uuid,
+          $3::uuid,
+          $4::uuid,
+          $5::numeric(14,3),
+          $6::numeric(14,3),
+          100.00,
+          round(($5::numeric(14,3) * 100.00)::numeric, 2)
+        )
       `,
       [
         PURCHASE_ORDER_LINE_ID,
@@ -775,7 +785,8 @@ const TEST_SCHEMA_SQL = `
     product_id uuid not null,
     ordered_quantity numeric(14,3) not null,
     received_quantity numeric(14,3) not null default 0,
-    unit_cost numeric(14,2) not null
+    unit_cost numeric(14,2) not null,
+    line_total numeric(14,2) not null
   );
 
   create table purchase_receivings (
