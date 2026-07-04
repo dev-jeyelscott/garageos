@@ -9,6 +9,7 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "test:watch": "pnpm -r test:watch",
+    "test:e2e": "playwright test",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "prepare": "husky",
@@ -39,8 +40,9 @@
     "validate:web": "pnpm --filter @garageos/web lint && pnpm --filter @garageos/web typecheck && pnpm --filter @garageos/web test",
     "validate:api": "pnpm --filter @garageos/api lint && pnpm --filter @garageos/api typecheck && pnpm --filter @garageos/api test",
     "validate:db": "node packages/db/scripts/validate-migration-order.cjs && pnpm db:validate",
-    "validate:full": "pnpm validate:quick && pnpm validate:web && pnpm validate:api && pnpm validate:db && pnpm validate:security",
-    "validate:security": "pnpm --dir apps/api test:security && pnpm audit --audit-level high"
+    "validate:security": "pnpm --dir apps/api test:security && pnpm audit --audit-level high",
+    "validate:e2e": "pnpm test:e2e",
+    "validate:full": "pnpm validate:quick && pnpm validate:web && pnpm validate:api && pnpm validate:db && pnpm validate:security && pnpm validate:e2e"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,json,md,yml,yaml}": [
@@ -56,6 +58,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.61.1",
     "@types/node": "^26.0.0",
     "@typescript-eslint/eslint-plugin": "^8.62.0",
     "@typescript-eslint/parser": "^8.62.0",
