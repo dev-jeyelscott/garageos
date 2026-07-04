@@ -14,7 +14,7 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 | In Progress             |       0 |
 | Ready                   |       1 |
 | Backlog                 |     109 |
-| **Total tracked cards** | **297** |
+| **Total tracked cards** | **298** |
 
 ## Milestone Status Summary
 
@@ -413,3 +413,4 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - 2026-07-05: ENG-LOOP-06 confirmed Done after branch protection for `main` and `develop` was configured and validation check evidence was recorded.
 - 2026-07-05: M9.18 confirmed Done after final Milestone 9 regression, documentation, and handoff closeout.
 - 2026-07-05: ENG-LOOP-07 completed after adding the PR validation evidence guard. Required PR checks are green, including the inline-code validation evidence parser fix.
+- 2026-07-05: ENG-LOOP-08 remains In Progress on branch `test/eng-loop-08-e2e-auth-coverage` while Playwright coverage is expanded beyond landing page smoke. Current work adds mobile auth route availability, auth navigation, mocked API envelope success/error handling, owner signup idempotency-key assertion, and forgot-password safe response coverage. Keep the card In Progress until `pnpm validate:e2e` and required validation profiles pass.
