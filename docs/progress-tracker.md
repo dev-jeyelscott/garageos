@@ -414,3 +414,44 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - 2026-07-05: M9.18 confirmed Done after final Milestone 9 regression, documentation, and handoff closeout.
 - 2026-07-05: ENG-LOOP-07 completed after adding the PR validation evidence guard. Required PR checks are green, including the inline-code validation evidence parser fix.
 - 2026-07-05: ENG-LOOP-08 remains In Progress on branch `test/eng-loop-08-e2e-auth-coverage` while Playwright coverage is expanded beyond landing page smoke. Current work adds mobile auth route availability, auth navigation, mocked API envelope success/error handling, owner signup idempotency-key assertion, and forgot-password safe response coverage. Keep the card In Progress until `pnpm validate:e2e` and required validation profiles pass.
+
+<!-- ENG-LOOP-09:START -->
+
+## ENG-LOOP-09 — Add dependency and security automation
+
+**Status:** In Progress  
+**Branch:** `chore/eng-loop-security-automation`  
+**Category:** Security  
+**Milestone:** M0
+
+### Scope
+
+- Added Dependabot configuration for npm workspace dependencies and GitHub Actions updates.
+- Added dependency security workflow using `pnpm audit --audit-level high` and `pnpm validate:security`.
+- Added static security analysis workflow using Semgrep OWASP, secrets, and TypeScript rules.
+- Added security automation documentation.
+
+### Validation Commands
+
+```bash
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm validate:security
+```
+
+### Expected Evidence
+
+- Local validation commands pass.
+- GitHub Actions starts the Dependency Security workflow.
+- GitHub Actions starts the Static Security Analysis workflow.
+- Dependabot is recognized by GitHub from the default branch and opens future dependency PRs against `develop`.
+
+### Files Updated
+
+- `.github/dependabot.yml`
+- `.github/workflows/dependency-security.yml`
+- `.github/workflows/static-security-analysis.yml`
+- `docs/engineering/security-automation.md`
+- `docs/progress-tracker.md`
+<!-- ENG-LOOP-09:END -->
