@@ -73,6 +73,24 @@ Pending profiles are documented future targets only. Do not reference pending pr
 | E2E      | `pnpm validate:e2e`      | Browser-based PWA workflow validation                             | Playwright mobile smoke coverage for implemented E2E paths                      |
 | Full     | `pnpm validate:full`     | Broad local pre-merge or milestone validation                     | All currently implemented validation coverage using real existing commands      |
 
+## GitHub Actions Check Names
+
+GarageOS validation profiles are wired into GitHub Actions using stable check names so branch protection can require deterministic gates.
+
+| GitHub Actions Check  | Command                  | Purpose                                               |
+| --------------------- | ------------------------ | ----------------------------------------------------- |
+| `validation-quick`    | `pnpm validate:quick`    | Fast local and PR sanity validation.                  |
+| `validation-web`      | `pnpm validate:web`      | Web/PWA validation profile.                           |
+| `validation-api`      | `pnpm validate:api`      | API validation profile.                               |
+| `validation-db`       | `pnpm validate:db`       | Database and migration validation profile.            |
+| `validation-security` | `pnpm validate:security` | Security-sensitive test and audit validation profile. |
+| `validation-e2e`      | `pnpm validate:e2e`      | Playwright E2E validation profile.                    |
+| `validation-full`     | `pnpm validate:full`     | Full deterministic validation profile.                |
+
+Pull requests targeting `main` or `develop` must run these checks through `.github/workflows/ci.yml`.
+
+Branch protection should require the stable check names above once this workflow has run successfully at least once on GitHub.
+
 ## Security Validation Profile
 
 ### Command
