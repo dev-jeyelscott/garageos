@@ -11,31 +11,31 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 | Status                  |   Cards |
 | ----------------------- | ------: |
 | Done                    |     187 |
-| In Progress             |       1 |
+| In Progress             |       0 |
 | Ready                   |       1 |
 | Backlog                 |     109 |
 | **Total tracked cards** | **298** |
 
 ## Milestone Status Summary
 
-| Milestone    | Status Summary         | Notes                                                         |
-| ------------ | ---------------------- | ------------------------------------------------------------- |
-| M0           | 23 Done, 1 In Progress | ENG-LOOP-01 through ENG-LOOP-07 complete; ENG-LOOP-08 started |
-| M1           | 18 Done                | Complete                                                      |
-| M2           | 21 Done                | Complete                                                      |
-| M3           | 19 Done                | Complete                                                      |
-| M4           | 15 Done                | Complete                                                      |
-| M5           | 16 Done                | Complete                                                      |
-| M6           | 16 Done                | Complete                                                      |
-| M7           | 16 Done                | Complete                                                      |
-| M8           | 14 Done                | Complete                                                      |
-| M9           | 26 Done                | Complete                                                      |
-| M10          | 16 Backlog             | Not started                                                   |
-| M11          | 18 Backlog             | Not started                                                   |
-| M12          | 16 Backlog             | Not started                                                   |
-| M13          | 19 Backlog, 1 Ready    | Security hardening follow-up ready                            |
-| M14          | 40 Backlog             | Not started                                                   |
-| No milestone | 1 Done                 | Review record                                                 |
+| Milestone    | Status Summary      | Notes                                    |
+| ------------ | ------------------- | ---------------------------------------- |
+| M0           | 23 Done             | ENG-LOOP-01 through ENG-LOOP-07 complete |
+| M1           | 18 Done             | Complete                                 |
+| M2           | 21 Done             | Complete                                 |
+| M3           | 19 Done             | Complete                                 |
+| M4           | 15 Done             | Complete                                 |
+| M5           | 16 Done             | Complete                                 |
+| M6           | 16 Done             | Complete                                 |
+| M7           | 16 Done             | Complete                                 |
+| M8           | 14 Done             | Complete                                 |
+| M9           | 26 Done             | Complete                                 |
+| M10          | 16 Backlog          | Not started                              |
+| M11          | 18 Backlog          | Not started                              |
+| M12          | 16 Backlog          | Not started                              |
+| M13          | 19 Backlog, 1 Ready | Security hardening follow-up ready       |
+| M14          | 40 Backlog          | Not started                              |
+| No milestone | 1 Done              | Review record                            |
 
 ## Current Focus
 
@@ -46,7 +46,6 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - [x] **Done** — ENG-LOOP-05 — Wire validation profiles into GitHub Actions
 - [x] **Done** — ENG-LOOP-06 — Enforce branch protection for main and develop
 - [x] **Done** — ENG-LOOP-07 — Add PR validation evidence guard
-- [ ] **In Progress** — ENG-LOOP-08 — Expand E2E coverage beyond landing page smoke
 - [x] **Done** — CI — Add OpenAI AI reviewer to pull request pipeline
 - [x] **Done** — M9.17 — Add Milestone 9 E2E, mobile, permission, and blocked-state coverage
 - [x] **Done** — M9.18 — Final Milestone 9 regression, documentation, and handoff
@@ -80,7 +79,6 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - [x] **Done** — ENG-LOOP-05 — Wire validation profiles into GitHub Actions
 - [x] **Done** — ENG-LOOP-06 — Enforce branch protection for main and develop
 - [x] **Done** — ENG-LOOP-07 — Add PR validation evidence guard
-- [ ] **In Progress** — ENG-LOOP-08 — Expand E2E coverage beyond landing page smoke
 
 ## M1 — Database Foundation and Core Migrations
 

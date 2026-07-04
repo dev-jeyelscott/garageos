@@ -204,7 +204,7 @@ pnpm validate:e2e
 
 Runs the dedicated GarageOS browser-based E2E validation profile for currently automated PWA paths.
 
-This profile provides focused validation evidence for implemented E2E coverage, starting with deterministic mobile-first PWA smoke and public/auth flow coverage. It is intended to grow incrementally toward documented GarageOS workflow coverage, including onboarding, tenant gates, customer and motorcycle intake, job orders, inventory, invoicing, payments, receipts, read-only behavior, and offline write blocking as stable fixtures become available.
+This profile provides focused validation evidence for implemented E2E coverage, starting with deterministic mobile-first PWA smoke coverage. It is intended to grow incrementally toward documented GarageOS workflow coverage, including onboarding, tenant gates, customer and motorcycle intake, job orders, inventory, invoicing, payments, receipts, read-only behavior, and offline write blocking as stable fixtures become available.
 
 ### Current Coverage
 
@@ -214,7 +214,7 @@ The profile currently runs real underlying commands only:
 pnpm test:e2e
 ```
 
-The current Playwright coverage validates that the public GarageOS PWA shell loads in a mobile Chromium viewport, exposes stable public navigation/CTA affordances, renders public auth screens, supports auth navigation, and handles deterministic auth form success/error states through mocked API envelopes using stable form-control selectors. Protected-route redirect coverage remains deferred until a stable protected route guard is available for deterministic validation.
+The initial Playwright coverage validates that the public GarageOS PWA shell loads in a mobile Chromium viewport and exposes stable public navigation/CTA affordances.
 
 ### Required Behavior
 
