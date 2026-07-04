@@ -2,6 +2,9 @@ name: AI PR Review
 
 on:
   pull_request:
+    branches:
+      - develop
+      - main
     types:
       - opened
       - reopened
@@ -12,6 +15,7 @@ permissions:
   contents: read
   pull-requests: write
   issues: write
+  actions: read
 
 concurrency:
   group: ai-pr-review-${{ github.event.pull_request.number }}
@@ -22,7 +26,7 @@ env:
   MAX_DIFF_CHARS: '60000'
   OPENAI_MODEL: ${{ vars.OPENAI_REVIEW_MODEL || 'gpt-4.1-mini' }}
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  GITHUB_TOKEN: ${{ github.token }}
   GITHUB_REPOSITORY: ${{ github.repository }}
   GITHUB_API_URL: ${{ github.api_url }}
   PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -31,7 +35,7 @@ jobs:
   ai-pr-review:
     name: Advisory AI PR Review
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     if: >-
       ${{
         github.event.pull_request.draft == false &&
@@ -41,11 +45,16 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+
+      - name: Validate AI reviewer script syntax
+        run: node --check scripts/ai-pr-review.mjs
 
       - name: Skip when OpenAI key is not configured
         if: ${{ env.OPENAI_API_KEY == '' }}
