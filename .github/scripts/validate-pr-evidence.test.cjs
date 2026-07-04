@@ -11,6 +11,11 @@ const cases = [
     expected: true,
   },
   {
+    name: 'accepts inline-code command evidence',
+    body: '# Summary\n\nTest PR.\n\n## Validation Evidence\n\n* `pnpm test:pr-evidence` — PASS\n* `pnpm validate:quick` — PASS',
+    expected: true,
+  },
+  {
     name: 'rejects empty body',
     body: '',
     expected: false,

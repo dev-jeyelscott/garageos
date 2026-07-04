@@ -63,6 +63,13 @@ function stripComments(text) {
   return text.replace(/<!--([\s\S]*?)-->/g, '').trim();
 }
 
+function normalizeEvidenceContent(text) {
+  return stripComments(text)
+    .replace(/```(?:[a-zA-Z0-9_-]+)?\n([\s\S]*?)```/g, '$1')
+    .replace(/`([^`\n]+)`/g, '$1')
+    .trim();
+}
+
 function extractSections(markdown) {
   const sections = [];
   const matches = [];
@@ -99,10 +106,9 @@ function findValidationSection(markdown) {
 }
 
 function isPlaceholderOnly(sectionContent) {
-  const cleaned = stripComments(sectionContent)
+  const cleaned = normalizeEvidenceContent(sectionContent)
     .replace(/^\s*[-*]\s*\[[ xX]\]\s*/gm, '')
     .replace(/^\s*[-*]\s*/gm, '')
-    .replace(/```[\s\S]*?```/g, (block) => block.replace(/```/g, '').trim())
     .trim();
 
   if (cleaned.length < 12) {
@@ -138,7 +144,7 @@ function evaluateValidationEvidence(markdown) {
     };
   }
 
-  const content = stripComments(section.content);
+  const content = normalizeEvidenceContent(section.content);
 
   if (isPlaceholderOnly(content)) {
     errors.push(
