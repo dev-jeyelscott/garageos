@@ -91,6 +91,37 @@ Pull requests targeting `main` or `develop` must run these checks through `.gith
 
 Branch protection should require the stable check names above once this workflow has run successfully at least once on GitHub.
 
+## Branch Protection Guidance
+
+After `.github/workflows/ci.yml` has run successfully at least once, configure branch protection for `main` and `develop` to require the stable GitHub Actions checks below before merge:
+
+- `validation-quick`
+- `validation-web`
+- `validation-api`
+- `validation-db`
+- `validation-security`
+- `validation-e2e`
+- `validation-full`
+
+Pull requests must not be merged into `main` or `develop` when required validation checks are failing, missing, skipped unexpectedly, or bypassed without explicit documented approval.
+
+Branch protection should also preserve human review authority. The AI reviewer is advisory only; deterministic CI gates and human review remain authoritative.
+
+## CI Validation Context
+
+GitHub Actions is responsible for orchestrating validation profiles and providing disposable infrastructure such as PostgreSQL for database-backed checks.
+
+GitHub Actions must not invent tenant IDs, branch IDs, RBAC grants, subscription statuses, or support-access context through environment variables unless the underlying tests explicitly define and consume those fixtures.
+
+GarageOS tenant isolation, branch access, RBAC, subscription lifecycle gates, and support-access safeguards must be proven by the underlying validation commands, especially:
+
+- `pnpm validate:security`
+- `pnpm validate:api`
+- `pnpm validate:db`
+- `pnpm validate:full`
+
+Any test requiring tenant, branch, role, permission, subscription, or support-access state must create deterministic test fixtures inside the relevant package test setup.
+
 ## Database-backed CI Profiles
 
 The following GitHub Actions checks require a disposable PostgreSQL service container and a CI-provided `DATABASE_URL`:

@@ -18,6 +18,10 @@ concurrency:
   group: garageos-validation-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# CI only orchestrates deterministic GarageOS validation profiles.
+# Tenant isolation, RBAC, branch access, and subscription lifecycle behavior
+# must be proven by the underlying API/security/DB tests and deterministic
+# test fixtures. Do not add fake tenant or permission environment variables here.
 jobs:
   validation:
     name: validation-${{ matrix.profile }}
@@ -48,41 +52,21 @@ jobs:
             command: pnpm validate:e2e
             timeout: 30
 
+    env:
+      NODE_ENV: test
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Enable pnpm
+        run: corepack enable
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
-
-      - name: Enable pnpm
-        shell: bash
-        run: |
-          corepack enable
-
-          if node -e "const pkg = require('./package.json'); process.exit(pkg.packageManager?.startsWith('pnpm@') ? 0 : 1);"; then
-            corepack install
-          else
-            corepack prepare pnpm@10.13.1 --activate
-          fi
-
-          pnpm --version
-
-      - name: Resolve pnpm store path
-        id: pnpm-store
-        shell: bash
-        run: |
-          echo "STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
-
-      - name: Cache pnpm store
-        uses: actions/cache@v4
-        with:
-          path: ${{ steps.pnpm-store.outputs.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-store-
+          cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -115,6 +99,7 @@ jobs:
           --health-retries 10
 
     env:
+      NODE_ENV: test
       DATABASE_URL: postgresql://garageos:garageos@localhost:5432/garageos_validation
 
     strategy:
@@ -133,37 +118,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Enable pnpm
+        run: corepack enable
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
-
-      - name: Enable pnpm
-        shell: bash
-        run: |
-          corepack enable
-
-          if node -e "const pkg = require('./package.json'); process.exit(pkg.packageManager?.startsWith('pnpm@') ? 0 : 1);"; then
-            corepack install
-          else
-            corepack prepare pnpm@10.13.1 --activate
-          fi
-
-          pnpm --version
-
-      - name: Resolve pnpm store path
-        id: pnpm-store
-        shell: bash
-        run: |
-          echo "STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
-
-      - name: Cache pnpm store
-        uses: actions/cache@v4
-        with:
-          path: ${{ steps.pnpm-store.outputs.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-store-
+          cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
