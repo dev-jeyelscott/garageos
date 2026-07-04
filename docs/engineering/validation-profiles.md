@@ -20,6 +20,7 @@ Validation must remain aligned with:
 - `qa-acceptance-test-plan.md`
 - `garageos-build-roadmap-v1.3.md`
 - `permission-matrix.md`
+- `requirements-traceability-matrix.md`
 - `garageos-architecture-records.md`
 
 GarageOS validation must prove the relevant evidence for:
@@ -46,55 +47,105 @@ GarageOS validation must prove the relevant evidence for:
 3. Do not add fake validation scripts that pass without meaningful checks.
 4. Do not remove or weaken existing test, lint, typecheck, build, migration, or security checks.
 5. Select the highest applicable risk class for the PR.
-6. If a PR touches multiple areas, run the union of required validation profiles.
+6. If a PR touches multiple areas, run the union of required implemented validation profiles.
 7. Critical financial, inventory, tenant isolation, RBAC, branch access, migration, and background-job work requires focused validation beyond generic lint/typecheck.
 8. Manual evidence is allowed only where automated coverage does not yet exist, and must be documented in the PR.
+9. Pending profiles must not be listed as required runnable commands until real underlying scripts exist.
+10. `validate:full` must include only implemented profiles and real checks.
 
-## Validation Profiles
+## Validation Profile Availability
 
-| Profile  | Command                  | Purpose                                              | Typical Coverage                                                             |
-| -------- | ------------------------ | ---------------------------------------------------- | ---------------------------------------------------------------------------- |
-| Quick    | `pnpm validate:quick`    | Fast baseline for low-risk docs/tooling-safe changes | Lint, typecheck, formatting-safe checks where available                      |
-| Web      | `pnpm validate:web`      | Frontend validation                                  | Web lint, web typecheck, web unit/component tests                            |
-| API      | `pnpm validate:api`      | Backend/API validation                               | API lint, API typecheck, backend unit/API tests                              |
-| DB       | `pnpm validate:db`       | Persistence and migration validation                 | Migration checks, schema checks, repository/integration tests                |
-| Security | `pnpm validate:security` | Security-sensitive validation                        | Auth, tenant isolation, RBAC, branch access, sensitive-log/dependency checks |
-| E2E      | `pnpm validate:e2e`      | User workflow validation                             | Playwright/mobile-first/critical workflow tests where available              |
-| Full     | `pnpm validate:full`     | Broad local pre-merge or milestone validation        | All implemented validation profiles                                          |
+GarageOS validation profiles are split into implemented profiles and pending profiles.
 
-## Risk Classes
+Implemented profiles are runnable today and may be required in PR evidence.
 
-| Risk Class | Name                                                | Description                                                                                                              | Minimum Validation                                                                                      |
-| ---------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
-| R0         | Docs-only                                           | Documentation, comments, markdown, non-runtime notes                                                                     | `pnpm validate:quick`                                                                                   |
-| R1         | Tooling / CI metadata                               | PR template, runbooks, non-production scripts, repo metadata                                                             | `pnpm validate:quick` plus script syntax checks if applicable                                           |
-| R2         | Web UI only                                         | UI rendering, frontend-only state, styling, components, route display                                                    | `pnpm validate:web`                                                                                     |
-| R3         | API / service logic                                 | DTOs, controllers, services, validators, API envelopes, error codes                                                      | `pnpm validate:api`                                                                                     |
-| R4         | Database / persistence                              | Migrations, schema, repositories, constraints, indexes, seed data                                                        | `pnpm validate:db` plus API/integration checks where affected                                           |
-| R5         | Auth / tenant / RBAC / branch / plan gates          | Authentication, tenant status, subscription gates, permissions, branch access, plan enforcement                          | `pnpm validate:security` plus relevant API/integration tests                                            |
-| R6         | Financial / inventory / workflow-critical           | Invoices, payments, receipts, refunds, voids, inventory, FIFO, reservations, purchases, supplier returns, job completion | `pnpm validate:api`, `pnpm validate:db`, focused domain tests, idempotency tests, and concurrency tests |
-| R7         | Background jobs / exports / operational reliability | Workers, scheduler, exports, reminders, lifecycle jobs, retry/dead-letter behavior, observability                        | Relevant API/DB tests plus retry/idempotency/operational visibility evidence                            |
-| R8         | Release candidate / milestone closure               | Milestone completion, release candidate, launch-readiness work                                                           | `pnpm validate:full` plus documented manual acceptance evidence                                         |
+Pending profiles are documented future targets only. Do not reference pending profiles as required runnable commands until the underlying scripts exist and have meaningful coverage.
+
+### Implemented Profiles
+
+| Profile | Command               | Purpose                                                           | Typical Coverage                                                           |
+| ------- | --------------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Quick   | `pnpm validate:quick` | Fast baseline for low-risk docs, tooling, and source-safe changes | Format check, lint, typecheck                                              |
+| Web     | `pnpm validate:web`   | Frontend validation                                               | Web lint, web typecheck, web unit/component tests                          |
+| API     | `pnpm validate:api`   | Backend/API validation                                            | API lint, API typecheck, backend unit/API tests                            |
+| DB      | `pnpm validate:db`    | Persistence and migration validation                              | Migration-order validation and database package validation                 |
+| Full    | `pnpm validate:full`  | Broad local pre-merge or milestone validation                     | All currently implemented validation coverage using real existing commands |
+
+### Pending Profiles
+
+| Profile  | Future Command           | Status  | Reason                                                                                                                                                                     |
+| -------- | ------------------------ | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Security | `pnpm validate:security` | Pending | Dedicated auth, tenant isolation, RBAC, branch access, subscription gate, support access, sensitive-log, and security checks are not yet wired into a single real profile. |
+| E2E      | `pnpm validate:e2e`      | Pending | Dedicated E2E workflow test infrastructure or command is not yet available as a stable validation profile.                                                                 |
+
+Pending profiles must not be required in PR evidence until implemented.
+
+Until then, security-sensitive and workflow-critical PRs must provide the strongest available implemented validation plus targeted test evidence, reviewer notes, UI evidence where applicable, and rollback notes.
+
+## Current Profile Status
+
+| Profile             | Status      | Notes                                                                                                                                                                                                                                                                    |
+| ------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `validate:quick`    | Implemented | Runs format check, lint, and typecheck.                                                                                                                                                                                                                                  |
+| `validate:web`      | Implemented | Runs web lint, typecheck, and tests for `@garageos/web`.                                                                                                                                                                                                                 |
+| `validate:api`      | Implemented | Runs API lint, typecheck, and tests for `@garageos/api`.                                                                                                                                                                                                                 |
+| `validate:db`       | Implemented | Runs migration order validation and `@garageos/db` validation.                                                                                                                                                                                                           |
+| `validate:full`     | Implemented | Runs quick validation, full recursive tests, DB validation, and dependency audit.                                                                                                                                                                                        |
+| `validate:security` | Pending     | Do not add until dedicated auth, tenant isolation, RBAC, branch access, subscription gate, support access, sensitive-log, or security test scripts exist. `audit:deps` may provide dependency security evidence only; it does not prove full GarageOS security coverage. |
+| `validate:e2e`      | Pending     | Do not add until real E2E or Playwright workflow scripts exist and are stable enough for the intended validation scope.                                                                                                                                                  |
+
+## Risk-Class Validation Matrix
+
+Select the highest applicable risk class for each PR.
+
+| Risk Class | Change Type                                                                             | Required Implemented Validation                                                                                                                         | Additional Evidence Required                                                                                                                                                                                       |
+| ---------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| R0         | Docs-only changes                                                                       | `pnpm validate:quick` when practical                                                                                                                    | Explain why no runtime validation is required.                                                                                                                                                                     |
+| R1         | Tooling, CI metadata, templates, runbooks                                               | `pnpm validate:quick`                                                                                                                                   | Confirm existing CI gates are not weakened.                                                                                                                                                                        |
+| R2         | Web UI only                                                                             | `pnpm validate:quick` + `pnpm validate:web`                                                                                                             | Provide screenshots, recordings, or UI verification notes where applicable.                                                                                                                                        |
+| R3         | API/service logic                                                                       | `pnpm validate:quick` + `pnpm validate:api`                                                                                                             | Identify affected endpoints, services, DTOs, guards, and tests.                                                                                                                                                    |
+| R4         | Database/persistence                                                                    | `pnpm validate:quick` + `pnpm validate:api` + `pnpm validate:db`                                                                                        | Document migration, constraint, transaction, locking, rollback, and data-integrity considerations.                                                                                                                 |
+| R5         | Auth, tenant isolation, RBAC, branch access, plan gates, support access, sensitive data | `pnpm validate:quick` + `pnpm validate:api` + `pnpm validate:db` when persistence is affected + `pnpm validate:web` when UI access behavior is affected | `validate:security` is pending. Until implemented, provide targeted auth/access/security test evidence, dependency audit evidence where relevant, explicit reviewer notes, and rollback notes.                     |
+| R6         | Financial, inventory, invoice, payment, refund, FIFO, workflow-critical behavior        | `pnpm validate:quick` + `pnpm validate:api` + `pnpm validate:db` + `pnpm validate:web` when UI is affected                                              | Provide targeted financial/inventory/workflow tests, concurrency/idempotency evidence where applicable, UI evidence where applicable, rollback notes, and manual workflow evidence where E2E is not yet automated. |
+| R7         | Background jobs, exports, operational reliability, observability                        | `pnpm validate:quick` + relevant package tests + `pnpm validate:api` where API behavior is affected + `pnpm validate:db` where persistence is affected  | Provide job retry, idempotency, logging, failure-state, operational visibility, and runbook evidence where applicable.                                                                                             |
+| R8         | Release candidate or milestone closure                                                  | `pnpm validate:full` plus all relevant implemented profile commands                                                                                     | `validate:security` and `validate:e2e` remain pending until implemented. Provide targeted security, E2E/manual workflow, UAT, UI evidence, rollback notes, and signoff evidence as applicable.                     |
+
+## Pending Profile Handling
+
+`validate:security` and `validate:e2e` are intentionally not required as runnable PR commands yet.
+
+Do not claim `pnpm validate:security` or `pnpm validate:e2e` was run unless those scripts exist and run meaningful checks.
+
+For R5, R6, and R8 PRs before those profiles exist, reviewers must require:
+
+- implemented validation profile results,
+- targeted package/test evidence,
+- explicit security or workflow review notes,
+- UI evidence where applicable,
+- rollback notes,
+- and follow-up tickets when automation coverage is missing.
+
+This keeps the validation matrix honest and prevents GarageOS from claiming automated security or E2E coverage that does not exist yet.
 
 ## Change-Type Matrix
 
-| Change Type                                              | Risk Class | Required Validation                                               | Notes                                                                                                   |
-| -------------------------------------------------------- | ---------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| Markdown docs only                                       | R0         | `pnpm validate:quick`                                             | Ensure no product scope drift.                                                                          |
-| PR template / branch protection runbook                  | R1         | `pnpm validate:quick`                                             | Do not weaken CI or human final merge authority.                                                        |
-| Frontend layout or component only                        | R2         | `pnpm validate:web`                                               | Include loading, empty, forbidden, read-only/offline, validation, and conflict states where applicable. |
-| Frontend permission/tenant-status behavior               | R5         | `pnpm validate:web` plus relevant security/API tests              | UI checks are not authoritative; backend remains authoritative.                                         |
-| API DTO/controller only                                  | R3         | `pnpm validate:api`                                               | Confirm response envelope, error envelope, validation, and required permissions.                        |
-| Service/domain rule                                      | R3 or R6   | `pnpm validate:api` plus focused tests                            | Use R6 for financial, inventory, workflow-critical, or irreversible operations.                         |
-| Migration/schema/index/seed                              | R4         | `pnpm validate:db`                                                | Include migration/schema validation and affected repository tests.                                      |
-| Repository query/scoping                                 | R4 or R5   | `pnpm validate:db` plus security tests if tenant/branch scoped    | Tenant and branch scoping must be proven.                                                               |
-| Auth/session/token/password/rate limit                   | R5         | `pnpm validate:security` plus API tests                           | Confirm sensitive data is not logged or exposed.                                                        |
-| Tenant lifecycle/subscription/read-only/suspended access | R5         | `pnpm validate:security` plus API/integration tests               | Tenant status guard must run before operational permission checks.                                      |
-| RBAC/roles/permissions/branch access                     | R5         | `pnpm validate:security` plus API/integration tests               | Effective permissions are additive; branch access is separate from permission access.                   |
-| Invoices/payments/receipts/refunds/voids/AR              | R6         | API, DB, idempotency, concurrency, and focused financial tests    | No overbilling, overpayment, over-refund, or mutable receipt behavior.                                  |
-| Inventory/FIFO/reservations/transfers/adjustments        | R6         | API, DB, idempotency, concurrency, and focused inventory tests    | No over-reservation, negative stock, duplicate ledger side effects, or FIFO corruption.                 |
-| Workers/scheduler/background jobs/export jobs            | R7         | Relevant API/DB tests plus retry/idempotency/observability checks | Prove retries do not duplicate irreversible side effects.                                               |
-| Release candidate or milestone closure                   | R8         | `pnpm validate:full` plus manual QA/security/devops evidence      | Required before milestone closure or release candidate approval.                                        |
+| Change Type                                              | Risk Class | Required Implemented Validation                                                                                                                        | Additional Evidence Required                                                                                                                                                        |
+| -------------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Markdown docs only                                       | R0         | `pnpm validate:quick` when practical                                                                                                                   | Ensure no product scope drift. Explain why no runtime validation is required.                                                                                                       |
+| PR template / branch protection runbook                  | R1         | `pnpm validate:quick`                                                                                                                                  | Confirm CI gates and human final merge authority are not weakened. Include rollback notes.                                                                                          |
+| Frontend layout or component only                        | R2         | `pnpm validate:quick` + `pnpm validate:web`                                                                                                            | Include loading, empty, forbidden, read-only/offline, validation, and conflict states where applicable. Attach screenshots or recordings for UI-facing changes.                     |
+| Frontend permission or tenant-status behavior            | R5         | `pnpm validate:quick` + `pnpm validate:web` + `pnpm validate:api` where backend behavior is affected                                                   | UI checks are not authoritative. Provide targeted access-control evidence and confirm backend authorization remains authoritative. `validate:security` remains pending.             |
+| API DTO/controller only                                  | R3         | `pnpm validate:quick` + `pnpm validate:api`                                                                                                            | Confirm response envelope, error envelope, validation, and required permissions.                                                                                                    |
+| Service/domain rule                                      | R3 or R6   | `pnpm validate:quick` + `pnpm validate:api` + focused tests                                                                                            | Use R6 for financial, inventory, workflow-critical, or irreversible operations. Add DB validation if persistence is affected.                                                       |
+| Migration/schema/index/seed                              | R4         | `pnpm validate:quick` + `pnpm validate:api` + `pnpm validate:db`                                                                                       | Include migration/schema validation, affected repository tests, rollback notes, and data-integrity evidence.                                                                        |
+| Repository query/scoping                                 | R4 or R5   | `pnpm validate:quick` + `pnpm validate:api` + `pnpm validate:db`                                                                                       | Tenant and branch scoping must be proven with targeted tests or reviewer evidence. `validate:security` remains pending.                                                             |
+| Auth/session/token/password/rate limit                   | R5         | `pnpm validate:quick` + `pnpm validate:api` + `pnpm validate:db` where persistence is affected                                                         | Confirm sensitive data is not logged or exposed. Provide targeted auth/security tests and dependency audit evidence where relevant. `validate:security` remains pending.            |
+| Tenant lifecycle/subscription/read-only/suspended access | R5         | `pnpm validate:quick` + `pnpm validate:api` + `pnpm validate:db` where persistence is affected + `pnpm validate:web` when UI is affected               | Tenant status guard must run before operational permission checks. Provide targeted guard/access evidence. `validate:security` remains pending.                                     |
+| RBAC/roles/permissions/branch access                     | R5         | `pnpm validate:quick` + `pnpm validate:api` + `pnpm validate:db` where persistence is affected + `pnpm validate:web` when UI is affected               | Effective permissions are additive; branch access is separate from permission access. Provide targeted permission and branch-access evidence. `validate:security` remains pending.  |
+| Invoices/payments/receipts/refunds/voids/AR              | R6         | `pnpm validate:quick` + `pnpm validate:api` + `pnpm validate:db` + `pnpm validate:web` when UI is affected                                             | No overbilling, overpayment, over-refund, or mutable receipt behavior. Provide idempotency, concurrency, financial immutability, UI evidence where applicable, and rollback notes.  |
+| Inventory/FIFO/reservations/transfers/adjustments        | R6         | `pnpm validate:quick` + `pnpm validate:api` + `pnpm validate:db` + `pnpm validate:web` when UI is affected                                             | No over-reservation, negative stock, duplicate ledger side effects, or FIFO corruption. Provide concurrency, idempotency, ledger, UI evidence where applicable, and rollback notes. |
+| Workers/scheduler/background jobs/export jobs            | R7         | `pnpm validate:quick` + relevant package tests + `pnpm validate:api` where API behavior is affected + `pnpm validate:db` where persistence is affected | Prove retries do not duplicate irreversible side effects. Provide observability, failure-state, and runbook evidence.                                                               |
+| Release candidate or milestone closure                   | R8         | `pnpm validate:full` plus all relevant implemented profile commands                                                                                    | Provide manual QA, targeted security evidence, E2E/manual workflow evidence, UAT evidence, rollback notes, and product/security/DevOps/engineering signoff as applicable.           |
 
 ## Profile Implementation Rules
 
@@ -106,6 +157,8 @@ If a package or command does not exist yet:
 - Document the profile as pending.
 - Create a follow-up ticket if the missing validation is required for upcoming work.
 - Keep `validate:full` limited to implemented profiles only.
+- Update this document before changing a profile from pending to implemented.
+- Update the PR template and risk matrix when a new implemented profile changes required evidence.
 
 ## PR Evidence Checklist
 
@@ -117,6 +170,8 @@ Every PR should state:
 - Command output summary
 - Any pending validation gaps
 - Manual acceptance evidence when automated coverage is not available
+- UI screenshots, recordings, or written UI verification notes for UI-facing changes
+- Rollback plan or rationale for why rollback is not needed
 - Whether CI passed
 - Whether human review remains required
 
@@ -130,18 +185,6 @@ If a validation profile fails:
 4. If the failure is unrelated and pre-existing, document evidence and create or link a follow-up ticket.
 5. For critical areas, do not merge with unresolved Critical or High validation failures.
 
-## Current Profile Status
-
-| Profile             | Status      | Notes                                                                                                                                                                                                    |
-| ------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `validate:quick`    | Implemented | Runs format check, lint, and typecheck.                                                                                                                                                                  |
-| `validate:web`      | Implemented | Runs web lint, typecheck, and tests for `@garageos/web`.                                                                                                                                                 |
-| `validate:api`      | Implemented | Runs API lint, typecheck, and tests for `@garageos/api`.                                                                                                                                                 |
-| `validate:db`       | Implemented | Runs migration order validation and `@garageos/db` validation.                                                                                                                                           |
-| `validate:security` | Pending     | Do not add until dedicated auth, tenant isolation, RBAC, branch access, sensitive-log, or security test scripts exist. `audit:deps` is included in `validate:full` as dependency security coverage only. |
-| `validate:e2e`      | Pending     | Do not add until E2E/Playwright workflow scripts exist.                                                                                                                                                  |
-| `validate:full`     | Implemented | Runs quick validation, full recursive tests, DB validation, and dependency audit.                                                                                                                        |
-
 ## Pending Profiles
 
 `validate:security` and `validate:e2e` are intentionally not implemented yet.
@@ -152,3 +195,24 @@ Reason:
 - No dedicated E2E command is currently present in the root scripts.
 
 These profiles should be added only when real underlying commands exist.
+
+Follow-up tickets:
+
+- `ENG-LOOP-03 — Add dedicated security validation profile`
+- `ENG-LOOP-04 — Add E2E validation profile`
+
+## Validation for This Document
+
+After editing this document, run:
+
+```bash
+pnpm validate:quick
+```
+
+Then verify that pending profile references are not written as required runnable commands:
+
+```bash
+grep -n "validate:security\|validate:e2e" docs/engineering/validation-profiles.md
+```
+
+Allowed references must clearly identify those profiles as pending, future, or not required until implemented.
