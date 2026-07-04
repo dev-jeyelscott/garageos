@@ -309,6 +309,10 @@ Output requirements:
 - Start with exactly one concise verdict line using this format:
   Verdict: <one-sentence advisory summary>
 - Severity sections must contain actionable risks only. Do not place positive changes, confirmations, or general praise under Critical, High, Medium, or Low.
+- Apply a materiality filter before reporting a finding:
+  - Report only concrete risks supported by the diff, PR description, or GarageOS source-of-truth rules.
+  - Do not report speculative compatibility risks unless the diff shows an actual downstream parser, test, workflow, or consumer that depends on the changed behavior.
+  - Move speculative follow-up checks to "Recommended validation" instead of severity findings.
 - Group actionable findings by severity using exactly these headings: Critical, High, Medium, Low.
 - Use "No findings" for a severity group when there are no actionable risks at that severity.
 - For each actionable finding include:
@@ -320,15 +324,18 @@ Output requirements:
   - Critical: data leakage, tenant isolation break, financial/inventory corruption, auth bypass, destructive production risk, or broken required CI/security control.
   - High: likely production defect, security weakness, authorization gap, idempotency/concurrency risk, schema/API contract break, or major source-of-truth misalignment.
   - Medium: maintainability, reliability, observability, validation, test coverage, or edge-case risk that should be addressed but is not immediately blocking.
-  - Low: minor cleanup, clarity, small DX issue, or optional hardening.
+  - Low: minor cleanup, clarity, small DX issue, or optional hardening with concrete value.
+- Do not report token usage, cost, or prompt verbosity as a finding unless the diff materially increases prompt size, MAX_DIFF_CHARS, max_output_tokens, external API calls, workflow runtime, or repeated document payloads.
 - Add a "Positive notes" section after severity groups.
 - Put confirmed good changes, improvements, successful refactors, and strengthened controls only under "Positive notes".
 - Use "No notable positive notes" if there are no meaningful positive notes.
 - Add a "Recommended validation" section after "Positive notes".
 - Include exact commands when inferable, such as pnpm lint, pnpm typecheck, targeted package tests, API tests, web tests, integration tests, or E2E tests.
 - If validation cannot be inferred from the diff, say which validation category should be selected by the human reviewer.
+- Put non-blocking compatibility checks, output-format checks, and CI workflow smoke checks in "Recommended validation" unless there is concrete evidence of breakage.
 - Add a final "Review limitations" section.
-- Mention important limitations such as truncated diffs, excluded generated/binary files, missing runtime context, or lack of direct CI execution evidence.
+- Mention important limitations such as truncated diffs, excluded generated/binary files, missing runtime context, or unavailable check-run status.
+- If CI/check-run status is not included in the prompt, say: "CI/check-run status was not included in this review context; verify GitHub Checks separately." Do not say CI evidence was not provided as if it is a PR defect.
 - Keep this advisory and practical. Do not approve, block, request changes, or claim that CI passed.
 - Do not include secrets, credentials, raw tokens, or sensitive values.
 
@@ -366,7 +373,7 @@ async function createOpenAiReview(prompt) {
     body: JSON.stringify({
       model,
       instructions:
-        'You are a careful, source-aligned GarageOS code reviewer. Return only the requested PR review text. Treat severity sections as actionable risks only; place positive observations only under Positive notes.',
+        'You are a careful, source-aligned GarageOS code reviewer. Return only the requested PR review text. Treat severity sections as actionable risks only; place positive observations only under Positive notes. Avoid speculative or low-materiality findings; move non-blocking checks to Recommended validation.',
       input: prompt,
       max_output_tokens: 2_000,
     }),
