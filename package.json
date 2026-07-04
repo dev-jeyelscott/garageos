@@ -39,7 +39,8 @@
     "validate:web": "pnpm --filter @garageos/web lint && pnpm --filter @garageos/web typecheck && pnpm --filter @garageos/web test",
     "validate:api": "pnpm --filter @garageos/api lint && pnpm --filter @garageos/api typecheck && pnpm --filter @garageos/api test",
     "validate:db": "node packages/db/scripts/validate-migration-order.cjs && pnpm db:validate",
-    "validate:full": "pnpm validate:quick && pnpm test && pnpm validate:db && pnpm audit:deps"
+    "validate:full": "pnpm validate:quick && pnpm validate:web && pnpm validate:api && pnpm validate:db && pnpm validate:security",
+    "validate:security": "pnpm --dir apps/api test:security && pnpm audit --audit-level high"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,json,md,yml,yaml}": [

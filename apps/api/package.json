@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "bootstrap:platform-admin": "tsx src/scripts/bootstrap-platform-admin.ts",
-    "activate:tenant-owner": "tsx src/scripts/activate-tenant-owner.ts"
+    "activate:tenant-owner": "tsx src/scripts/activate-tenant-owner.ts",
+    "test:security": "vitest run src/modules/auth src/modules/branches src/modules/platform src/modules/roles src/shared/authorization src/shared/tenant-context src/shared/audit"
   },
   "dependencies": {
     "@nestjs/common": "latest",
