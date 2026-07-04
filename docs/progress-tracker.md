@@ -10,39 +10,39 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 
 | Status                  |   Cards |
 | ----------------------- | ------: |
-| Done                    |     182 |
+| Done                    |     183 |
 | In Progress             |       1 |
-| Ready                   |       2 |
+| Ready                   |       1 |
 | Backlog                 |     109 |
 | **Total tracked cards** | **294** |
 
 ## Milestone Status Summary
 
-| Milestone    | Status Summary                    | Notes                                   |
-| ------------ | --------------------------------- | --------------------------------------- |
-| M0           | 19 Done, 1 Ready                  | ENG-LOOP-03 complete; ENG-LOOP-04 ready |
-| M1           | 18 Done                           | Complete                                |
-| M2           | 21 Done                           | Complete                                |
-| M3           | 19 Done                           | Complete                                |
-| M4           | 15 Done                           | Complete                                |
-| M5           | 16 Done                           | Complete                                |
-| M6           | 16 Done                           | Complete                                |
-| M7           | 16 Done                           | Complete                                |
-| M8           | 14 Done                           | Complete                                |
-| M9           | 25 Done, 1 In Progress, 0 Backlog | Current active milestone                |
-| M10          | 16 Backlog                        | Not started                             |
-| M11          | 18 Backlog                        | Not started                             |
-| M12          | 16 Backlog                        | Not started                             |
-| M13          | 19 Backlog, 1 Ready               | Security hardening follow-up ready      |
-| M14          | 40 Backlog                        | Not started                             |
-| No milestone | 1 Done                            | Review record                           |
+| Milestone    | Status Summary                    | Notes                                |
+| ------------ | --------------------------------- | ------------------------------------ |
+| M0           | 20 Done                           | ENG-LOOP-03 and ENG-LOOP-04 complete |
+| M1           | 18 Done                           | Complete                             |
+| M2           | 21 Done                           | Complete                             |
+| M3           | 19 Done                           | Complete                             |
+| M4           | 15 Done                           | Complete                             |
+| M5           | 16 Done                           | Complete                             |
+| M6           | 16 Done                           | Complete                             |
+| M7           | 16 Done                           | Complete                             |
+| M8           | 14 Done                           | Complete                             |
+| M9           | 25 Done, 1 In Progress, 0 Backlog | Current active milestone             |
+| M10          | 16 Backlog                        | Not started                          |
+| M11          | 18 Backlog                        | Not started                          |
+| M12          | 16 Backlog                        | Not started                          |
+| M13          | 19 Backlog, 1 Ready               | Security hardening follow-up ready   |
+| M14          | 40 Backlog                        | Not started                          |
+| No milestone | 1 Done                            | Review record                        |
 
 ## Current Focus
 
 - [x] **Done** — ENG-LOOP-01 — Add PR template and branch protection checklist
 - [x] **Done** — ENG-LOOP-02 — Add validation profiles and risk-class matrix
 - [x] **Done** — ENG-LOOP-03 — Add dedicated security validation profile
-- [ ] **Ready** — ENG-LOOP-04 — Add E2E validation profile
+- [x] **Done** — ENG-LOOP-04 — Add E2E validation profile
 - [x] **Done** — CI — Add OpenAI AI reviewer to pull request pipeline
 - [x] **Done** — M9.17 — Add Milestone 9 E2E, mobile, permission, and blocked-state coverage
 - [ ] **In Progress** — M9.18 — Final Milestone 9 regression, documentation, and handoff
@@ -71,8 +71,8 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - [x] **Done** — CI — Add OpenAI AI reviewer to pull request pipeline
 - [x] **Done** — ENG-LOOP-01 — Add PR template and branch protection checklist
 - [x] **Done** — ENG-LOOP-02 — Add validation profiles and risk-class matrix
-- [ ] **In Progress** — ENG-LOOP-03 — Add dedicated security validation profile
-- [ ] **Ready** — ENG-LOOP-04 — Add E2E validation profile
+- [x] **Done** — ENG-LOOP-03 — Add dedicated security validation profile
+- [x] **Done** — ENG-LOOP-04 — Add E2E validation profile
 
 ## M1 — Database Foundation and Core Migrations
 
@@ -398,4 +398,5 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - Keep implementation-specific completion notes in the relevant Notion card and commit history; this tracker should stay a concise card/status snapshot.
 - 2026-07-04: Current focus refreshed after AI PR Reviewer completion and final output tuning; Notion card remains Done and detailed completion evidence is stored on the card.
 - 2026-07-04: ENG-LOOP-02 marked Done after validation profile/risk-class matrix PR; ENG-LOOP-03 and ENG-LOOP-04 added as Ready follow-up tickets for dedicated security and E2E validation profiles.
-- 2026-07-04: ENG-LOOP-03 moved to In Progress while wiring the dedicated security validation profile. AI PR review for PR #9 reported no Critical or High findings and confirmed the profile uses real security-sensitive API tests plus dependency audit without placeholders or `--passWithNoTests`. Keep ENG-LOOP-03 open until `pnpm validate:security` and `pnpm validate:full` pass and the Notion card is moved to Done.
+- 2026-07-04: ENG-LOOP-03 completed after wiring the dedicated security validation profile. AI PR review for PR #9 reported no Critical or High findings and confirmed the profile uses real security-sensitive API tests plus dependency audit without placeholders or `--passWithNoTests`.
+- 2026-07-04: ENG-LOOP-04 completed after adding the Playwright-backed `validate:e2e` profile. Local validation passed, including `pnpm validate:e2e`; initial scope is real mobile PWA smoke coverage only and must not be treated as broad authenticated workflow E2E coverage until those workflows are automated with deterministic fixtures.

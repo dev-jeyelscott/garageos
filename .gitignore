@@ -9,6 +9,10 @@ build
 coverage
 .turbo
 
+# Playwright
+playwright-report
+test-results
+
 # Environment files
 .env
 .env.*
