@@ -38,9 +38,11 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 
 ## Current Focus
 
-- [x] **Done** — M9.BUG — Refund UI estimates per-receipt refundable amount from invoice totals
-- [ ] **In Progress** — M9.17 — Add Milestone 9 E2E, mobile, permission, and blocked-state coverage
-- [ ] **Backlog** — M9.18 — Final Milestone 9 regression, documentation, and handoff
+- [x] **Done** — CI — Add OpenAI AI reviewer to pull request pipeline
+- [x] **Done** — M9.17 — Add Milestone 9 E2E, mobile, permission, and blocked-state coverage
+- [ ] **In Progress** — M9.18 — Final Milestone 9 regression, documentation, and handoff
+- [ ] **In Progress** — SEC — Add OWASP ZAP baseline security scan pipeline
+- [ ] **Backlog** — M10.01 — Implement expense categories
 
 ---
 
@@ -385,3 +387,4 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - Update this file after meaningful Notion status changes or after completing a milestone handoff.
 - Keep card titles and statuses aligned with Notion. Avoid adding local-only checklist items here unless corresponding Notion cards exist.
 - Keep implementation-specific completion notes in the relevant Notion card and commit history; this tracker should stay a concise card/status snapshot.
+- 2026-07-04: Current focus refreshed after AI PR Reviewer completion and final output tuning; Notion card remains Done and detailed completion evidence is stored on the card.
