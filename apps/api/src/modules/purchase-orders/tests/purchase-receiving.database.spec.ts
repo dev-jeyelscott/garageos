@@ -246,6 +246,13 @@ class PurchaseReceivingDatabaseHarness {
     );
     await this.database.query(
       `
+        insert into products (tenant_id, id, name, status)
+        values ($1::uuid, $2::uuid, 'GarageOS Test Product', 'active')
+      `,
+      [tenantId, PRODUCT_ID],
+    );
+    await this.database.query(
+      `
         insert into purchase_orders (
           id,
           tenant_id,
@@ -275,19 +282,9 @@ class PurchaseReceivingDatabaseHarness {
           product_id,
           ordered_quantity,
           received_quantity,
-          unit_cost,
-          line_total
+          unit_cost
         )
-        values (
-          $1::uuid,
-          $2::uuid,
-          $3::uuid,
-          $4::uuid,
-          $5::numeric(14,3),
-          $6::numeric(14,3),
-          100.00,
-          round(($5::numeric(14,3) * 100.00)::numeric, 2)
-        )
+        values ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::numeric(14,3), $6::numeric(14,3), 100.00)
       `,
       [
         PURCHASE_ORDER_LINE_ID,
@@ -760,6 +757,14 @@ const TEST_SCHEMA_SQL = `
   );
 
   create table suppliers (
+    tenant_id uuid not null,
+    id uuid not null,
+    name text not null,
+    status text not null,
+    primary key (tenant_id, id)
+  );
+
+  create table products (
     tenant_id uuid not null,
     id uuid not null,
     name text not null,
