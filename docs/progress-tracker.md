@@ -11,8 +11,8 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 | Status                  |   Cards |
 | ----------------------- | ------: |
 | Done                    |     180 |
-| In Progress             |       1 |
-| Ready                   |       2 |
+| In Progress             |       2 |
+| Ready                   |       1 |
 | Backlog                 |     109 |
 | **Total tracked cards** | **292** |
 
@@ -20,7 +20,7 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 
 | Milestone    | Status Summary                    | Notes                             |
 | ------------ | --------------------------------- | --------------------------------- |
-| M0           | 15 Done, 1 Ready                  | Engineering loop hardening active |
+| M0           | 15 Done, 1 In Progress            | Engineering loop hardening active |
 | M1           | 18 Done                           | Complete                          |
 | M2           | 21 Done                           | Complete                          |
 | M3           | 19 Done                           | Complete                          |

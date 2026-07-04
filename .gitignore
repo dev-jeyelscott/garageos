@@ -36,3 +36,6 @@ yarn-debug.log*
 .vscode/*
 !.vscode/extensions.json
 !.vscode/settings.json
+
+# Next.js generated TypeScript environment
+apps/web/next-env.d.ts
