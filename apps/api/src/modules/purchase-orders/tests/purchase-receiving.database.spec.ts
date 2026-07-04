@@ -786,7 +786,8 @@ const TEST_SCHEMA_SQL = `
     ordered_quantity numeric(14,3) not null,
     received_quantity numeric(14,3) not null default 0,
     unit_cost numeric(14,2) not null,
-    line_total numeric(14,2) not null
+    line_total numeric(14,2) not null,
+    notes text
   );
 
   create table purchase_receivings (
