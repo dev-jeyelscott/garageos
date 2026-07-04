@@ -780,6 +780,7 @@ const TEST_SCHEMA_SQL = `
     tenant_id uuid not null,
     id uuid not null,
     name text not null,
+    status text not null,
     primary key (tenant_id, id)
   );
 
