@@ -767,7 +767,7 @@ const TEST_SCHEMA_SQL = `
     primary key (tenant_id, id)
   );
 
-  create table purchase_orders (
+    create table purchase_orders (
     id uuid primary key,
     tenant_id uuid not null,
     branch_id uuid not null,
@@ -775,7 +775,15 @@ const TEST_SCHEMA_SQL = `
     purchase_order_number text not null,
     status text not null,
     payment_terms text not null,
-    updated_at timestamptz not null default now()
+    updated_at timestamptz not null default now(),
+    lock_version integer not null default 0
+  );
+
+  create table products (
+    tenant_id uuid not null,
+    id uuid not null,
+    name text not null,
+    primary key (tenant_id, id)
   );
 
   create table purchase_order_lines (
