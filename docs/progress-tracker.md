@@ -10,10 +10,10 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 
 | Status                  |   Cards |
 | ----------------------- | ------: |
-| Done                    |     175 |
-| In Progress             |       1 |
+| Done                    |     180 |
+| In Progress             |       2 |
 | Backlog                 |     109 |
-| **Total tracked cards** | **285** |
+| **Total tracked cards** | **291** |
 
 ## Milestone Status Summary
 
@@ -61,6 +61,7 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - [x] **Done** — M0.13 — Create initial UX wireframe backlog from UX screen map
 - [x] **Done** — M0.14 — Create baseline QA automation structure
 - [x] **Done** — M0 — Project Foundation and Engineering Decisions
+- [x] **Done** — CI — Add OpenAI AI reviewer to pull request pipeline
 
 ## M1 — Database Foundation and Core Migrations
 
@@ -330,6 +331,7 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - [ ] **Backlog** — M13.17 — Validate or formally waive RPO 24h and RTO 4h targets
 - [ ] **Backlog** — M13.18 — Complete operational runbooks
 - [ ] **Backlog** — M13 — Security, Observability, Performance, DR Hardening
+- [ ] **In Progress** — SEC — Add OWASP ZAP baseline security scan pipeline
 
 ## M14 — End-to-End UAT and Launch Readiness
 
