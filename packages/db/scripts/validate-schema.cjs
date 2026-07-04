@@ -9,7 +9,7 @@ require('dotenv').config({
 const DATABASE_URL = process.env.DATABASE_URL;
 
 const EXPECTED = {
-  migrationCount: 28,
+  migrationCount: 29,
   publicTableCount: 109,
   subscriptionPlans: 3,
   subscriptionPlanLimits: 27,
@@ -874,6 +874,30 @@ async function validateEstimatesBaselineSchema(client) {
   assertEqual('estimate lines estimate order index', estimateLineOrderIndexCount, 1);
 }
 
+async function validatePurchaseOrderLineSchema(client) {
+  const purchaseOrderLineColumnCount = await count(
+    client,
+    `
+      select count(*)
+      from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'purchase_order_lines'
+        and column_name in (
+          'id',
+          'tenant_id',
+          'purchase_order_id',
+          'product_id',
+          'ordered_quantity',
+          'received_quantity',
+          'unit_cost',
+          'line_total',
+          'notes'
+        )
+    `,
+  );
+
+  assertEqual('purchase order line columns', purchaseOrderLineColumnCount, 9);
+}
 async function validateMoneyPrecision(client) {
   const result = await client.query(`
     select table_name, column_name, numeric_precision, numeric_scale
@@ -961,6 +985,7 @@ async function main() {
     await validateInventoryLedgerFoundationSchema(client);
     await validateFifoLayerFoundationSchema(client);
     await validateEstimatesBaselineSchema(client);
+    await validatePurchaseOrderLineSchema(client);
     await validateMoneyPrecision(client);
     await validateQuantityPrecision(client);
 

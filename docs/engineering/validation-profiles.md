@@ -73,6 +73,74 @@ Pending profiles are documented future targets only. Do not reference pending pr
 | E2E      | `pnpm validate:e2e`      | Browser-based PWA workflow validation                             | Playwright mobile smoke coverage for implemented E2E paths                      |
 | Full     | `pnpm validate:full`     | Broad local pre-merge or milestone validation                     | All currently implemented validation coverage using real existing commands      |
 
+## GitHub Actions Check Names
+
+GarageOS validation profiles are wired into GitHub Actions using stable check names so branch protection can require deterministic gates.
+
+| GitHub Actions Check  | Command                  | Purpose                                               |
+| --------------------- | ------------------------ | ----------------------------------------------------- |
+| `validation-quick`    | `pnpm validate:quick`    | Fast local and PR sanity validation.                  |
+| `validation-web`      | `pnpm validate:web`      | Web/PWA validation profile.                           |
+| `validation-api`      | `pnpm validate:api`      | API validation profile.                               |
+| `validation-db`       | `pnpm validate:db`       | Database and migration validation profile.            |
+| `validation-security` | `pnpm validate:security` | Security-sensitive test and audit validation profile. |
+| `validation-e2e`      | `pnpm validate:e2e`      | Playwright E2E validation profile.                    |
+| `validation-full`     | `pnpm validate:full`     | Full deterministic validation profile.                |
+
+Pull requests targeting `main` or `develop` must run these checks through `.github/workflows/ci.yml`.
+
+Branch protection should require the stable check names above once this workflow has run successfully at least once on GitHub.
+
+## Branch Protection Guidance
+
+After `.github/workflows/ci.yml` has run successfully at least once, configure branch protection for `main` and `develop` to require the stable GitHub Actions checks below before merge:
+
+- `validation-quick`
+- `validation-web`
+- `validation-api`
+- `validation-db`
+- `validation-security`
+- `validation-e2e`
+- `validation-full`
+
+Pull requests must not be merged into `main` or `develop` when required validation checks are failing, missing, skipped unexpectedly, or bypassed without explicit documented approval.
+
+Branch protection should also preserve human review authority. The AI reviewer is advisory only; deterministic CI gates and human review remain authoritative.
+
+## CI Validation Context
+
+GitHub Actions is responsible for orchestrating validation profiles and providing disposable infrastructure such as PostgreSQL for database-backed checks.
+
+GitHub Actions must not invent tenant IDs, branch IDs, RBAC grants, subscription statuses, or support-access context through environment variables unless the underlying tests explicitly define and consume those fixtures.
+
+GarageOS tenant isolation, branch access, RBAC, subscription lifecycle gates, and support-access safeguards must be proven by the underlying validation commands, especially:
+
+- `pnpm validate:security`
+- `pnpm validate:api`
+- `pnpm validate:db`
+- `pnpm validate:full`
+
+Any test requiring tenant, branch, role, permission, subscription, or support-access state must create deterministic test fixtures inside the relevant package test setup.
+
+## Database-backed CI Profiles
+
+The following GitHub Actions checks require a disposable PostgreSQL service container and a CI-provided `DATABASE_URL`:
+
+| GitHub Actions Check | Command              | CI Requirement                                                                                                                        |
+| -------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `validation-db`      | `pnpm validate:db`   | PostgreSQL 16 service container plus `DATABASE_URL`.                                                                                  |
+| `validation-full`    | `pnpm validate:full` | PostgreSQL 16 service container plus `DATABASE_URL`; also installs Playwright browser dependencies when full validation includes E2E. |
+
+CI must not use production, staging, or developer database credentials for validation profiles.
+
+Recommended CI database configuration:
+
+```text
+postgresql://garageos:garageos@localhost:5432/garageos_validation
+```
+
+The GitHub Actions workflow must wait for PostgreSQL readiness before running database-backed validation. A missing `DATABASE_URL` is a CI configuration failure, not a validation-profile failure to bypass.
+
 ## Security Validation Profile
 
 ### Command
@@ -169,15 +237,15 @@ Those scenarios must be added incrementally with deterministic fixtures and stab
 
 ## Current Profile Status
 
-| Profile             | Status      | Notes                                                                                                                                                |
-| ------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `validate:quick`    | Implemented | Runs format check, lint, and typecheck.                                                                                                              |
-| `validate:web`      | Implemented | Runs web lint, typecheck, and tests for `@garageos/web`.                                                                                             |
-| `validate:api`      | Implemented | Runs API lint, API typecheck, and tests for `@garageos/api`.                                                                                         |
-| `validate:db`       | Implemented | Runs migration order validation and `@garageos/db` validation.                                                                                       |
-| `validate:security` | Implemented | Runs security-sensitive API tests plus dependency audit. Dependency audit is only one signal and does not prove complete GarageOS security coverage. |
-| `validate:e2e`      | Implemented | Runs Playwright browser-based E2E tests for currently automated mobile-first PWA paths.                                                              |
-| `validate:full`     | Implemented | Runs quick, web, API, DB, security, and E2E validation using real existing commands.                                                                 |
+| Profile             | Status      | Notes                                                                                                                                                 |
+| ------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `validate:quick`    | Implemented | Runs format check, lint, and typecheck.                                                                                                               |
+| `validate:web`      | Implemented | Runs web lint, typecheck, and tests for `@garageos/web`.                                                                                              |
+| `validate:api`      | Implemented | Runs API lint, API typecheck, and tests for `@garageos/api`.                                                                                          |
+| `validate:db`       | Implemented | Runs migration order validation and `@garageos/db` validation. Requires `DATABASE_URL` when schema validation connects to PostgreSQL.                 |
+| `validate:security` | Implemented | Runs security-sensitive API tests plus dependency audit. Dependency audit is only one signal and does not prove complete GarageOS security coverage.  |
+| `validate:e2e`      | Implemented | Runs Playwright browser-based E2E tests for currently automated mobile-first PWA paths.                                                               |
+| `validate:full`     | Implemented | Runs quick, web, API, DB, security, and E2E validation using real existing commands. Requires the same environment dependencies as included profiles. |
 
 ## Risk-Class Validation Matrix
 
