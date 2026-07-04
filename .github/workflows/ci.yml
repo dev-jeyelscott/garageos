@@ -40,10 +40,6 @@ jobs:
             command: pnpm validate:api
             timeout: 20
 
-          - profile: db
-            command: pnpm validate:db
-            timeout: 20
-
           - profile: security
             command: pnpm validate:security
             timeout: 20
@@ -51,6 +47,83 @@ jobs:
           - profile: e2e
             command: pnpm validate:e2e
             timeout: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable pnpm
+        shell: bash
+        run: |
+          corepack enable
+
+          if node -e "const pkg = require('./package.json'); process.exit(pkg.packageManager?.startsWith('pnpm@') ? 0 : 1);"; then
+            corepack install
+          else
+            corepack prepare pnpm@10.13.1 --activate
+          fi
+
+          pnpm --version
+
+      - name: Resolve pnpm store path
+        id: pnpm-store
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browser dependencies
+        if: matrix.profile == 'e2e'
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run GarageOS validation profile
+        run: ${{ matrix.command }}
+
+  validation-database:
+    name: validation-${{ matrix.profile }}
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ matrix.timeout }}
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: garageos
+          POSTGRES_PASSWORD: garageos
+          POSTGRES_DB: garageos_validation
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U garageos -d garageos_validation"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://garageos:garageos@localhost:5432/garageos_validation
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - profile: db
+            command: pnpm validate:db
+            timeout: 20
 
           - profile: full
             command: pnpm validate:full
@@ -95,8 +168,19 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Wait for PostgreSQL
+        shell: bash
+        run: |
+          for i in {1..30}; do
+            pg_isready -h localhost -p 5432 -U garageos -d garageos_validation && exit 0
+            sleep 2
+          done
+
+          echo "PostgreSQL did not become ready in time."
+          exit 1
+
       - name: Install Playwright browser dependencies
-        if: matrix.profile == 'e2e' || matrix.profile == 'full'
+        if: matrix.profile == 'full'
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Run GarageOS validation profile
