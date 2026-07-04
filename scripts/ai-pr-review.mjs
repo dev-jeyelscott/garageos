@@ -306,13 +306,29 @@ GarageOS review checklist:
 - Observability: structured logs, safe error handling, no sensitive logs, useful failure context.
 
 Output requirements:
-- Start with one concise verdict line.
-- Then group findings by severity: Critical, High, Medium, Low.
-- Use "No findings" for empty severity groups.
-- For each finding include: file/path if known, risk, why it matters, and suggested fix.
-- End with a "Recommended validation" section.
+- Start with exactly one concise verdict line using this format:
+  Verdict: <one-sentence advisory summary>
+- Severity sections must contain actionable risks only. Do not place positive changes, confirmations, or general praise under Critical, High, Medium, or Low.
+- Group actionable findings by severity using exactly these headings: Critical, High, Medium, Low.
+- Use "No findings" for a severity group when there are no actionable risks at that severity.
+- For each actionable finding include:
+  - File/path if known.
+  - Risk.
+  - Why it matters.
+  - Suggested fix.
+- Severity guidance:
+  - Critical: data leakage, tenant isolation break, financial/inventory corruption, auth bypass, destructive production risk, or broken required CI/security control.
+  - High: likely production defect, security weakness, authorization gap, idempotency/concurrency risk, schema/API contract break, or major source-of-truth misalignment.
+  - Medium: maintainability, reliability, observability, validation, test coverage, or edge-case risk that should be addressed but is not immediately blocking.
+  - Low: minor cleanup, clarity, small DX issue, or optional hardening.
+- Add a "Positive notes" section after severity groups.
+- Put confirmed good changes, improvements, successful refactors, and strengthened controls only under "Positive notes".
+- Use "No notable positive notes" if there are no meaningful positive notes.
+- Add a "Recommended validation" section after "Positive notes".
 - Include exact commands when inferable, such as pnpm lint, pnpm typecheck, targeted package tests, API tests, web tests, integration tests, or E2E tests.
 - If validation cannot be inferred from the diff, say which validation category should be selected by the human reviewer.
+- Add a final "Review limitations" section.
+- Mention important limitations such as truncated diffs, excluded generated/binary files, missing runtime context, or lack of direct CI execution evidence.
 - Keep this advisory and practical. Do not approve, block, request changes, or claim that CI passed.
 - Do not include secrets, credentials, raw tokens, or sensitive values.
 
@@ -350,7 +366,7 @@ async function createOpenAiReview(prompt) {
     body: JSON.stringify({
       model,
       instructions:
-        'You are a careful, source-aligned code reviewer. Return only the requested PR review text.',
+        'You are a careful, source-aligned GarageOS code reviewer. Return only the requested PR review text. Treat severity sections as actionable risks only; place positive observations only under Positive notes.',
       input: prompt,
       max_output_tokens: 2_000,
     }),
