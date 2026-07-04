@@ -10,8 +10,8 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 
 | Status                  |   Cards |
 | ----------------------- | ------: |
-| Done                    |     180 |
-| In Progress             |       2 |
+| Done                    |     181 |
+| In Progress             |       1 |
 | Ready                   |       1 |
 | Backlog                 |     109 |
 | **Total tracked cards** | **292** |
@@ -39,7 +39,7 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 
 ## Current Focus
 
-- [ ] **In Progress** — ENG-LOOP-01 — Add PR template and branch protection checklist
+- [x] **Done** — ENG-LOOP-01 — Add PR template and branch protection checklist
 - [x] **Done** — CI — Add OpenAI AI reviewer to pull request pipeline
 - [x] **Done** — M9.17 — Add Milestone 9 E2E, mobile, permission, and blocked-state coverage
 - [ ] **In Progress** — M9.18 — Final Milestone 9 regression, documentation, and handoff
