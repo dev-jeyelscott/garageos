@@ -12,36 +12,38 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 | ----------------------- | ------: |
 | Done                    |     180 |
 | In Progress             |       2 |
+| Ready                   |       1 |
 | Backlog                 |     109 |
-| **Total tracked cards** | **291** |
+| **Total tracked cards** | **292** |
 
 ## Milestone Status Summary
 
-| Milestone    | Status Summary                    | Notes                    |
-| ------------ | --------------------------------- | ------------------------ |
-| M0           | 15 Done                           | Complete                 |
-| M1           | 18 Done                           | Complete                 |
-| M2           | 21 Done                           | Complete                 |
-| M3           | 19 Done                           | Complete                 |
-| M4           | 15 Done                           | Complete                 |
-| M5           | 16 Done                           | Complete                 |
-| M6           | 16 Done                           | Complete                 |
-| M7           | 16 Done                           | Complete                 |
-| M8           | 14 Done                           | Complete                 |
-| M9           | 25 Done, 1 In Progress, 0 Backlog | Current active milestone |
-| M10          | 16 Backlog                        | Not started              |
-| M11          | 18 Backlog                        | Not started              |
-| M12          | 16 Backlog                        | Not started              |
-| M13          | 19 Backlog                        | Not started              |
-| M14          | 40 Backlog                        | Not started              |
-| No milestone | 1 Done                            | Review record            |
+| Milestone    | Status Summary                    | Notes                             |
+| ------------ | --------------------------------- | --------------------------------- |
+| M0           | 15 Done, 1 In Progress            | Engineering loop hardening active |
+| M1           | 18 Done                           | Complete                          |
+| M2           | 21 Done                           | Complete                          |
+| M3           | 19 Done                           | Complete                          |
+| M4           | 15 Done                           | Complete                          |
+| M5           | 16 Done                           | Complete                          |
+| M6           | 16 Done                           | Complete                          |
+| M7           | 16 Done                           | Complete                          |
+| M8           | 14 Done                           | Complete                          |
+| M9           | 25 Done, 1 In Progress, 0 Backlog | Current active milestone          |
+| M10          | 16 Backlog                        | Not started                       |
+| M11          | 18 Backlog                        | Not started                       |
+| M12          | 16 Backlog                        | Not started                       |
+| M13          | 19 Backlog                        | Not started                       |
+| M14          | 40 Backlog                        | Not started                       |
+| No milestone | 1 Done                            | Review record                     |
 
 ## Current Focus
 
+- [ ] **In Progress** — ENG-LOOP-01 — Add PR template and branch protection checklist
 - [x] **Done** — CI — Add OpenAI AI reviewer to pull request pipeline
 - [x] **Done** — M9.17 — Add Milestone 9 E2E, mobile, permission, and blocked-state coverage
 - [ ] **In Progress** — M9.18 — Final Milestone 9 regression, documentation, and handoff
-- [ ] **In Progress** — SEC — Add OWASP ZAP baseline security scan pipeline
+- [ ] **Ready** — SEC — Add OWASP ZAP baseline security scan pipeline
 - [ ] **Backlog** — M10.01 — Implement expense categories
 
 ---
@@ -64,6 +66,7 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - [x] **Done** — M0.14 — Create baseline QA automation structure
 - [x] **Done** — M0 — Project Foundation and Engineering Decisions
 - [x] **Done** — CI — Add OpenAI AI reviewer to pull request pipeline
+- [ ] **In Progress** — ENG-LOOP-01 — Add PR template and branch protection checklist
 
 ## M1 — Database Foundation and Core Migrations
 

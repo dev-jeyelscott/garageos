@@ -5,6 +5,7 @@
     "jsx": "preserve"
   },
   "include": [
+    "next-env.d.ts",
     "app/**/*.ts",
     "app/**/*.tsx",
     "src/**/*.ts",
