@@ -12,35 +12,37 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 | ----------------------- | ------: |
 | Done                    |     181 |
 | In Progress             |       1 |
-| Ready                   |       1 |
+| Ready                   |       3 |
 | Backlog                 |     109 |
-| **Total tracked cards** | **292** |
+| **Total tracked cards** | **294** |
 
 ## Milestone Status Summary
 
-| Milestone    | Status Summary                    | Notes                             |
-| ------------ | --------------------------------- | --------------------------------- |
-| M0           | 15 Done, 1 In Progress            | Engineering loop hardening active |
-| M1           | 18 Done                           | Complete                          |
-| M2           | 21 Done                           | Complete                          |
-| M3           | 19 Done                           | Complete                          |
-| M4           | 15 Done                           | Complete                          |
-| M5           | 16 Done                           | Complete                          |
-| M6           | 16 Done                           | Complete                          |
-| M7           | 16 Done                           | Complete                          |
-| M8           | 14 Done                           | Complete                          |
-| M9           | 25 Done, 1 In Progress, 0 Backlog | Current active milestone          |
-| M10          | 16 Backlog                        | Not started                       |
-| M11          | 18 Backlog                        | Not started                       |
-| M12          | 16 Backlog                        | Not started                       |
-| M13          | 19 Backlog                        | Not started                       |
-| M14          | 40 Backlog                        | Not started                       |
-| No milestone | 1 Done                            | Review record                     |
+| Milestone    | Status Summary                    | Notes                                       |
+| ------------ | --------------------------------- | ------------------------------------------- |
+| M0           | 18 Done, 2 Ready                  | Engineering loop hardening follow-ups ready |
+| M1           | 18 Done                           | Complete                                    |
+| M2           | 21 Done                           | Complete                                    |
+| M3           | 19 Done                           | Complete                                    |
+| M4           | 15 Done                           | Complete                                    |
+| M5           | 16 Done                           | Complete                                    |
+| M6           | 16 Done                           | Complete                                    |
+| M7           | 16 Done                           | Complete                                    |
+| M8           | 14 Done                           | Complete                                    |
+| M9           | 25 Done, 1 In Progress, 0 Backlog | Current active milestone                    |
+| M10          | 16 Backlog                        | Not started                                 |
+| M11          | 18 Backlog                        | Not started                                 |
+| M12          | 16 Backlog                        | Not started                                 |
+| M13          | 19 Backlog, 1 Ready               | Security hardening follow-up ready          |
+| M14          | 40 Backlog                        | Not started                                 |
+| No milestone | 1 Done                            | Review record                               |
 
 ## Current Focus
 
 - [x] **Done** — ENG-LOOP-01 — Add PR template and branch protection checklist
-- [ ] **In Progress** — ENG-LOOP-02 — Add validation profiles and risk-class matrix
+- [x] **Done** — ENG-LOOP-02 — Add validation profiles and risk-class matrix
+- [ ] **Ready** — ENG-LOOP-03 — Add dedicated security validation profile
+- [ ] **Ready** — ENG-LOOP-04 — Add E2E validation profile
 - [x] **Done** — CI — Add OpenAI AI reviewer to pull request pipeline
 - [x] **Done** — M9.17 — Add Milestone 9 E2E, mobile, permission, and blocked-state coverage
 - [ ] **In Progress** — M9.18 — Final Milestone 9 regression, documentation, and handoff
@@ -68,7 +70,9 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - [x] **Done** — M0 — Project Foundation and Engineering Decisions
 - [x] **Done** — CI — Add OpenAI AI reviewer to pull request pipeline
 - [x] **Done** — ENG-LOOP-01 — Add PR template and branch protection checklist
-- [ ] **In Progress** — ENG-LOOP-02 — Add validation profiles and risk-class matrix
+- [x] **Done** — ENG-LOOP-02 — Add validation profiles and risk-class matrix
+- [ ] **Ready** — ENG-LOOP-03 — Add dedicated security validation profile
+- [ ] **Ready** — ENG-LOOP-04 — Add E2E validation profile
 
 ## M1 — Database Foundation and Core Migrations
 
@@ -338,7 +342,7 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - [ ] **Backlog** — M13.17 — Validate or formally waive RPO 24h and RTO 4h targets
 - [ ] **Backlog** — M13.18 — Complete operational runbooks
 - [ ] **Backlog** — M13 — Security, Observability, Performance, DR Hardening
-- [ ] **In Progress** — SEC — Add OWASP ZAP baseline security scan pipeline
+- [ ] **Ready** — SEC — Add OWASP ZAP baseline security scan pipeline
 
 ## M14 — End-to-End UAT and Launch Readiness
 
@@ -393,3 +397,4 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - Keep card titles and statuses aligned with Notion. Avoid adding local-only checklist items here unless corresponding Notion cards exist.
 - Keep implementation-specific completion notes in the relevant Notion card and commit history; this tracker should stay a concise card/status snapshot.
 - 2026-07-04: Current focus refreshed after AI PR Reviewer completion and final output tuning; Notion card remains Done and detailed completion evidence is stored on the card.
+- 2026-07-04: ENG-LOOP-02 marked Done after validation profile/risk-class matrix PR; ENG-LOOP-03 and ENG-LOOP-04 added as Ready follow-up tickets for dedicated security and E2E validation profiles.
