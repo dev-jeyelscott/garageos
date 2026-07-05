@@ -537,3 +537,29 @@ Next:
 2. Update Notion ENG-LOOP-06 to Done.
 3. Identify the next ENG-LOOP ticket.
 ```
+
+<!-- ENG-LOOP-10:REQUIRED-CHECK-MATRIX:START -->
+
+## CI Status Check Required-Check Matrix
+
+Use the canonical CI status check names from `docs/engineering/ci-status-checks.md` when configuring branch protection. GitHub required checks must match the emitted workflow job names exactly.
+
+| Status Check                         | Required on `main` | Required on `develop` | Blocking | Local Reproduction                                |
+| ------------------------------------ | -----------------: | --------------------: | -------: | ------------------------------------------------- |
+| `PR Evidence / validate-pr-evidence` |                Yes |                   Yes |      Yes | `node ./.github/scripts/validate-pr-evidence.cjs` |
+| `GarageOS CI / validate:quick`       |                Yes |                   Yes |      Yes | `pnpm validate:quick`                             |
+| `GarageOS CI / validate:web`         |                Yes |                   Yes |      Yes | `pnpm validate:web`                               |
+| `GarageOS CI / validate:api`         |                Yes |                   Yes |      Yes | `pnpm validate:api`                               |
+| `GarageOS CI / validate:db`          |                Yes |                   Yes |      Yes | `pnpm validate:db`                                |
+| `GarageOS CI / validate:security`    |                Yes |                   Yes |      Yes | `pnpm validate:security`                          |
+| `GarageOS CI / validate:e2e`         |                Yes |                   Yes |      Yes | `pnpm validate:e2e`                               |
+| `GarageOS AI Review / advisory`      |                 No |                    No |       No | Advisory review only                              |
+
+### Required Configuration Notes
+
+- Configure the same blocking checks for both `main` and `develop` unless a future accepted architecture or release-management decision changes this policy.
+- Keep `GarageOS AI Review / advisory` non-blocking. It may produce useful risk findings, but deterministic validation gates and human review remain authoritative.
+- If a workflow job is renamed, update this matrix in the same PR before changing GitHub branch protection.
+- If GitHub shows duplicate check names, rename the workflow jobs so each required status check is unique and stable.
+
+<!-- ENG-LOOP-10:REQUIRED-CHECK-MATRIX:END -->

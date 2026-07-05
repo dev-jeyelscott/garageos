@@ -471,3 +471,25 @@ semgrep scan --config p/owasp-top-ten --config p/secrets --config p/typescript -
 - `docs/progress-tracker.md`
 
 <!-- ENG-LOOP-09:END -->
+
+<!-- ENG-LOOP-10:PROGRESS:START -->
+
+## ENG-LOOP-10 — Add CI status check naming and required-check matrix
+
+| Field         | Value                                                                                                                                               |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status        | In Progress                                                                                                                                         |
+| Branch        | `docs/eng-loop-validation-checks`                                                                                                                   |
+| Category      | Documentation / Validation Gate                                                                                                                     |
+| Scope         | Document canonical CI status check names and required branch-protection check matrix for `main` and `develop`.                                      |
+| Files Updated | `docs/engineering/ci-status-checks.md`, `docs/runbooks/branch-protection.md`, `docs/engineering/validation-profiles.md`, `docs/progress-tracker.md` |
+| Validation    | Pending local docs review and validation commands.                                                                                                  |
+
+### Completion Notes
+
+- Created a canonical GarageOS CI status check naming reference.
+- Added a required-check matrix for `main` and `develop`.
+- Clarified that the AI reviewer remains advisory and should not be configured as a required branch-protection check unless the project intentionally changes that policy later.
+- Kept the change documentation-only; no runtime application behavior is changed.
+
+<!-- ENG-LOOP-10:PROGRESS:END -->
