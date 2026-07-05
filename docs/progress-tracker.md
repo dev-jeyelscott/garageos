@@ -11,31 +11,31 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 | Status                  |   Cards |
 | ----------------------- | ------: |
 | Done                    |     196 |
-| In Progress             |       0 |
-| Ready                   |       3 |
+| In Progress             |       1 |
+| Ready                   |       2 |
 | Backlog                 |     109 |
 | **Total tracked cards** | **308** |
 
 ## Milestone Status Summary
 
-| Milestone    | Status Summary      | Notes                                                                       |
-| ------------ | ------------------- | --------------------------------------------------------------------------- |
-| M0           | 31 Done, 2 Ready    | ENG-LOOP-01 through ENG-LOOP-12 complete; ENG-LOOP-13 and ENG-LOOP-14 ready |
-| M1           | 18 Done             | Complete                                                                    |
-| M2           | 22 Done             | Complete                                                                    |
-| M3           | 19 Done             | Complete                                                                    |
-| M4           | 15 Done             | Complete                                                                    |
-| M5           | 16 Done             | Complete                                                                    |
-| M6           | 16 Done             | Complete                                                                    |
-| M7           | 16 Done             | Complete                                                                    |
-| M8           | 14 Done             | Complete                                                                    |
-| M9           | 28 Done             | Complete                                                                    |
-| M10          | 15 Backlog, 1 Ready | M10.01 ready                                                                |
-| M11          | 18 Backlog          | Not started                                                                 |
-| M12          | 16 Backlog          | Not started                                                                 |
-| M13          | 20 Backlog          | Security and observability hardening backlog                                |
-| M14          | 40 Backlog          | Not started                                                                 |
-| No milestone | 1 Done              | Review record                                                               |
+| Milestone    | Status Summary                  | Notes                                                                                |
+| ------------ | ------------------------------- | ------------------------------------------------------------------------------------ |
+| M0           | 31 Done, 1 In Progress, 1 Ready | ENG-LOOP-01 through ENG-LOOP-12 complete; ENG-LOOP-13 in progress; ENG-LOOP-14 ready |
+| M1           | 18 Done                         | Complete                                                                             |
+| M2           | 22 Done                         | Complete                                                                             |
+| M3           | 19 Done                         | Complete                                                                             |
+| M4           | 15 Done                         | Complete                                                                             |
+| M5           | 16 Done                         | Complete                                                                             |
+| M6           | 16 Done                         | Complete                                                                             |
+| M7           | 16 Done                         | Complete                                                                             |
+| M8           | 14 Done                         | Complete                                                                             |
+| M9           | 28 Done                         | Complete                                                                             |
+| M10          | 15 Backlog, 1 Ready             | M10.01 ready                                                                         |
+| M11          | 18 Backlog                      | Not started                                                                          |
+| M12          | 16 Backlog                      | Not started                                                                          |
+| M13          | 20 Backlog                      | Security and observability hardening backlog                                         |
+| M14          | 40 Backlog                      | Not started                                                                          |
+| No milestone | 1 Done                          | Review record                                                                        |
 
 ## Current Focus
 
@@ -54,7 +54,7 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - [x] **Done** — CI — Add OpenAI AI reviewer to pull request pipeline
 - [x] **Done** — M9.17 — Add Milestone 9 E2E, mobile, permission, and blocked-state coverage
 - [x] **Done** — M9.18 — Final Milestone 9 regression, documentation, and handoff
-- [ ] **Ready** — ENG-LOOP-13 — Plan OWASP ZAP baseline scanning
+- [ ] **In Progress** — ENG-LOOP-13 — Plan OWASP ZAP baseline scanning
 - [ ] **Ready** — ENG-LOOP-14 — Add observability validation profile
 - [ ] **Ready** — M10.01 — Implement expense categories
 
@@ -90,6 +90,8 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - [x] **Done** — ENG-LOOP-10 — Add CI status check naming and required-check matrix
 - [x] **Done** — ENG-LOOP-11 — Add engineering loop runbook
 - [x] **Done** — ENG-LOOP-12 — Add release and milestone readiness checklist
+- [ ] **In Progress** — ENG-LOOP-13 — Plan OWASP ZAP baseline scanning
+- [ ] **Ready** — ENG-LOOP-14 — Add observability validation profile
 
 ## M1 — Database Foundation and Core Migrations
 
