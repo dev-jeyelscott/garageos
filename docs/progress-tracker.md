@@ -476,20 +476,63 @@ semgrep scan --config p/owasp-top-ten --config p/secrets --config p/typescript -
 
 ## ENG-LOOP-10 — Add CI status check naming and required-check matrix
 
-| Field         | Value                                                                                                                                               |
-| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status        | In Progress                                                                                                                                         |
-| Branch        | `docs/eng-loop-validation-checks`                                                                                                                   |
-| Category      | Documentation / Validation Gate                                                                                                                     |
-| Scope         | Document canonical CI status check names and required branch-protection check matrix for `main` and `develop`.                                      |
-| Files Updated | `docs/engineering/ci-status-checks.md`, `docs/runbooks/branch-protection.md`, `docs/engineering/validation-profiles.md`, `docs/progress-tracker.md` |
-| Validation    | Pending local docs review and validation commands.                                                                                                  |
+**Status:** In Progress  
+**Branch:** `docs/eng-loop-validation-checks`  
+**Category:** Documentation / Validation Gate  
+**Updated:** 2026-07-05T03:37:27.613Z
 
-### Completion Notes
+### Scope
 
-- Created a canonical GarageOS CI status check naming reference.
-- Added a required-check matrix for `main` and `develop`.
-- Clarified that the AI reviewer remains advisory and should not be configured as a required branch-protection check unless the project intentionally changes that policy later.
-- Kept the change documentation-only; no runtime application behavior is changed.
+- Added canonical CI status check naming documentation.
+- Documented required branch protection checks for `main` and `develop`.
+- Synced the required-check matrix to the actual GitHub Actions job names emitted by local workflows.
+- Added a verifier script at `.tmp/verify-ci-checks.cjs` for local confirmation before closure.
 
+### Validation
+
+Pending local validation:
+
+```bash
+node .tmp/verify-ci-checks.cjs
+pnpm lint
+pnpm typecheck
+pnpm validate:quick
+node ./.github/scripts/validate-pr-evidence.cjs
+```
+
+### Notes
+
+Do not mark complete until the verifier confirms that documented required checks match emitted workflow job names and project validation passes.
 <!-- ENG-LOOP-10:PROGRESS:END -->
+<!-- ENG-LOOP-10:START -->
+
+## ENG-LOOP-10 — Add CI status check naming and required-check matrix
+
+**Status:** In Progress
+
+**Completion notes:**
+
+- Added canonical CI status check matrix documentation.
+- Documented required checks for `main` and `develop` using emitted workflow job names.
+- Added local verifier for comparing documented required checks against `.github/workflows` job names.
+- Scope remains documentation-only; no workflow behavior changes are introduced by this task.
+
+**Detected checks:**
+
+- `Advisory AI PR Review` from `.github/workflows/ai-pr-review.yml` (`ai-pr-review`)
+- `validation-${{ matrix.profile }}` from `.github/workflows/ci.yml` (`validation`)
+- `Dependency audit and security profile` from `.github/workflows/dependency-security.yml` (`dependency-security`)
+- `Validate PR evidence` from `.github/workflows/pr-validation-evidence.yml` (`validate`)
+- `Semgrep static security scan` from `.github/workflows/static-security-analysis.yml` (`semgrep`)
+
+**Validation commands:**
+
+```bash
+node .tmp/verify-ci-checks.cjs
+pnpm lint
+pnpm typecheck
+pnpm validate:quick
+node ./.github/scripts/validate-pr-evidence.cjs
+```
+
+<!-- ENG-LOOP-10:END -->

@@ -563,3 +563,55 @@ Use the canonical CI status check names from `docs/engineering/ci-status-checks.
 - If GitHub shows duplicate check names, rename the workflow jobs so each required status check is unique and stable.
 
 <!-- ENG-LOOP-10:REQUIRED-CHECK-MATRIX:END -->
+
+<!-- ENG-LOOP-10:START -->
+
+## ENG-LOOP-10 — CI Status Check Naming and Required-Check Matrix
+
+GarageOS branch protection must require status checks by exact emitted GitHub Actions job names. The canonical matrix lives in `docs/engineering/ci-status-checks.md`.
+
+| Status check name                     | Workflow location                                                   | `main` requirement | `develop` requirement |
+| ------------------------------------- | ------------------------------------------------------------------- | ------------------ | --------------------- |
+| Advisory AI PR Review                 | `.github/workflows/ai-pr-review.yml` / `ai-pr-review`               | Required           | Required              |
+| validation-${{ matrix.profile }}      | `.github/workflows/ci.yml` / `validation`                           | Required           | Required              |
+| Dependency audit and security profile | `.github/workflows/dependency-security.yml` / `dependency-security` | Required           | Required              |
+| Validate PR evidence                  | `.github/workflows/pr-validation-evidence.yml` / `validate`         | Required           | Required              |
+| Semgrep static security scan          | `.github/workflows/static-security-analysis.yml` / `semgrep`        | Required           | Required              |
+
+Verification command:
+
+```bash
+node .tmp/verify-ci-checks.cjs
+```
+
+<!-- ENG-LOOP-10:END -->
+
+<!-- ENG-LOOP-10:CI-STATUS-CHECKS:START -->
+
+## ENG-LOOP-10 — CI status check naming and required-check matrix
+
+GarageOS branch protection for `main` and `develop` must use exact GitHub Actions check names emitted by workflow job-level `name:` fields.
+
+The canonical matrix is maintained in:
+
+- `docs/engineering/ci-status-checks.md`
+
+Required deterministic checks discovered from the current workflow configuration:
+
+- `Dependency audit and security profile`
+- `Semgrep static security scan`
+- `Validate PR evidence`
+- `validation-${{ matrix.profile }}`
+
+Advisory checks:
+
+- `Advisory AI PR Review` — advisory only, not authoritative for production merge approval.
+
+Before changing branch protection, run:
+
+```bash
+node .tmp/verify-ci-checks.cjs
+```
+
+If workflow job names change, update the matrix and branch protection together in the same PR.
+<!-- ENG-LOOP-10:CI-STATUS-CHECKS:END -->
