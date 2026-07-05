@@ -447,3 +447,41 @@ node .tmp/verify-ci-checks.cjs
 ```
 
 <!-- ENG-LOOP-10:VALIDATION-CHECK-MAPPING:END -->
+
+<!-- eng-loop-14-observability-profile:start -->
+
+## Observability validation profile
+
+| Field            | Value                                                                             |
+| ---------------- | --------------------------------------------------------------------------------- |
+| Command          | `pnpm validate:observability`                                                     |
+| Script           | `node ./.github/scripts/validate-observability-profile.cjs`                       |
+| Scope            | Static observability contract validation and documented coverage/gap enforcement. |
+| Runtime behavior | No runtime, database, API, UI, or permission behavior changes.                    |
+| CI policy        | Advisory until runtime observability checks exist.                                |
+
+### Purpose
+
+Use this profile for changes that affect GarageOS observability expectations, including request/correlation metadata, structured logging, safe error summaries, background job failure visibility, and observability documentation.
+
+### Current checks
+
+- Confirms `validate:observability` is registered in `package.json`.
+- Confirms the observability validation script exists.
+- Confirms the observability validation profile document exists.
+- Confirms this validation profile index documents the command.
+- Confirms API contract documentation includes `request_id` and `correlation_id` expectations when the contract document exists.
+- Scans implementation files for observability evidence and reports warnings when runtime implementation evidence is not present yet.
+
+### Required PR evidence
+
+```bash
+pnpm validate:observability
+pnpm validate:quick
+PR_BODY="$(cat .tmp/eng-loop-14-pr-body.md)" node ./.github/scripts/validate-pr-evidence.cjs
+```
+
+### Known limitation
+
+This is not yet a runtime telemetry gate. It must not be represented as proof that metrics, traces, error monitoring, structured runtime logs, or background job dashboards are fully implemented.
+<!-- eng-loop-14-observability-profile:end -->

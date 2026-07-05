@@ -406,3 +406,25 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 ## Unmilestoned Notion Records
 
 - [x] **Done** — [Review] garageos@aa88188 — AI code review completed with 10 findings
+
+<!-- eng-loop-14-progress:start -->
+
+## ENG-LOOP-14 — Add observability validation profile
+
+| Field          | Value                                                                                                               |
+| -------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Status         | In Progress                                                                                                         |
+| Branch         | `chore/eng-loop-observability-validation`                                                                           |
+| Category       | Observability                                                                                                       |
+| Item Type      | Validation Gate                                                                                                     |
+| Implementation | Adds `pnpm validate:observability`, a deterministic observability static contract guard, and profile documentation. |
+| Scope          | Documentation/profile validation only; no runtime, database, API, UI, or permission behavior changes.               |
+| Validation     | `pnpm validate:observability`; `pnpm validate:quick`; PR evidence guard.                                            |
+
+### Completion notes
+
+- Profile is advisory until runtime observability checks exist.
+- The guard validates source-aligned request/correlation metadata expectations and documents current coverage gaps.
+- Runtime telemetry, metrics, traces, provider dashboards, and log-redaction tests remain future implementation work.
+
+<!-- eng-loop-14-progress:end -->
