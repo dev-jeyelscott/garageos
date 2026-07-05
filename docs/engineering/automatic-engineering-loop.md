@@ -332,3 +332,9 @@ ENG-LOOP-15 is complete when:
 4. The progress tracker marks ENG-LOOP-15 as In Progress or Done according to the current repository stage.
 5. No runtime behavior changes are introduced.
 6. `pnpm validate:quick` passes.
+
+## Machine-Readable Notion Task Contract
+
+The automatic engineering loop reads task metadata using the canonical schema documented in [`docs/engineering/notion-task-schema.md`](./notion-task-schema.md).
+
+Runner implementations must not infer undocumented Notion fields, task statuses, dependency rules, validation commands, or writable fields. Missing or malformed task metadata must be handled as a safe skip with evidence rather than best-effort mutation.
