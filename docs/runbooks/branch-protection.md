@@ -537,3 +537,81 @@ Next:
 2. Update Notion ENG-LOOP-06 to Done.
 3. Identify the next ENG-LOOP ticket.
 ```
+
+<!-- ENG-LOOP-10:REQUIRED-CHECK-MATRIX:START -->
+
+## CI Status Check Required-Check Matrix
+
+Use the canonical CI status check names from `docs/engineering/ci-status-checks.md` when configuring branch protection. GitHub required checks must match the emitted workflow job names exactly.
+
+| Status Check                         | Required on `main` | Required on `develop` | Blocking | Local Reproduction                                |
+| ------------------------------------ | -----------------: | --------------------: | -------: | ------------------------------------------------- |
+| `PR Evidence / validate-pr-evidence` |                Yes |                   Yes |      Yes | `node ./.github/scripts/validate-pr-evidence.cjs` |
+| `GarageOS CI / validate:quick`       |                Yes |                   Yes |      Yes | `pnpm validate:quick`                             |
+| `GarageOS CI / validate:web`         |                Yes |                   Yes |      Yes | `pnpm validate:web`                               |
+| `GarageOS CI / validate:api`         |                Yes |                   Yes |      Yes | `pnpm validate:api`                               |
+| `GarageOS CI / validate:db`          |                Yes |                   Yes |      Yes | `pnpm validate:db`                                |
+| `GarageOS CI / validate:security`    |                Yes |                   Yes |      Yes | `pnpm validate:security`                          |
+| `GarageOS CI / validate:e2e`         |                Yes |                   Yes |      Yes | `pnpm validate:e2e`                               |
+| `GarageOS AI Review / advisory`      |                 No |                    No |       No | Advisory review only                              |
+
+### Required Configuration Notes
+
+- Configure the same blocking checks for both `main` and `develop` unless a future accepted architecture or release-management decision changes this policy.
+- Keep `GarageOS AI Review / advisory` non-blocking. It may produce useful risk findings, but deterministic validation gates and human review remain authoritative.
+- If a workflow job is renamed, update this matrix in the same PR before changing GitHub branch protection.
+- If GitHub shows duplicate check names, rename the workflow jobs so each required status check is unique and stable.
+
+<!-- ENG-LOOP-10:REQUIRED-CHECK-MATRIX:END -->
+
+<!-- ENG-LOOP-10:START -->
+
+## ENG-LOOP-10 — CI Status Check Naming and Required-Check Matrix
+
+GarageOS branch protection must require status checks by exact emitted GitHub Actions job names. The canonical matrix lives in `docs/engineering/ci-status-checks.md`.
+
+| Status check name                     | Workflow location                                                   | `main` requirement | `develop` requirement |
+| ------------------------------------- | ------------------------------------------------------------------- | ------------------ | --------------------- |
+| Advisory AI PR Review                 | `.github/workflows/ai-pr-review.yml` / `ai-pr-review`               | Required           | Required              |
+| validation-${{ matrix.profile }}      | `.github/workflows/ci.yml` / `validation`                           | Required           | Required              |
+| Dependency audit and security profile | `.github/workflows/dependency-security.yml` / `dependency-security` | Required           | Required              |
+| Validate PR evidence                  | `.github/workflows/pr-validation-evidence.yml` / `validate`         | Required           | Required              |
+| Semgrep static security scan          | `.github/workflows/static-security-analysis.yml` / `semgrep`        | Required           | Required              |
+
+Verification command:
+
+```bash
+node .tmp/verify-ci-checks.cjs
+```
+
+<!-- ENG-LOOP-10:END -->
+
+<!-- ENG-LOOP-10:CI-STATUS-CHECKS:START -->
+
+## ENG-LOOP-10 — CI status check naming and required-check matrix
+
+GarageOS branch protection for `main` and `develop` must use exact GitHub Actions check names emitted by workflow job-level `name:` fields.
+
+The canonical matrix is maintained in:
+
+- `docs/engineering/ci-status-checks.md`
+
+Required deterministic checks discovered from the current workflow configuration:
+
+- `Dependency audit and security profile`
+- `Semgrep static security scan`
+- `Validate PR evidence`
+- `validation-${{ matrix.profile }}`
+
+Advisory checks:
+
+- `Advisory AI PR Review` — advisory only, not authoritative for production merge approval.
+
+Before changing branch protection, run:
+
+```bash
+node .tmp/verify-ci-checks.cjs
+```
+
+If workflow job names change, update the matrix and branch protection together in the same PR.
+<!-- ENG-LOOP-10:CI-STATUS-CHECKS:END -->

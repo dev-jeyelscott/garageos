@@ -10,17 +10,17 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 
 | Status                  |   Cards |
 | ----------------------- | ------: |
-| Done                    |     188 |
+| Done                    |     189 |
 | In Progress             |       0 |
 | Ready                   |       1 |
 | Backlog                 |     109 |
-| **Total tracked cards** | **298** |
+| **Total tracked cards** | **299** |
 
 ## Milestone Status Summary
 
 | Milestone    | Status Summary      | Notes                                    |
 | ------------ | ------------------- | ---------------------------------------- |
-| M0           | 25 Done             | ENG-LOOP-01 through ENG-LOOP-09 complete |
+| M0           | 26 Done             | ENG-LOOP-01 through ENG-LOOP-10 complete |
 | M1           | 18 Done             | Complete                                 |
 | M2           | 21 Done             | Complete                                 |
 | M3           | 19 Done             | Complete                                 |
@@ -48,6 +48,7 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - [x] **Done** — ENG-LOOP-07 — Add PR validation evidence guard
 - [x] **Done** — ENG-LOOP-08 — Expand E2E coverage beyond landing page smoke
 - [x] **Done** — ENG-LOOP-09 — Add dependency and security automation
+- [x] **Done** — ENG-LOOP-10 — Add CI status check naming and required-check matrix
 - [x] **Done** — CI — Add OpenAI AI reviewer to pull request pipeline
 - [x] **Done** — M9.17 — Add Milestone 9 E2E, mobile, permission, and blocked-state coverage
 - [x] **Done** — M9.18 — Final Milestone 9 regression, documentation, and handoff
@@ -83,6 +84,7 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - [x] **Done** — ENG-LOOP-07 — Add PR validation evidence guard
 - [x] **Done** — ENG-LOOP-08 — Expand E2E coverage beyond landing page smoke
 - [x] **Done** — ENG-LOOP-09 — Add dependency and security automation
+- [x] **Done** — ENG-LOOP-10 — Add CI status check naming and required-check matrix
 
 ## M1 — Database Foundation and Core Migrations
 
@@ -419,6 +421,7 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - 2026-07-05: ENG-LOOP-07 completed after adding the PR validation evidence guard. Required PR checks are green, including the inline-code validation evidence parser fix.
 - 2026-07-05: ENG-LOOP-08 completed after expanding Playwright E2E coverage beyond landing page smoke. Validation evidence recorded: `pnpm format:check`, `pnpm validate:e2e`, `pnpm validate:quick`, and `pnpm validate:web` passed.
 - 2026-07-05: ENG-LOOP-09 completed after adding dependency and security automation. Validation is green, including `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm validate:security`, and Semgrep static security analysis. Follow-up hardening addressed Dependabot cooldown, workflow secret scoping, mutable GitHub Actions references, and pnpm release-age supply-chain policy handling.
+- 2026-07-05: ENG-LOOP-10 completed after documenting CI status check naming and the required-check matrix for `main` and `develop`. Validation evidence recorded: `node .tmp/verify-ci-checks.cjs`, `pnpm lint`, `pnpm typecheck`, `pnpm validate:quick`, and PR evidence guard all passed.
 
 <!-- ENG-LOOP-09:START -->
 
@@ -471,3 +474,59 @@ semgrep scan --config p/owasp-top-ten --config p/secrets --config p/typescript -
 - `docs/progress-tracker.md`
 
 <!-- ENG-LOOP-09:END -->
+
+<!-- ENG-LOOP-10:START -->
+
+## ENG-LOOP-10 — Add CI status check naming and required-check matrix
+
+**Status:** Done  
+**Branch:** `docs/eng-loop-validation-checks`  
+**Category:** Documentation / Validation Gate  
+**Milestone:** M0
+
+### Scope
+
+- Added canonical CI status check naming documentation.
+- Documented required branch protection checks for `main` and `develop`.
+- Synced the required-check matrix to the actual GitHub Actions job names emitted by local workflows.
+- Documented validation profile alignment for required CI checks.
+- Updated progress tracking after local validation passed.
+
+### Detected Checks
+
+- `Advisory AI PR Review` from `.github/workflows/ai-pr-review.yml` (`ai-pr-review`)
+- `validation-${{ matrix.profile }}` from `.github/workflows/ci.yml` (`validation`)
+- `Dependency audit and security profile` from `.github/workflows/dependency-security.yml` (`dependency-security`)
+- `Validate PR evidence` from `.github/workflows/pr-validation-evidence.yml` (`validate`)
+- `Semgrep static security scan` from `.github/workflows/static-security-analysis.yml` (`semgrep`)
+
+### Validation Commands
+
+```bash
+node .tmp/verify-ci-checks.cjs
+pnpm lint
+pnpm typecheck
+pnpm validate:quick
+PR_BODY="$(cat .tmp/eng-loop-10-pr-body.md)" node ./.github/scripts/validate-pr-evidence.cjs
+```
+
+### Validation Evidence
+
+- `node .tmp/verify-ci-checks.cjs` passed and confirmed documented required checks match workflow job names.
+- `pnpm lint` passed.
+- `pnpm typecheck` passed.
+- `pnpm validate:quick` passed, including format check, lint, and typecheck.
+- PR validation evidence guard passed with the ENG-LOOP-10 PR body.
+
+### Files Updated
+
+- `docs/engineering/ci-status-checks.md`
+- `docs/runbooks/branch-protection.md`
+- `docs/engineering/validation-profiles.md`
+- `docs/progress-tracker.md`
+
+### Notes
+
+Temporary local files under `.tmp/` should not remain tracked in the repository. The PR body belongs in GitHub, and local verifier artifacts should either be untracked or promoted intentionally as a documented repo script in a separate change.
+
+<!-- ENG-LOOP-10:END -->

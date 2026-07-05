@@ -385,3 +385,65 @@ Expected result:
 - `validate:security` is documented as implemented and backed by real checks.
 - `validate:e2e` is documented as implemented and backed by real Playwright tests.
 - No pending-profile language claims `validate:e2e` is unavailable.
+
+<!-- ENG-LOOP-10:VALIDATION-CHECK-NAMES:START -->
+
+## CI Status Check Name Mapping
+
+The following check names are the canonical GitHub status checks for validation profiles. Branch protection must use these names exactly when the corresponding workflow jobs emit them.
+
+| Validation Profile  | Canonical Status Check               | Required on Protected Branches | Local Command                                     |
+| ------------------- | ------------------------------------ | -----------------------------: | ------------------------------------------------- |
+| PR evidence         | `PR Evidence / validate-pr-evidence` |                            Yes | `node ./.github/scripts/validate-pr-evidence.cjs` |
+| Quick validation    | `GarageOS CI / validate:quick`       |                            Yes | `pnpm validate:quick`                             |
+| Web validation      | `GarageOS CI / validate:web`         |                            Yes | `pnpm validate:web`                               |
+| API validation      | `GarageOS CI / validate:api`         |                            Yes | `pnpm validate:api`                               |
+| Database validation | `GarageOS CI / validate:db`          |                            Yes | `pnpm validate:db`                                |
+| Security validation | `GarageOS CI / validate:security`    |                            Yes | `pnpm validate:security`                          |
+| E2E validation      | `GarageOS CI / validate:e2e`         |                            Yes | `pnpm validate:e2e`                               |
+| AI review           | `GarageOS AI Review / advisory`      |                             No | Advisory workflow                                 |
+
+### Policy
+
+- Required validation checks must map to real local commands or deterministic scripts.
+- Advisory checks must not be treated as production merge approval.
+- When a validation profile is added, removed, renamed, or split, update `docs/engineering/ci-status-checks.md` and `docs/runbooks/branch-protection.md` in the same change.
+
+<!-- ENG-LOOP-10:VALIDATION-CHECK-NAMES:END -->
+
+<!-- ENG-LOOP-10:START -->
+
+## ENG-LOOP-10 — CI Check Names for Validation Profiles
+
+Validation profile status checks must be documented by their emitted GitHub Actions names so branch protection can be configured without guesswork.
+
+- `validation-${{ matrix.profile }}` maps to a CI validation profile emitted from `.github/workflows/ci.yml`.
+
+The authoritative required-check matrix is `docs/engineering/ci-status-checks.md`.
+<!-- ENG-LOOP-10:END -->
+
+<!-- ENG-LOOP-10:VALIDATION-CHECK-MAPPING:START -->
+
+## ENG-LOOP-10 — Validation profile status check mapping
+
+Validation profile scripts are package-level commands. GitHub branch protection must require the emitted GitHub Actions check names, not the script names, unless they are identical.
+
+Current emitted validation-related checks:
+
+- `Advisory AI PR Review`
+- `Dependency audit and security profile`
+- `Semgrep static security scan`
+- `Validate PR evidence`
+- `validation-${{ matrix.profile }}`
+
+Canonical required-check rules live in:
+
+- `docs/engineering/ci-status-checks.md`
+
+When validation profiles or workflow matrix values change, regenerate this documentation and rerun:
+
+```bash
+node .tmp/verify-ci-checks.cjs
+```
+
+<!-- ENG-LOOP-10:VALIDATION-CHECK-MAPPING:END -->
