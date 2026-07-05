@@ -376,3 +376,15 @@ This runbook should be read together with:
 - `garageos-build-roadmap-v1.3.md`
 - `garageos-architecture-records.md`
 - `qa-acceptance-test-plan.md`
+
+## Release and Milestone Readiness
+
+Before marking a milestone complete or approving release-candidate work, use `docs/runbooks/release-readiness.md` to confirm source alignment, validation evidence, QA/security/documentation review, unresolved-risk handling, deployment readiness, rollback planning, and final signoff.
+
+<!-- ENG-LOOP-12 release-readiness-reference -->
+
+## Release and Milestone Readiness
+
+Before closing a GarageOS milestone or preparing release-candidate work, use `docs/runbooks/release-readiness.md` as the canonical readiness checklist.
+
+This checklist must be used with the existing PR evidence guard, branch protection requirements, validation profiles, QA acceptance criteria, and progress tracker closeout steps.
