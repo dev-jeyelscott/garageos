@@ -43,3 +43,5 @@ yarn-debug.log*
 
 # Next.js generated TypeScript environment
 apps/web/next-env.d.ts
+
+.tmp/
