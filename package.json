@@ -46,8 +46,10 @@
     "validate:pr-evidence": "node ./.github/scripts/validate-pr-evidence.cjs",
     "test:pr-evidence": "node ./.github/scripts/validate-pr-evidence.test.cjs",
     "validate:observability": "node ./.github/scripts/validate-observability-profile.cjs",
-    "eng-loop:dry-run": "node ./.github/scripts/run-engineering-loop-dry-run.cjs --dry-run",
-    "test:eng-loop": "node --test ./.github/scripts/tests/run-engineering-loop-dry-run.test.cjs"
+    "eng-loop:dry-run": "node ./.github/scripts/eng-loop-runner.cjs --mode=dry-run",
+    "test:eng-loop": "node --test ./.github/scripts/tests/run-engineering-loop-dry-run.test.cjs",
+    "eng-loop:claim": "node ./.github/scripts/eng-loop-runner.cjs --mode=claim",
+    "eng-loop:test": "node ./.github/scripts/eng-loop-runner.test.cjs"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,json,md,yml,yaml}": [
