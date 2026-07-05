@@ -10,32 +10,32 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 
 | Status                  |   Cards |
 | ----------------------- | ------: |
-| Done                    |     190 |
+| Done                    |     196 |
 | In Progress             |       0 |
-| Ready                   |       1 |
+| Ready                   |       3 |
 | Backlog                 |     109 |
-| **Total tracked cards** | **300** |
+| **Total tracked cards** | **308** |
 
 ## Milestone Status Summary
 
-| Milestone    | Status Summary      | Notes                                    |
-| ------------ | ------------------- | ---------------------------------------- |
-| M0           | 27 Done             | ENG-LOOP-01 through ENG-LOOP-11 complete |
-| M1           | 18 Done             | Complete                                 |
-| M2           | 21 Done             | Complete                                 |
-| M3           | 19 Done             | Complete                                 |
-| M4           | 15 Done             | Complete                                 |
-| M5           | 16 Done             | Complete                                 |
-| M6           | 16 Done             | Complete                                 |
-| M7           | 16 Done             | Complete                                 |
-| M8           | 14 Done             | Complete                                 |
-| M9           | 26 Done             | Complete                                 |
-| M10          | 16 Backlog          | Not started                              |
-| M11          | 18 Backlog          | Not started                              |
-| M12          | 16 Backlog          | Not started                              |
-| M13          | 19 Backlog, 1 Ready | Security hardening follow-up ready       |
-| M14          | 40 Backlog          | Not started                              |
-| No milestone | 1 Done              | Review record                            |
+| Milestone    | Status Summary      | Notes                                                                       |
+| ------------ | ------------------- | --------------------------------------------------------------------------- |
+| M0           | 31 Done, 2 Ready    | ENG-LOOP-01 through ENG-LOOP-12 complete; ENG-LOOP-13 and ENG-LOOP-14 ready |
+| M1           | 18 Done             | Complete                                                                    |
+| M2           | 22 Done             | Complete                                                                    |
+| M3           | 19 Done             | Complete                                                                    |
+| M4           | 15 Done             | Complete                                                                    |
+| M5           | 16 Done             | Complete                                                                    |
+| M6           | 16 Done             | Complete                                                                    |
+| M7           | 16 Done             | Complete                                                                    |
+| M8           | 14 Done             | Complete                                                                    |
+| M9           | 28 Done             | Complete                                                                    |
+| M10          | 15 Backlog, 1 Ready | M10.01 ready                                                                |
+| M11          | 18 Backlog          | Not started                                                                 |
+| M12          | 16 Backlog          | Not started                                                                 |
+| M13          | 20 Backlog          | Security and observability hardening backlog                                |
+| M14          | 40 Backlog          | Not started                                                                 |
+| No milestone | 1 Done              | Review record                                                               |
 
 ## Current Focus
 
@@ -50,11 +50,13 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - [x] **Done** — ENG-LOOP-09 — Add dependency and security automation
 - [x] **Done** — ENG-LOOP-10 — Add CI status check naming and required-check matrix
 - [x] **Done** — ENG-LOOP-11 — Add engineering loop runbook
+- [x] **Done** — ENG-LOOP-12 — Add release and milestone readiness checklist
 - [x] **Done** — CI — Add OpenAI AI reviewer to pull request pipeline
 - [x] **Done** — M9.17 — Add Milestone 9 E2E, mobile, permission, and blocked-state coverage
 - [x] **Done** — M9.18 — Final Milestone 9 regression, documentation, and handoff
-- [ ] **Ready** — SEC — Add OWASP ZAP baseline security scan pipeline
-- [ ] **Backlog** — M10.01 — Implement expense categories
+- [ ] **Ready** — ENG-LOOP-13 — Plan OWASP ZAP baseline scanning
+- [ ] **Ready** — ENG-LOOP-14 — Add observability validation profile
+- [ ] **Ready** — M10.01 — Implement expense categories
 
 ---
 
@@ -87,6 +89,7 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - [x] **Done** — ENG-LOOP-09 — Add dependency and security automation
 - [x] **Done** — ENG-LOOP-10 — Add CI status check naming and required-check matrix
 - [x] **Done** — ENG-LOOP-11 — Add engineering loop runbook
+- [x] **Done** — ENG-LOOP-12 — Add release and milestone readiness checklist
 
 ## M1 — Database Foundation and Core Migrations
 
@@ -278,7 +281,7 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 
 ## M10 — Expenses, Reminders, Notifications, Integrations
 
-- [ ] **Backlog** — M10.01 — Implement expense categories
+- [ ] **Ready** — M10.01 — Implement expense categories
 - [ ] **Backlog** — M10.02 — Implement expense create/read/update/void
 - [ ] **Backlog** — M10.03 — Implement expense financial report basis
 - [ ] **Backlog** — M10.04 — Implement reminder rules
@@ -356,7 +359,6 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - [ ] **Backlog** — M13.17 — Validate or formally waive RPO 24h and RTO 4h targets
 - [ ] **Backlog** — M13.18 — Complete operational runbooks
 - [ ] **Backlog** — M13 — Security, Observability, Performance, DR Hardening
-- [ ] **Ready** — SEC — Add OWASP ZAP baseline security scan pipeline
 
 ## M14 — End-to-End UAT and Launch Readiness
 
@@ -404,15 +406,3 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 ## Unmilestoned Notion Records
 
 - [x] **Done** — [Review] garageos@aa88188 — AI code review completed with 10 findings
-
-<!-- ENG-LOOP-12 release-readiness-checklist -->
-
-## ENG-LOOP-12 — Release and Milestone Readiness Checklist
-
-- **Status:** In Progress
-- **Branch:** `docs/release-readiness-checklist`
-- **Type:** Documentation-only engineering-loop hardening
-- **Started:** 2026-07-05
-- **Scope:** Add a canonical release and milestone readiness checklist aligned with GarageOS QA, roadmap, validation, branch protection, and PR evidence expectations.
-- **Files:** `docs/runbooks/release-readiness.md`, `docs/runbooks/engineering-loop.md`, `.tmp/eng-loop-12-pr-body.md`
-- **Validation:** Pending local run of `pnpm validate:quick`, `pnpm validate:full`, and PR evidence guard after validation evidence is updated.
