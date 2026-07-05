@@ -10,32 +10,32 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 
 | Status                  |   Cards |
 | ----------------------- | ------: |
-| Done                    |     189 |
-| In Progress             |       1 |
+| Done                    |     190 |
+| In Progress             |       0 |
 | Ready                   |       1 |
 | Backlog                 |     109 |
 | **Total tracked cards** | **300** |
 
 ## Milestone Status Summary
 
-| Milestone    | Status Summary         | Notes                                                             |
-| ------------ | ---------------------- | ----------------------------------------------------------------- |
-| M0           | 26 Done, 1 In Progress | ENG-LOOP-01 through ENG-LOOP-10 complete; ENG-LOOP-11 in progress |
-| M1           | 18 Done                | Complete                                                          |
-| M2           | 21 Done                | Complete                                                          |
-| M3           | 19 Done                | Complete                                                          |
-| M4           | 15 Done                | Complete                                                          |
-| M5           | 16 Done                | Complete                                                          |
-| M6           | 16 Done                | Complete                                                          |
-| M7           | 16 Done                | Complete                                                          |
-| M8           | 14 Done                | Complete                                                          |
-| M9           | 26 Done                | Complete                                                          |
-| M10          | 16 Backlog             | Not started                                                       |
-| M11          | 18 Backlog             | Not started                                                       |
-| M12          | 16 Backlog             | Not started                                                       |
-| M13          | 19 Backlog, 1 Ready    | Security hardening follow-up ready                                |
-| M14          | 40 Backlog             | Not started                                                       |
-| No milestone | 1 Done                 | Review record                                                     |
+| Milestone    | Status Summary      | Notes                                    |
+| ------------ | ------------------- | ---------------------------------------- |
+| M0           | 27 Done             | ENG-LOOP-01 through ENG-LOOP-11 complete |
+| M1           | 18 Done             | Complete                                 |
+| M2           | 21 Done             | Complete                                 |
+| M3           | 19 Done             | Complete                                 |
+| M4           | 15 Done             | Complete                                 |
+| M5           | 16 Done             | Complete                                 |
+| M6           | 16 Done             | Complete                                 |
+| M7           | 16 Done             | Complete                                 |
+| M8           | 14 Done             | Complete                                 |
+| M9           | 26 Done             | Complete                                 |
+| M10          | 16 Backlog          | Not started                              |
+| M11          | 18 Backlog          | Not started                              |
+| M12          | 16 Backlog          | Not started                              |
+| M13          | 19 Backlog, 1 Ready | Security hardening follow-up ready       |
+| M14          | 40 Backlog          | Not started                              |
+| No milestone | 1 Done              | Review record                            |
 
 ## Current Focus
 
@@ -49,7 +49,7 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - [x] **Done** — ENG-LOOP-08 — Expand E2E coverage beyond landing page smoke
 - [x] **Done** — ENG-LOOP-09 — Add dependency and security automation
 - [x] **Done** — ENG-LOOP-10 — Add CI status check naming and required-check matrix
-- [ ] **In Progress** — ENG-LOOP-11 — Add engineering loop runbook
+- [x] **Done** — ENG-LOOP-11 — Add engineering loop runbook
 - [x] **Done** — CI — Add OpenAI AI reviewer to pull request pipeline
 - [x] **Done** — M9.17 — Add Milestone 9 E2E, mobile, permission, and blocked-state coverage
 - [x] **Done** — M9.18 — Final Milestone 9 regression, documentation, and handoff
@@ -86,7 +86,7 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - [x] **Done** — ENG-LOOP-08 — Expand E2E coverage beyond landing page smoke
 - [x] **Done** — ENG-LOOP-09 — Add dependency and security automation
 - [x] **Done** — ENG-LOOP-10 — Add CI status check naming and required-check matrix
-- [ ] **In Progress** — ENG-LOOP-11 — Add engineering loop runbook
+- [x] **Done** — ENG-LOOP-11 — Add engineering loop runbook
 
 ## M1 — Database Foundation and Core Migrations
 
@@ -424,7 +424,7 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - 2026-07-05: ENG-LOOP-08 completed after expanding Playwright E2E coverage beyond landing page smoke. Validation evidence recorded: `pnpm format:check`, `pnpm validate:e2e`, `pnpm validate:quick`, and `pnpm validate:web` passed.
 - 2026-07-05: ENG-LOOP-09 completed after adding dependency and security automation. Validation is green, including `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm validate:security`, and Semgrep static security analysis. Follow-up hardening addressed Dependabot cooldown, workflow secret scoping, mutable GitHub Actions references, and pnpm release-age supply-chain policy handling.
 - 2026-07-05: ENG-LOOP-10 completed after documenting CI status check naming and the required-check matrix for `main` and `develop`. Validation evidence recorded: `node .tmp/verify-ci-checks.cjs`, `pnpm lint`, `pnpm typecheck`, `pnpm validate:quick`, and PR evidence guard all passed.
-- 2026-07-05: ENG-LOOP-11 moved to In Progress for branch `docs/engineering-loop-runbook`; tracker updated to reflect the canonical engineering loop runbook work covering ticket-to-branch-to-PR flow, validation profile selection, Notion/progress-tracker update rules, and advisory-only AI review.
+- 2026-07-05: ENG-LOOP-11 completed after adding the canonical engineering loop runbook and updating the progress tracker. PR checks are green with 10 successful checks, including the required validation checks. The PR body format was adjusted so validation command lines include explicit `passed` evidence accepted by the PR evidence guard.
 
 <!-- ENG-LOOP-09:START -->
 
@@ -538,7 +538,7 @@ Temporary local files under `.tmp/` should not remain tracked in the repository.
 
 ## ENG-LOOP-11 — Add engineering loop runbook
 
-**Status:** In Progress  
+**Status:** Done  
 **Branch:** `docs/engineering-loop-runbook`  
 **Type:** Documentation  
 **Files:**
@@ -548,11 +548,11 @@ Temporary local files under `.tmp/` should not remain tracked in the repository.
 
 **Notes:**
 
-- Creating the canonical GarageOS engineering loop runbook.
-- Documents ticket-to-branch-to-PR flow.
-- Documents validation profile selection.
-- Documents Notion and progress tracker update rules.
-- Confirms AI review remains advisory-only.
+- Created the canonical GarageOS engineering loop runbook.
+- Documented ticket-to-branch-to-PR flow.
+- Documented validation profile selection.
+- Documented Notion and progress tracker update rules.
+- Confirmed AI review remains advisory-only.
 
-**Validation:** Pending local validation after applying changes.
+**Validation:** Passed — GitHub PR checks are green with 10 successful checks; `pnpm validate:quick` passed; PR evidence guard accepted the updated PR body format.
 <!-- eng-loop-11-progress-end -->
