@@ -10,17 +10,17 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 
 | Status                  |   Cards |
 | ----------------------- | ------: |
-| Done                    |     199 |
+| Done                    |     200 |
 | In Progress             |       0 |
 | Ready                   |       1 |
-| Backlog                 |     108 |
+| Backlog                 |     107 |
 | **Total tracked cards** | **308** |
 
 ## Milestone Status Summary
 
 | Milestone    | Status Summary      | Notes                                                        |
 | ------------ | ------------------- | ------------------------------------------------------------ |
-| M0           | 34 Done, 9 Backlog  | ENG-LOOP-15 complete; ENG-LOOP-16 through ENG-LOOP-24 queued |
+| M0           | 35 Done, 8 Backlog  | ENG-LOOP-16 complete; ENG-LOOP-17 through ENG-LOOP-24 queued |
 | M1           | 18 Done             | Complete                                                     |
 | M2           | 22 Done             | Complete                                                     |
 | M3           | 19 Done             | Complete                                                     |
@@ -39,7 +39,6 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 
 ## Current Focus
 
-- [ ] **Backlog** — ENG-LOOP-16 — Add machine-readable Notion task schema
 - [ ] **Backlog** — ENG-LOOP-17 — Add engineering loop runner dry-run mode
 - [ ] **Backlog** — ENG-LOOP-18 — Add task claiming and run ledger
 - [ ] **Backlog** — ENG-LOOP-19 — Add local validation executor
@@ -85,7 +84,7 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - [x] **Done** — ENG-LOOP-13 — Plan OWASP ZAP baseline scanning
 - [x] **Done** — ENG-LOOP-14 — Add observability validation profile
 - [x] **Done** — ENG-LOOP-15 — Define automatic engineering-loop contract
-- [ ] **Backlog** — ENG-LOOP-16 — Add machine-readable Notion task schema
+- [x] **Done** — ENG-LOOP-16 — Add machine-readable Notion task schema
 - [ ] **Backlog** — ENG-LOOP-17 — Add engineering loop runner dry-run mode
 - [ ] **Backlog** — ENG-LOOP-18 — Add task claiming and run ledger
 - [ ] **Backlog** — ENG-LOOP-19 — Add local validation executor
