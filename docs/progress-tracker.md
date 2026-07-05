@@ -1,6 +1,6 @@
 # GarageOS Progress Tracker
 
-**Last Notion alignment:** 2026-07-05  
+**Last Notion alignment:** 2026-07-06  
 **Source of truth:** Notion database `GarageOS — Full Build Task Tracker`  
 **Repository path:** `docs/progress-tracker.md`
 
@@ -10,17 +10,17 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 
 | Status                  |   Cards |
 | ----------------------- | ------: |
-| Done                    |     201 |
+| Done                    |     202 |
 | In Progress             |       0 |
 | Ready                   |       1 |
-| Backlog                 |     106 |
+| Backlog                 |     105 |
 | **Total tracked cards** | **308** |
 
 ## Milestone Status Summary
 
 | Milestone    | Status Summary      | Notes                                                    |
 | ------------ | ------------------- | -------------------------------------------------------- |
-| M0           | 36 Done, 7 Backlog  | ENG-LOOP-17 done; ENG-LOOP-18 through ENG-LOOP-24 queued |
+| M0           | 37 Done, 6 Backlog  | ENG-LOOP-18 done; ENG-LOOP-19 through ENG-LOOP-24 queued |
 | M1           | 18 Done             | Complete                                                 |
 | M2           | 22 Done             | Complete                                                 |
 | M3           | 19 Done             | Complete                                                 |
@@ -40,7 +40,7 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 ## Current Focus
 
 - [x] **Done** — ENG-LOOP-17 — Add engineering loop runner dry-run mode
-- [ ] **Backlog** — ENG-LOOP-18 — Add task claiming and run ledger
+- [x] **Done** — ENG-LOOP-18 — Add task claiming and run ledger
 - [ ] **Backlog** — ENG-LOOP-19 — Add local validation executor
 - [ ] **Backlog** — ENG-LOOP-20 — Add PR body and branch automation
 - [ ] **Backlog** — ENG-LOOP-21 — Add GitHub CI status watcher
@@ -86,7 +86,7 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - [x] **Done** — ENG-LOOP-15 — Define automatic engineering-loop contract
 - [x] **Done** — ENG-LOOP-16 — Add machine-readable Notion task schema
 - [x] **Done** — ENG-LOOP-17 — Add engineering loop runner dry-run mode
-- [ ] **Backlog** — ENG-LOOP-18 — Add task claiming and run ledger
+- [x] **Done** — ENG-LOOP-18 — Add task claiming and run ledger
 - [ ] **Backlog** — ENG-LOOP-19 — Add local validation executor
 - [ ] **Backlog** — ENG-LOOP-20 — Add PR body and branch automation
 - [ ] **Backlog** — ENG-LOOP-21 — Add GitHub CI status watcher
