@@ -45,7 +45,9 @@
     "validate:full": "pnpm validate:quick && pnpm validate:web && pnpm validate:api && pnpm validate:db && pnpm validate:security && pnpm validate:e2e",
     "validate:pr-evidence": "node ./.github/scripts/validate-pr-evidence.cjs",
     "test:pr-evidence": "node ./.github/scripts/validate-pr-evidence.test.cjs",
-    "validate:observability": "node ./.github/scripts/validate-observability-profile.cjs"
+    "validate:observability": "node ./.github/scripts/validate-observability-profile.cjs",
+    "eng-loop:dry-run": "node ./.github/scripts/run-engineering-loop-dry-run.cjs --dry-run",
+    "test:eng-loop": "node --test ./.github/scripts/tests/run-engineering-loop-dry-run.test.cjs"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,json,md,yml,yaml}": [
