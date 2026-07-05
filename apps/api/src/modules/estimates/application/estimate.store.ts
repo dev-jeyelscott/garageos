@@ -1,24 +1,14 @@
 import type { DatabaseQueryClient } from '../../../shared/database/database-client';
 
 export type EstimateStatus =
-  | 'draft'
-  | 'presented'
-  | 'approved'
-  | 'converted'
-  | 'cancelled'
-  | 'expired';
+  'draft' | 'presented' | 'approved' | 'converted' | 'cancelled' | 'expired';
 
 export type EstimateApprovalMethod = 'verbal' | 'sms' | 'email' | 'signed_document' | 'other';
 
 export type EstimateLineType = 'service' | 'labor' | 'part';
 
 export type JobOrderStatus =
-  | 'pending'
-  | 'in_progress'
-  | 'waiting_for_parts'
-  | 'completed'
-  | 'released'
-  | 'cancelled';
+  'pending' | 'in_progress' | 'waiting_for_parts' | 'completed' | 'released' | 'cancelled';
 
 export interface JobOrderSummaryRecord {
   readonly id: string;

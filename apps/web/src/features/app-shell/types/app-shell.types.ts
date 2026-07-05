@@ -1,11 +1,7 @@
 import type { AuthSessionResponseData } from '../../auth/types/auth-session';
 
 export type ProtectedRouteKind =
-  | 'platform'
-  | 'tenant-dashboard'
-  | 'tenant-operational'
-  | 'tenant-onboarding'
-  | 'tenant-status';
+  'platform' | 'tenant-dashboard' | 'tenant-operational' | 'tenant-onboarding' | 'tenant-status';
 
 export type SessionLoadState =
   | {

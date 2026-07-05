@@ -5,10 +5,7 @@ export type MotorcycleStatus = 'active' | 'soft_deleted';
 export type MotorcycleIdentifierType = 'plate_number' | 'engine_number' | 'chassis_number';
 
 export type MotorcycleDuplicateWarningType =
-  | 'similar_plate_number'
-  | 'similar_engine_number'
-  | 'similar_chassis_number'
-  | 'similar_model';
+  'similar_plate_number' | 'similar_engine_number' | 'similar_chassis_number' | 'similar_model';
 
 export interface ShopOwnerCheckInput {
   readonly tenantId: string;

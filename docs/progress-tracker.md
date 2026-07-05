@@ -10,7 +10,7 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 
 | Status                  |   Cards |
 | ----------------------- | ------: |
-| Done                    |     187 |
+| Done                    |     188 |
 | In Progress             |       0 |
 | Ready                   |       1 |
 | Backlog                 |     109 |
@@ -20,7 +20,7 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 
 | Milestone    | Status Summary      | Notes                                    |
 | ------------ | ------------------- | ---------------------------------------- |
-| M0           | 23 Done             | ENG-LOOP-01 through ENG-LOOP-07 complete |
+| M0           | 25 Done             | ENG-LOOP-01 through ENG-LOOP-09 complete |
 | M1           | 18 Done             | Complete                                 |
 | M2           | 21 Done             | Complete                                 |
 | M3           | 19 Done             | Complete                                 |
@@ -46,6 +46,8 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - [x] **Done** — ENG-LOOP-05 — Wire validation profiles into GitHub Actions
 - [x] **Done** — ENG-LOOP-06 — Enforce branch protection for main and develop
 - [x] **Done** — ENG-LOOP-07 — Add PR validation evidence guard
+- [x] **Done** — ENG-LOOP-08 — Expand E2E coverage beyond landing page smoke
+- [x] **Done** — ENG-LOOP-09 — Add dependency and security automation
 - [x] **Done** — CI — Add OpenAI AI reviewer to pull request pipeline
 - [x] **Done** — M9.17 — Add Milestone 9 E2E, mobile, permission, and blocked-state coverage
 - [x] **Done** — M9.18 — Final Milestone 9 regression, documentation, and handoff
@@ -79,6 +81,8 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - [x] **Done** — ENG-LOOP-05 — Wire validation profiles into GitHub Actions
 - [x] **Done** — ENG-LOOP-06 — Enforce branch protection for main and develop
 - [x] **Done** — ENG-LOOP-07 — Add PR validation evidence guard
+- [x] **Done** — ENG-LOOP-08 — Expand E2E coverage beyond landing page smoke
+- [x] **Done** — ENG-LOOP-09 — Add dependency and security automation
 
 ## M1 — Database Foundation and Core Migrations
 
@@ -413,4 +417,57 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - 2026-07-05: ENG-LOOP-06 confirmed Done after branch protection for `main` and `develop` was configured and validation check evidence was recorded.
 - 2026-07-05: M9.18 confirmed Done after final Milestone 9 regression, documentation, and handoff closeout.
 - 2026-07-05: ENG-LOOP-07 completed after adding the PR validation evidence guard. Required PR checks are green, including the inline-code validation evidence parser fix.
-- 2026-07-05: ENG-LOOP-08 remains In Progress on branch `test/eng-loop-08-e2e-auth-coverage` while Playwright coverage is expanded beyond landing page smoke. Current work adds mobile auth route availability, auth navigation, mocked API envelope success/error handling, owner signup idempotency-key assertion, and forgot-password safe response coverage. Keep the card In Progress until `pnpm validate:e2e` and required validation profiles pass.
+- 2026-07-05: ENG-LOOP-08 completed after expanding Playwright E2E coverage beyond landing page smoke. Validation evidence recorded: `pnpm format:check`, `pnpm validate:e2e`, `pnpm validate:quick`, and `pnpm validate:web` passed.
+- 2026-07-05: ENG-LOOP-09 completed after adding dependency and security automation. Validation is green, including `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm validate:security`, and Semgrep static security analysis. Follow-up hardening addressed Dependabot cooldown, workflow secret scoping, mutable GitHub Actions references, and pnpm release-age supply-chain policy handling.
+
+<!-- ENG-LOOP-09:START -->
+
+## ENG-LOOP-09 — Add dependency and security automation
+
+**Status:** Done  
+**Branch:** `chore/eng-loop-security-automation`  
+**Category:** Security  
+**Milestone:** M0
+
+### Scope
+
+- Added Dependabot configuration for npm workspace dependencies and GitHub Actions updates.
+- Added dependency security workflow using dependency review, `pnpm audit --audit-level high`, and `pnpm validate:security`.
+- Added static security analysis workflow using Semgrep OWASP, secrets, and TypeScript rules.
+- Hardened security automation findings from Semgrep:
+  - Added Dependabot cooldown.
+  - Scoped `OPENAI_API_KEY` away from workflow-level environment exposure.
+  - Pinned GitHub Actions references to immutable SHAs.
+  - Added pnpm supply-chain policy settings with narrow framework/toolchain release-age exclusions.
+- Added security automation documentation.
+
+### Validation Commands
+
+```bash
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm validate:security
+semgrep scan --config p/owasp-top-ten --config p/secrets --config p/typescript --error --metrics=off --exclude node_modules --exclude .next --exclude dist --exclude coverage --exclude playwright-report --exclude test-results --exclude pnpm-lock.yaml
+```
+
+### Validation Evidence
+
+- Local validation commands passed.
+- GitHub Actions are green.
+- Semgrep static security analysis passed after dependency/security automation hardening.
+- Dependency security automation is configured and remains non-placeholder.
+
+### Files Updated
+
+- `.github/dependabot.yml`
+- `.github/workflows/dependency-security.yml`
+- `.github/workflows/static-security-analysis.yml`
+- `.github/workflows/ai-pr-review.yml`
+- `.github/workflows/ci.yml`
+- `.github/workflows/pr-validation-evidence.yml`
+- `pnpm-workspace.yaml`
+- `docs/engineering/security-automation.md`
+- `docs/progress-tracker.md`
+
+<!-- ENG-LOOP-09:END -->

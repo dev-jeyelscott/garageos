@@ -225,27 +225,25 @@ function createService(): {
 } {
   const store = createFakePlatformTenantStore();
   const auditService = {
-    record: vi.fn(
-      async (input: RecordAuditLogInput): Promise<AuditLogRecord> => ({
-        id: 'audit-id',
-        tenantId: input.tenantId ?? null,
-        actorUserId: input.actorUserId ?? null,
-        actorType: input.actorType,
-        supportAccessSessionId: input.supportAccessSessionId ?? null,
-        action: input.action,
-        entityType: input.entityType,
-        entityId: input.entityId ?? null,
-        branchId: input.branchId ?? null,
-        beforeJson: input.beforeJson ?? null,
-        afterJson: input.afterJson ?? null,
-        metadataJson: input.metadataJson ?? null,
-        reason: input.reason ?? null,
-        ipAddress: input.ipAddress ?? null,
-        userAgent: input.userAgent ?? null,
-        retentionClass: input.retentionClass ?? 'standard_3_year',
-        createdAt: input.createdAt ?? NOW,
-      }),
-    ),
+    record: vi.fn(async (input: RecordAuditLogInput): Promise<AuditLogRecord> => ({
+      id: 'audit-id',
+      tenantId: input.tenantId ?? null,
+      actorUserId: input.actorUserId ?? null,
+      actorType: input.actorType,
+      supportAccessSessionId: input.supportAccessSessionId ?? null,
+      action: input.action,
+      entityType: input.entityType,
+      entityId: input.entityId ?? null,
+      branchId: input.branchId ?? null,
+      beforeJson: input.beforeJson ?? null,
+      afterJson: input.afterJson ?? null,
+      metadataJson: input.metadataJson ?? null,
+      reason: input.reason ?? null,
+      ipAddress: input.ipAddress ?? null,
+      userAgent: input.userAgent ?? null,
+      retentionClass: input.retentionClass ?? 'standard_3_year',
+      createdAt: input.createdAt ?? NOW,
+    })),
   } as unknown as AuditService;
 
   return {

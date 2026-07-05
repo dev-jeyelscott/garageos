@@ -1,12 +1,7 @@
 import { Badge, cn } from '../ui';
 
 export type StatusBadgeVariant =
-  | 'neutral'
-  | 'success'
-  | 'warning'
-  | 'destructive'
-  | 'info'
-  | 'muted';
+  'neutral' | 'success' | 'warning' | 'destructive' | 'info' | 'muted';
 
 export type StatusBadgeProps = {
   readonly label: string;

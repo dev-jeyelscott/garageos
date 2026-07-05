@@ -1,0 +1,67 @@
+# ENG-LOOP-09 — portable dependency security automation
+# This workflow uses repository-local pnpm validation so it does not depend on paid GitHub security features.
+
+name: Dependency Security
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'apps/**/package.json'
+      - 'packages/**/package.json'
+      - '.github/workflows/dependency-security.yml'
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'apps/**/package.json'
+      - 'packages/**/package.json'
+      - '.github/workflows/dependency-security.yml'
+  schedule:
+    # Weekly dependency/security drift check: Monday 01:00 UTC / 09:00 Asia/Manila.
+    - cron: '0 1 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dependency-security:
+    name: Dependency audit and security profile
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Audit dependencies
+        run: pnpm audit --audit-level high
+
+      - name: Run GarageOS security validation profile
+        run: pnpm validate:security

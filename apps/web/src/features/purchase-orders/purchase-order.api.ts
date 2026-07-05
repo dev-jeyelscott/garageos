@@ -220,15 +220,13 @@ function normalizePurchaseOrderListItem(value: unknown): PurchaseOrderListItem |
     return null;
   }
 
-  if (
-    !(
-      typeof value.id === 'string' &&
-      typeof value.purchase_order_number === 'string' &&
-      isPurchaseOrderStatus(value.status) &&
-      isPurchasePaymentTerms(value.payment_terms) &&
-      typeof value.order_date === 'string'
-    )
-  ) {
+  if (!(
+    typeof value.id === 'string' &&
+    typeof value.purchase_order_number === 'string' &&
+    isPurchaseOrderStatus(value.status) &&
+    isPurchasePaymentTerms(value.payment_terms) &&
+    typeof value.order_date === 'string'
+  )) {
     return null;
   }
 

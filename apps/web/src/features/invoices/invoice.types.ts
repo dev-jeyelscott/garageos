@@ -1,14 +1,7 @@
 import type { ApiPaginationMeta } from '../../lib/api-envelope';
 
 export type InvoiceStatus =
-  | 'draft'
-  | 'pending'
-  | 'partially_paid'
-  | 'paid'
-  | 'overdue'
-  | 'cancelled'
-  | 'voided'
-  | 'refunded';
+  'draft' | 'pending' | 'partially_paid' | 'paid' | 'overdue' | 'cancelled' | 'voided' | 'refunded';
 
 export type InvoiceStatusFilter = 'all' | InvoiceStatus;
 
@@ -17,13 +10,7 @@ export type InvoiceBranchFilter = 'all' | string;
 export type InvoiceDiscountType = 'none' | 'fixed' | 'percentage';
 
 export type InvoicePaymentMethod =
-  | 'cash'
-  | 'gcash'
-  | 'maya'
-  | 'bank_transfer'
-  | 'credit_card'
-  | 'check'
-  | 'other';
+  'cash' | 'gcash' | 'maya' | 'bank_transfer' | 'credit_card' | 'check' | 'other';
 
 export interface InvoiceListFilters {
   readonly status: InvoiceStatusFilter;

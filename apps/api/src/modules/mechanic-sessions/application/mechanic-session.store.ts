@@ -3,12 +3,7 @@ import type { DatabaseQueryClient } from '../../../shared/database/database-clie
 export type MechanicWorkSessionStatus = 'active' | 'paused' | 'finished';
 
 export type MechanicSessionJobOrderStatus =
-  | 'pending'
-  | 'in_progress'
-  | 'waiting_for_parts'
-  | 'completed'
-  | 'released'
-  | 'cancelled';
+  'pending' | 'in_progress' | 'waiting_for_parts' | 'completed' | 'released' | 'cancelled';
 
 export interface MechanicWorkSessionPauseRecord {
   readonly id: string;

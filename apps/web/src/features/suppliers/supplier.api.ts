@@ -375,13 +375,11 @@ function normalizeSupplierListItem(value: unknown): SupplierListItem | null {
     return null;
   }
 
-  if (
-    !(
-      typeof value.id === 'string' &&
-      typeof value.name === 'string' &&
-      isSupplierStatus(value.status)
-    )
-  ) {
+  if (!(
+    typeof value.id === 'string' &&
+    typeof value.name === 'string' &&
+    isSupplierStatus(value.status)
+  )) {
     return null;
   }
 
@@ -424,13 +422,11 @@ function normalizeSupplierPaymentRecord(value: unknown): SupplierPaymentRecord |
     return null;
   }
 
-  if (
-    !(
-      typeof value.id === 'string' &&
-      typeof value.supplier_id === 'string' &&
-      isSupplierPaymentMethod(value.payment_method)
-    )
-  ) {
+  if (!(
+    typeof value.id === 'string' &&
+    typeof value.supplier_id === 'string' &&
+    isSupplierPaymentMethod(value.payment_method)
+  )) {
     return null;
   }
 

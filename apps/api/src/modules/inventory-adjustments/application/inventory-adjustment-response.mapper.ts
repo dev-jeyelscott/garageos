@@ -1,9 +1,7 @@
 import type { InventoryAdjustmentRecord } from './inventory-adjustment.records';
 
 export type ApiInventoryAdjustmentType =
-  | 'positive_adjustment'
-  | 'negative_adjustment'
-  | 'final_counted_quantity';
+  'positive_adjustment' | 'negative_adjustment' | 'final_counted_quantity';
 
 export interface InventoryAdjustmentLineResponse {
   readonly id: string;

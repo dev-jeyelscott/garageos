@@ -1,25 +1,14 @@
 import type { ApiPaginationMeta } from '../../lib/api-envelope';
 
 export type PurchaseOrderStatus =
-  | 'draft'
-  | 'ordered'
-  | 'partially_received'
-  | 'received'
-  | 'closed'
-  | 'cancelled';
+  'draft' | 'ordered' | 'partially_received' | 'received' | 'closed' | 'cancelled';
 
 export type PurchaseOrderStatusFilter = 'all' | PurchaseOrderStatus;
 
 export type PurchasePaymentTerms = 'cash' | 'credit';
 
 export type PurchasePaymentMethod =
-  | 'cash'
-  | 'gcash'
-  | 'maya'
-  | 'bank_transfer'
-  | 'credit_card'
-  | 'check'
-  | 'other';
+  'cash' | 'gcash' | 'maya' | 'bank_transfer' | 'credit_card' | 'check' | 'other';
 
 export type PurchaseOrderBranchFilter = 'all' | string;
 
