@@ -10,17 +10,17 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 
 | Status                  |   Cards |
 | ----------------------- | ------: |
-| Done                    |     209 |
+| Done                    |     210 |
 | In Progress             |       0 |
 | Ready                   |       1 |
 | Backlog                 |      99 |
-| **Total tracked cards** | **309** |
+| **Total tracked cards** | **310** |
 
 ## Milestone Status Summary
 
 | Milestone    | Status Summary      | Notes                                        |
 | ------------ | ------------------- | -------------------------------------------- |
-| M0           | 44 Done             | Complete                                     |
+| M0           | 45 Done             | Complete                                     |
 | M1           | 18 Done             | Complete                                     |
 | M2           | 22 Done             | Complete                                     |
 | M3           | 19 Done             | Complete                                     |
@@ -48,6 +48,7 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - [x] **Done** — ENG-LOOP-23 — Add manual GitHub workflow entrypoint
 - [x] **Done** — ENG-LOOP-24 — Add first-5 batch mode
 - [x] **Done** — ENG-LOOP-25 — Add Codex-powered first-5 PR automation
+- [x] **Done** — ENG-LOOP-26 — Generalize engineering loop task selection to all tracker tasks
 - [ ] **Ready** — M10.01 — Implement expense categories
 
 ---
@@ -95,6 +96,7 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - [x] **Done** — ENG-LOOP-23 — Add manual GitHub workflow entrypoint
 - [x] **Done** — ENG-LOOP-24 — Add first-5 batch mode
 - [x] **Done** — ENG-LOOP-25 — Add Codex-powered first-5 PR automation
+- [x] **Done** — ENG-LOOP-26 — Generalize engineering loop task selection to all tracker tasks
 
 ## M1 — Database Foundation and Core Migrations
 
