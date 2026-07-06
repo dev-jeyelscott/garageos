@@ -55,7 +55,9 @@
     "eng-loop:prepare-pr": "node ./.github/scripts/eng-loop-pr-automation.cjs",
     "eng-loop:follow-up": "node ./.github/scripts/eng-loop-follow-up-task.cjs",
     "eng-loop:follow-up:test": "node ./.github/scripts/eng-loop-follow-up-task.test.cjs",
-    "eng-loop:workflow-preflight:test": "node ./.github/scripts/eng-loop-workflow-preflight.test.cjs"
+    "eng-loop:workflow-preflight:test": "node ./.github/scripts/eng-loop-workflow-preflight.test.cjs",
+    "eng-loop:first-5:dry-run": "node ./.github/scripts/eng-loop-runner.cjs --mode=first-5-dry-run",
+    "eng-loop:first-5": "node ./.github/scripts/eng-loop-runner.cjs --mode=first-5 --confirm-first-5"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,json,md,yml,yaml}": [

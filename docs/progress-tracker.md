@@ -10,17 +10,17 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 
 | Status                  |   Cards |
 | ----------------------- | ------: |
-| Done                    |     207 |
+| Done                    |     208 |
 | In Progress             |       0 |
 | Ready                   |       1 |
-| Backlog                 |     100 |
+| Backlog                 |      99 |
 | **Total tracked cards** | **308** |
 
 ## Milestone Status Summary
 
 | Milestone    | Status Summary      | Notes                                        |
 | ------------ | ------------------- | -------------------------------------------- |
-| M0           | 42 Done, 1 Backlog  | ENG-LOOP-23 done; ENG-LOOP-24 queued         |
+| M0           | 43 Done             | ENG-LOOP-24 done; M10.01 ready               |
 | M1           | 18 Done             | Complete                                     |
 | M2           | 22 Done             | Complete                                     |
 | M3           | 19 Done             | Complete                                     |
@@ -46,7 +46,7 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - [x] **Done** — ENG-LOOP-21 — Add GitHub CI status watcher
 - [x] **Done** — ENG-LOOP-22 — Add follow-up task creation
 - [x] **Done** — ENG-LOOP-23 — Add manual GitHub workflow entrypoint
-- [ ] **Backlog** — ENG-LOOP-24 — Add first-5 batch mode
+- [x] **Done** — ENG-LOOP-24 — Add first-5 batch mode
 - [ ] **Ready** — M10.01 — Implement expense categories
 
 ---
@@ -92,7 +92,7 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - [x] **Done** — ENG-LOOP-21 — Add GitHub CI status watcher
 - [x] **Done** — ENG-LOOP-22 — Add follow-up task creation
 - [x] **Done** — ENG-LOOP-23 — Add manual GitHub workflow entrypoint
-- [ ] **Backlog** — ENG-LOOP-24 — Add first-5 batch mode
+- [x] **Done** — ENG-LOOP-24 — Add first-5 batch mode
 
 ## M1 — Database Foundation and Core Migrations
 

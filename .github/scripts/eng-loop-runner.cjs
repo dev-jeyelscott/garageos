@@ -8,6 +8,7 @@ const crypto = require('node:crypto');
 
 const DEFAULT_ALLOWED_STATUSES = ['backlog', 'ready', 'todo', 'to do'];
 const DEFAULT_STALE_CLAIM_HOURS = 24;
+const FIRST_FIVE_BATCH_LIMIT = 5;
 const LEDGER_STATUSES = new Set(['started', 'claimed', 'succeeded', 'failed', 'aborted']);
 
 function normalizeText(value) {
@@ -33,6 +34,8 @@ function parseCliArgs(argv = process.argv.slice(2)) {
       'local',
     staleClaimHours: Number(process.env.ENG_LOOP_STALE_CLAIM_HOURS || DEFAULT_STALE_CLAIM_HOURS),
     maxTasks: 100,
+    confirmFirstFive: false,
+    firstFiveConfirmation: '',
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -71,6 +74,13 @@ function parseCliArgs(argv = process.argv.slice(2)) {
         args.maxTasks = Number(nextValue);
         if (inlineValue === undefined) index += 1;
         break;
+      case '--confirm-first-5':
+        args.confirmFirstFive = true;
+        break;
+      case '--first-5-confirmation':
+        args.firstFiveConfirmation = nextValue;
+        if (inlineValue === undefined) index += 1;
+        break;
       case '--help':
       case '-h':
         args.help = true;
@@ -99,10 +109,15 @@ function printHelp() {
 Usage:
   node ./.github/scripts/eng-loop-runner.cjs --mode=dry-run
   node ./.github/scripts/eng-loop-runner.cjs --mode=claim
+  node ./.github/scripts/eng-loop-runner.cjs --mode=first-5-dry-run
+  node ./.github/scripts/eng-loop-runner.cjs --mode=first-5 --confirm-first-5
 
 Modes:
-  dry-run   Read eligible tasks and print the deterministic selected task. No writes.
-  claim     Claim exactly one eligible Notion task and initialize a run ledger.
+  dry-run          Read eligible tasks and print the deterministic selected task. No writes.
+  claim            Claim exactly one eligible Notion task and initialize a run ledger.
+  run              Alias for claim mode when invoked by the manual workflow.
+  first-5-dry-run  Read eligible tasks and write an ordered first-five batch plan. No Notion writes.
+  first-5          Claim up to five eligible tasks sequentially. Requires explicit confirmation.
 
 Environment:
   GARAGEOS_NOTION_TOKEN or NOTION_TOKEN
@@ -306,10 +321,20 @@ function compareTasks(left, right) {
   return normalizeText(left.title).localeCompare(normalizeText(right.title));
 }
 
-function selectEligibleTask(pages, options = {}) {
+function selectEligibleTasks(pages, options = {}) {
+  const limit = Number(options.limit ?? FIRST_FIVE_BATCH_LIMIT);
+
+  if (!Number.isInteger(limit) || limit <= 0) {
+    throw new Error('Eligible task selection limit must be a positive integer.');
+  }
+
   const tasks = pages.map(taskFromPage).filter((task) => isEligibleTask(task, options));
   tasks.sort(compareTasks);
-  return tasks[0] ?? null;
+  return tasks.slice(0, limit);
+}
+
+function selectEligibleTask(pages, options = {}) {
+  return selectEligibleTasks(pages, { ...options, limit: 1 })[0] ?? null;
 }
 
 function propertyPatchFromExistingProperty(existingProperty, value) {
@@ -463,6 +488,102 @@ async function writeRunLedger(record, cwd = process.cwd()) {
   return filePath;
 }
 
+function summarizeBatchTask(task, status = 'planned') {
+  return {
+    id: task.id,
+    title: task.title,
+    branch: task.branch,
+    repository: task.repository,
+    url: task.url,
+    status,
+    run_id: null,
+    ledger_path: null,
+    completed_at: null,
+  };
+}
+
+function createBatchSummary({
+  mode,
+  dryRun,
+  actor,
+  maxTasks = FIRST_FIVE_BATCH_LIMIT,
+  selectedTasks = [],
+  timestamp = nowIso(),
+}) {
+  return {
+    schema_version: 1,
+    batch_id: createRunId(),
+    mode,
+    dry_run: Boolean(dryRun),
+    actor: actor || 'local',
+    status: 'started',
+    max_tasks: maxTasks,
+    selected_count: selectedTasks.length,
+    processed_count: 0,
+    success_count: 0,
+    failure_count: 0,
+    skipped_count: selectedTasks.length,
+    stop_reason: '',
+    started_at: timestamp,
+    completed_at: null,
+    tasks: selectedTasks.map((task) => summarizeBatchTask(task)),
+  };
+}
+
+function batchSummaryMarkdown(summary) {
+  const lines = [
+    '# Engineering Loop First-5 Batch Summary',
+    '',
+    `- Batch id: ${summary.batch_id}`,
+    `- Mode: ${summary.mode}`,
+    `- Dry run: ${summary.dry_run}`,
+    `- Status: ${summary.status}`,
+    `- Max tasks: ${summary.max_tasks}`,
+    `- Selected: ${summary.selected_count}`,
+    `- Processed: ${summary.processed_count}`,
+    `- Succeeded: ${summary.success_count}`,
+    `- Failed: ${summary.failure_count}`,
+    `- Skipped: ${summary.skipped_count}`,
+    `- Stop reason: ${summary.stop_reason || '(none)'}`,
+    '',
+    '## Tasks',
+    '',
+  ];
+
+  if (!summary.tasks.length) {
+    lines.push('- No eligible tasks selected.');
+  } else {
+    for (const [index, task] of summary.tasks.entries()) {
+      lines.push(
+        `${index + 1}. ${task.status} — ${task.title} — ${task.id}${task.ledger_path ? ` — ${task.ledger_path}` : ''}`,
+      );
+    }
+  }
+
+  return `${lines.join('\n')}\n`;
+}
+
+async function writeBatchSummary(summary, cwd = process.cwd()) {
+  const jsonPath = path.join(cwd, '.tmp', 'eng-loop-batch-summary.json');
+  const markdownPath = path.join(cwd, '.tmp', 'eng-loop-batch-summary.md');
+  await writeJsonAtomic(jsonPath, summary);
+  await fsp.writeFile(markdownPath, batchSummaryMarkdown(summary), 'utf8');
+  return { jsonPath, markdownPath };
+}
+
+function classifyBatchStopReason(error) {
+  const message = normalizeComparable(error?.message || error);
+
+  if (message.includes('claim conflict')) return 'claim_conflict';
+  if (message.includes('validation')) return 'validation_failed';
+  if (message.includes('ci')) return 'ci_failed';
+  if (message.includes('malformed')) return 'malformed_task';
+  if (message.includes('unsafe')) return 'unsafe_state';
+  if (message.includes('follow-up')) return 'follow_up_created';
+
+  return 'unexpected_error';
+}
+
 class NotionTaskClient {
   constructor({ token, databaseId, notionVersion = '2022-06-28', maxTasks = 100 }) {
     if (!token) throw new Error('Missing Notion token. Set GARAGEOS_NOTION_TOKEN or NOTION_TOKEN.');
@@ -596,35 +717,21 @@ async function runDryRun({ client, args, cwd = process.cwd() }) {
   return { status: 'selected', selected, actor: args.actor };
 }
 
-async function runClaim({ client, args, cwd = process.cwd() }) {
-  if (client instanceof LocalFixtureTaskClient) {
-    throw new Error(
-      'Claim mode requires Notion credentials. Local fixture mode is read-only by design.',
-    );
-  }
-
-  const pages = await client.listTaskPages();
-  const selected = selectEligibleTask(pages);
-
-  console.log('Engineering loop claim mode');
-  console.log(`Scanned task pages: ${pages.length}`);
-
+async function claimSelectedTask({ client, args, cwd = process.cwd(), selected, mode = 'claim' }) {
   if (!selected) {
-    console.log('Selected task: none');
-    console.log('Result: no eligible task found. No mutations performed.');
-    return { status: 'no_task', selected: null };
+    throw new Error('claimSelectedTask requires a selected task.');
   }
 
   const runId = createRunId();
   const timestamp = nowIso();
   let ledger = createLedgerRecord({
     runId,
-    mode: 'claim',
+    mode,
     actor: args.actor,
     task: selected,
     status: 'started',
     timestamp,
-    summary: `Selected ${selected.title} for claim initialization.`,
+    summary: `Selected ${selected.title} for ${mode} claim initialization.`,
   });
 
   const ledgerPath = await writeRunLedger(ledger, cwd);
@@ -656,7 +763,7 @@ async function runClaim({ client, args, cwd = process.cwd() }) {
     const claimSummary = buildClaimSummary({
       runId,
       actor: args.actor,
-      mode: 'claim',
+      mode,
       branch: beforeTask.branch,
       timestamp: nowIso(),
     });
@@ -715,6 +822,163 @@ async function runClaim({ client, args, cwd = process.cwd() }) {
   }
 }
 
+async function runClaim({ client, args, cwd = process.cwd() }) {
+  if (client instanceof LocalFixtureTaskClient) {
+    throw new Error(
+      'Claim mode requires Notion credentials. Local fixture mode is read-only by design.',
+    );
+  }
+
+  const pages = await client.listTaskPages();
+  const selected = selectEligibleTask(pages);
+
+  console.log('Engineering loop claim mode');
+  console.log(`Scanned task pages: ${pages.length}`);
+
+  if (!selected) {
+    console.log('Selected task: none');
+    console.log('Result: no eligible task found. No mutations performed.');
+    return { status: 'no_task', selected: null };
+  }
+
+  return claimSelectedTask({ client, args, cwd, selected, mode: 'claim' });
+}
+
+async function runFirstFiveDryRun({ client, args, cwd = process.cwd() }) {
+  const pages = await client.listTaskPages();
+  const selectedTasks = selectEligibleTasks(pages, { limit: FIRST_FIVE_BATCH_LIMIT });
+  const summary = createBatchSummary({
+    mode: 'first-5-dry-run',
+    dryRun: true,
+    actor: args.actor,
+    selectedTasks,
+  });
+
+  summary.status = selectedTasks.length ? 'planned' : 'succeeded';
+  summary.stop_reason = selectedTasks.length ? 'dry_run_plan_created' : 'zero_eligible_tasks';
+  summary.completed_at = nowIso();
+  summary.skipped_count = 0;
+
+  const summaryPaths = await writeBatchSummary(summary, cwd);
+
+  console.log('Engineering loop first-5 dry-run mode');
+  console.log(`Scanned task pages: ${pages.length}`);
+  console.log(`Planned tasks: ${selectedTasks.length}`);
+
+  if (!selectedTasks.length) {
+    console.log('Result: no eligible task found. No mutations performed.');
+  } else {
+    for (const [index, task] of selectedTasks.entries()) {
+      console.log(`${index + 1}. ${task.title} (${task.id})`);
+    }
+    console.log('Result: first-5 dry-run only. No Notion writes and no run ledger created.');
+  }
+
+  console.log(`Batch summary: ${summaryPaths.jsonPath}`);
+  return {
+    status: selectedTasks.length ? 'planned' : 'no_task',
+    selected: selectedTasks,
+    summary,
+    summaryPaths,
+  };
+}
+
+async function runFirstFive({ client, args, cwd = process.cwd() }) {
+  if (client instanceof LocalFixtureTaskClient) {
+    throw new Error(
+      'First-5 mode requires Notion credentials. Local fixture mode is read-only by design.',
+    );
+  }
+
+  if (!args.confirmFirstFive && args.firstFiveConfirmation !== 'ENG-LOOP-24-FIRST-5') {
+    throw new Error(
+      'Mutation-capable first-5 mode requires --confirm-first-5 or --first-5-confirmation ENG-LOOP-24-FIRST-5.',
+    );
+  }
+
+  const pages = await client.listTaskPages();
+  const selectedTasks = selectEligibleTasks(pages, { limit: FIRST_FIVE_BATCH_LIMIT });
+  const summary = createBatchSummary({
+    mode: 'first-5',
+    dryRun: false,
+    actor: args.actor,
+    selectedTasks,
+  });
+
+  console.log('Engineering loop first-5 batch mode');
+  console.log(`Scanned task pages: ${pages.length}`);
+  console.log(`Selected tasks: ${selectedTasks.length}`);
+
+  if (!selectedTasks.length) {
+    summary.status = 'succeeded';
+    summary.stop_reason = 'zero_eligible_tasks';
+    summary.completed_at = nowIso();
+    summary.skipped_count = 0;
+    const summaryPaths = await writeBatchSummary(summary, cwd);
+    console.log('Result: no eligible task found. No mutations performed.');
+    console.log(`Batch summary: ${summaryPaths.jsonPath}`);
+    return { status: 'no_task', selected: [], summary, summaryPaths };
+  }
+
+  for (const [index, task] of selectedTasks.entries()) {
+    console.log(`Processing batch task ${index + 1}/${selectedTasks.length}: ${task.title}`);
+
+    try {
+      const result = await claimSelectedTask({
+        client,
+        args,
+        cwd,
+        selected: task,
+        mode: 'first-5',
+      });
+      summary.processed_count += 1;
+      summary.success_count += 1;
+      summary.skipped_count = Math.max(0, selectedTasks.length - summary.processed_count);
+      summary.tasks[index] = {
+        ...summary.tasks[index],
+        status: 'succeeded',
+        run_id: result.runId,
+        ledger_path: result.ledgerPath,
+        completed_at: nowIso(),
+      };
+      await writeBatchSummary(summary, cwd);
+    } catch (error) {
+      summary.processed_count += 1;
+      summary.failure_count += 1;
+      summary.skipped_count = Math.max(0, selectedTasks.length - summary.processed_count);
+      summary.status = 'failed';
+      summary.stop_reason = classifyBatchStopReason(error);
+      summary.completed_at = nowIso();
+      summary.tasks[index] = {
+        ...summary.tasks[index],
+        status: 'failed',
+        error: error.message || 'First-5 task failed.',
+        completed_at: nowIso(),
+      };
+      const summaryPaths = await writeBatchSummary(summary, cwd);
+      console.log(`Batch stopped: ${summary.stop_reason}`);
+      console.log(`Batch summary: ${summaryPaths.jsonPath}`);
+      throw error;
+    }
+  }
+
+  summary.status = 'succeeded';
+  summary.stop_reason =
+    selectedTasks.length >= FIRST_FIVE_BATCH_LIMIT
+      ? 'max_count_reached'
+      : 'selected_tasks_exhausted';
+  summary.completed_at = nowIso();
+  summary.skipped_count = 0;
+  const summaryPaths = await writeBatchSummary(summary, cwd);
+
+  console.log(
+    `Batch completed: ${summary.success_count} succeeded, ${summary.failure_count} failed.`,
+  );
+  console.log(`Batch summary: ${summaryPaths.jsonPath}`);
+
+  return { status: 'succeeded', selected: selectedTasks, summary, summaryPaths };
+}
+
 async function main() {
   const args = parseCliArgs();
 
@@ -723,14 +987,26 @@ async function main() {
     return;
   }
 
-  if (!['dry-run', 'claim'].includes(args.mode)) {
-    throw new Error(`Unsupported mode: ${args.mode}. Use dry-run or claim.`);
+  if (!['dry-run', 'claim', 'run', 'first-5-dry-run', 'first-5'].includes(args.mode)) {
+    throw new Error(
+      `Unsupported mode: ${args.mode}. Use dry-run, claim, run, first-5-dry-run, or first-5.`,
+    );
   }
 
   const client = createClientFromArgs(args);
 
   if (args.mode === 'dry-run') {
     await runDryRun({ client, args });
+    return;
+  }
+
+  if (args.mode === 'first-5-dry-run') {
+    await runFirstFiveDryRun({ client, args });
+    return;
+  }
+
+  if (args.mode === 'first-5') {
+    await runFirstFive({ client, args });
     return;
   }
 
@@ -747,6 +1023,7 @@ if (require.main === module) {
 module.exports = {
   DEFAULT_ALLOWED_STATUSES,
   DEFAULT_STALE_CLAIM_HOURS,
+  FIRST_FIVE_BATCH_LIMIT,
   LEDGER_STATUSES,
   LocalFixtureTaskClient,
   NotionTaskClient,
@@ -754,7 +1031,10 @@ module.exports = {
   booleanFromProperty,
   buildClaimPatch,
   buildClaimSummary,
+  claimSelectedTask,
+  classifyBatchStopReason,
   compareTasks,
+  createBatchSummary,
   completeLedgerRecord,
   createLedgerRecord,
   createRunId,
@@ -763,10 +1043,14 @@ module.exports = {
   isEligibleTask,
   parseCliArgs,
   propertyPatchFromExistingProperty,
+  runFirstFive,
+  runFirstFiveDryRun,
   selectEligibleTask,
+  selectEligibleTasks,
   taskFromPage,
   taskNumberFromTitle,
   textFromProperty,
+  writeBatchSummary,
   writeJsonAtomic,
   writeRunLedger,
 };
