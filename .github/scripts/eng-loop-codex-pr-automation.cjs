@@ -162,12 +162,13 @@ function redactSensitiveText(value) {
 }
 
 function runCommand(command, args = [], options = {}) {
+  const shell = options.shell ?? false;
   const result = spawnSync(command, args, {
     cwd: options.cwd || process.cwd(),
     input: options.input,
     encoding: 'utf8',
     maxBuffer: options.maxBuffer || 1024 * 1024 * 20,
-    shell: options.shell ?? process.platform === 'win32',
+    shell,
     env: { ...process.env, ...(options.env || {}) },
   });
 
@@ -178,6 +179,7 @@ function runCommand(command, args = [], options = {}) {
     command,
     args,
     cwd: options.cwd || process.cwd(),
+    shell,
     status: result.status,
     signal: result.signal,
     error: result.error,
@@ -781,6 +783,7 @@ module.exports = {
   createPlanMarkdown,
   parseCliArgs,
   redactSensitiveText,
+  runCommand,
   taskKeyFromTitle,
   validateSafeBranchName,
   validateSafeValidationCommand,
