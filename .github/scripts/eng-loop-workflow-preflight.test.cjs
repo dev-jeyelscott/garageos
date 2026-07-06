@@ -34,7 +34,11 @@ function assertPassed(name, env) {
   assert.equal(
     result.status,
     0,
-    `${name} expected pass\nSTDOUT:\n${result.stdout}\nSTDERR:\n${result.stderr}`,
+    `${name} expected pass
+STDOUT:
+${result.stdout}
+STDERR:
+${result.stderr}`,
   );
   console.log(`passed: ${name}`);
   return result;
@@ -43,15 +47,21 @@ function assertPassed(name, env) {
 function assertFailed(name, env, expectedText) {
   const result = runPreflight(env);
   assert.notEqual(result.status, 0, `${name} expected failure`);
-  const output = `${result.stdout}\n${result.stderr}`;
-  assert.match(output, expectedText, `${name} expected output to match ${expectedText}\n${output}`);
+  const output = `${result.stdout}
+${result.stderr}`;
+  assert.match(
+    output,
+    expectedText,
+    `${name} expected output to match ${expectedText}
+${output}`,
+  );
   console.log(`passed: ${name}`);
   return result;
 }
 
 assertPassed('testDefaultDryRunIsAllowed', {});
 
-assertFailed('testMaxTasksAboveOneIsRejected', { INPUT_MAX_TASKS: '5' }, /max_tasks=1 only/i);
+assertFailed('testMaxTasksAboveOneIsRejected', { INPUT_MAX_TASKS: '5' }, /requires max_tasks=1/i);
 
 assertFailed(
   'testDryRunCannotDisableDryRunFlag',
@@ -104,6 +114,31 @@ assertPassed('testMutateNotionWithSecretIsAllowed', {
   NOTION_TOKEN: 'unit-test-secret-token',
 });
 
+assertPassed('testFirstFiveDryRunIsAllowed', {
+  INPUT_MODE: 'first-5-dry-run',
+  INPUT_MAX_TASKS: '5',
+  INPUT_DRY_RUN: 'true',
+});
+
+assertFailed(
+  'testFirstFiveDryRunRequiresMaxTasksFive',
+  { INPUT_MODE: 'first-5-dry-run', INPUT_MAX_TASKS: '1' },
+  /requires max_tasks=5/i,
+);
+
+assertFailed(
+  'testFirstFiveRunRequiresConfirmation',
+  { INPUT_MODE: 'first-5', INPUT_MAX_TASKS: '5', INPUT_DRY_RUN: 'false' },
+  /requires mutation_confirmation=ENG-LOOP-24-FIRST-5/i,
+);
+
+assertPassed('testFirstFiveRunWithConfirmationIsAllowed', {
+  INPUT_MODE: 'first-5',
+  INPUT_MAX_TASKS: '5',
+  INPUT_DRY_RUN: 'false',
+  INPUT_MUTATION_CONFIRMATION: 'ENG-LOOP-24-FIRST-5',
+});
+
 assertFailed(
   'testUnsafeValidationCommandIsRejected',
   { INPUT_VALIDATION_COMMAND: 'pnpm validate:quick && echo unsafe' },
@@ -117,7 +152,8 @@ const secretResult = assertPassed('testSecretValueIsNotPrinted', {
   INPUT_MUTATE_NOTION: 'true',
   NOTION_TOKEN: 'super-secret-token-that-must-not-print',
 });
-const combinedOutput = `${secretResult.stdout}\n${secretResult.stderr}`;
+const combinedOutput = `${secretResult.stdout}
+${secretResult.stderr}`;
 assert.equal(combinedOutput.includes('super-secret-token-that-must-not-print'), false);
 
-console.log('All 10 engineering loop manual workflow preflight tests passed.');
+console.log('All 15 engineering loop manual workflow preflight tests passed.');

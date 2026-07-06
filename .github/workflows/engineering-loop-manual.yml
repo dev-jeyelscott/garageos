@@ -11,25 +11,28 @@ on:
         options:
           - dry-run
           - run
+          - first-5-dry-run
+          - first-5
       task_id:
-        description: 'Optional task key or Notion page id. Example: ENG-LOOP-23.'
+        description: 'Optional task key or Notion page id. Example: ENG-LOOP-24.'
         required: false
         type: string
         default: ''
       max_tasks:
-        description: 'Maximum tasks to process. ENG-LOOP-23 allows only 1 until ENG-LOOP-24 batch mode exists.'
+        description: 'Maximum tasks to process. Use 1 for one-task modes and 5 for first-5 modes.'
         required: true
         type: choice
         default: '1'
         options:
           - '1'
+          - '5'
       dry_run:
-        description: 'Keep the run non-mutating. Must stay true unless mode is run and mutation confirmation is provided.'
+        description: 'Keep the run non-mutating. Must stay true unless mode is run/first-5 and confirmation is provided.'
         required: true
         type: boolean
         default: true
       create_branch:
-        description: 'Allow branch-producing behavior when the runner supports it. Requires mode=run and confirmation.'
+        description: 'Allow branch-producing behavior when the runner supports it. Requires mutation mode and confirmation.'
         required: true
         type: boolean
         default: false
@@ -39,7 +42,7 @@ on:
         type: boolean
         default: true
       mutate_notion:
-        description: 'Allow Notion mutations. Requires mode=run, confirmation, and Notion token secret.'
+        description: 'Allow Notion mutations. Requires mutation mode, confirmation, and Notion token secret.'
         required: true
         type: boolean
         default: false
@@ -54,7 +57,7 @@ on:
         type: string
         default: 'pnpm validate:quick'
       mutation_confirmation:
-        description: 'Required exact value for mutation-capable mode: ENG-LOOP-23-RUN'
+        description: 'Required exact value: ENG-LOOP-23-RUN for run, ENG-LOOP-24-FIRST-5 for first-5.'
         required: false
         type: string
         default: ''
@@ -116,7 +119,7 @@ jobs:
   dry-run:
     name: Dry-run engineering loop
     needs: preflight
-    if: ${{ inputs.mode == 'dry-run' }}
+    if: ${{ inputs.mode == 'dry-run' || inputs.mode == 'first-5-dry-run' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -162,7 +165,7 @@ jobs:
       - name: Run engineering loop runner in dry-run mode
         run: |
           mkdir -p .tmp
-          node ./.github/scripts/eng-loop-runner.cjs --mode=dry-run
+          node ./.github/scripts/eng-loop-runner.cjs --mode="${INPUT_MODE}"
 
       - name: Run local validation executor
         if: ${{ inputs.run_validation == true }}
@@ -201,7 +204,7 @@ jobs:
   controlled-run:
     name: Controlled engineering loop run
     needs: preflight
-    if: ${{ inputs.mode == 'run' }}
+    if: ${{ inputs.mode == 'run' || inputs.mode == 'first-5' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -247,7 +250,11 @@ jobs:
       - name: Run engineering loop runner in controlled mode
         run: |
           mkdir -p .tmp
-          node ./.github/scripts/eng-loop-runner.cjs --mode=run
+          if [ "${INPUT_MODE}" = "first-5" ]; then
+            node ./.github/scripts/eng-loop-runner.cjs --mode=first-5 --confirm-first-5
+          else
+            node ./.github/scripts/eng-loop-runner.cjs --mode=run
+          fi
 
       - name: Run local validation executor
         if: ${{ inputs.run_validation == true }}

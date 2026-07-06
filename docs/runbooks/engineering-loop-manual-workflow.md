@@ -75,3 +75,27 @@ node ./.github/scripts/eng-loop-workflow-preflight.test.cjs
 pnpm eng-loop:test
 pnpm validate:quick
 ```
+
+## ENG-LOOP-24 first-5 batch mode
+
+First-5 mode is a controlled batch mode for the GarageOS engineering loop. It is limited to five eligible tasks and must be run sequentially. Dry-run mode is the required trial path before mutation-capable execution.
+
+### Dry-run
+
+```bash
+node ./.github/scripts/eng-loop-runner.cjs --mode=first-5-dry-run
+```
+
+Dry-run writes local evidence only under `.tmp/eng-loop-batch-summary.json` and `.tmp/eng-loop-batch-summary.md`. It must not mutate Notion, create branches, create PRs, or claim tasks.
+
+### Mutation-capable first-5 run
+
+```bash
+node ./.github/scripts/eng-loop-runner.cjs --mode=first-5 --confirm-first-5
+```
+
+Manual workflow execution must use `max_tasks=5`, `dry_run=false`, and `mutation_confirmation=ENG-LOOP-24-FIRST-5`.
+
+### Stop conditions
+
+The batch stops immediately on claim conflict, malformed task, validation failure, CI failure, unsafe state, follow-up creation, or unexpected runner error. Downstream tasks must not be processed after the first failure.

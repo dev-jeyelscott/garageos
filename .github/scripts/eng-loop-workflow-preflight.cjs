@@ -32,28 +32,36 @@ const input = {
 
 const notionTokenPresent = Boolean(process.env.NOTION_TOKEN || process.env.NOTION_API_KEY);
 const githubTokenPresent = Boolean(process.env.GITHUB_TOKEN);
-const allowedModes = new Set(['dry-run', 'run']);
+const allowedModes = new Set(['dry-run', 'run', 'first-5-dry-run', 'first-5']);
+const dryRunMode = input.mode === 'dry-run' || input.mode === 'first-5-dry-run';
+const firstFiveMode = input.mode === 'first-5' || input.mode === 'first-5-dry-run';
 const mutationRequested =
-  input.mode === 'run' || input.createBranch || input.mutateNotion || input.dryRun === false;
-const confirmationValue = 'ENG-LOOP-23-RUN';
+  input.mode === 'run' ||
+  input.mode === 'first-5' ||
+  input.createBranch ||
+  input.mutateNotion ||
+  input.dryRun === false;
+const oneTaskConfirmationValue = 'ENG-LOOP-23-RUN';
+const firstFiveConfirmationValue = 'ENG-LOOP-24-FIRST-5';
+const expectedMaxTasks = firstFiveMode ? 5 : 1;
 
 if (!allowedModes.has(input.mode)) {
-  fail(`Unsupported mode "${input.mode}". Allowed values: dry-run, run.`);
+  fail(`Unsupported mode "${input.mode}". Allowed values: dry-run, run, first-5-dry-run, first-5.`);
 }
 
-if (!Number.isInteger(input.maxTasks) || input.maxTasks !== 1) {
-  fail('ENG-LOOP-23 allows max_tasks=1 only. First-5 or batch execution belongs to ENG-LOOP-24.');
+if (!Number.isInteger(input.maxTasks) || input.maxTasks !== expectedMaxTasks) {
+  fail(`${input.mode} requires max_tasks=${expectedMaxTasks}.`);
 }
 
-if (input.mode === 'dry-run' && input.dryRun !== true) {
-  fail('dry_run must remain true when mode=dry-run.');
+if (dryRunMode && input.dryRun !== true) {
+  fail('dry_run must remain true when mode is dry-run or first-5-dry-run.');
 }
 
-if (input.mode === 'dry-run' && input.createBranch) {
+if (dryRunMode && input.createBranch) {
   fail('create_branch cannot be true in dry-run mode.');
 }
 
-if (input.mode === 'dry-run' && input.mutateNotion) {
+if (dryRunMode && input.mutateNotion) {
   fail('mutate_notion cannot be true in dry-run mode.');
 }
 
@@ -61,8 +69,24 @@ if (input.mode === 'run' && input.dryRun !== false) {
   fail('mode=run requires dry_run=false to make mutation-capable behavior explicit.');
 }
 
-if (mutationRequested && input.mutationConfirmation !== confirmationValue) {
-  fail(`Mutation-capable behavior requires mutation_confirmation=${confirmationValue}.`);
+if (input.mode === 'first-5' && input.dryRun !== false) {
+  fail('mode=first-5 requires dry_run=false to make mutation-capable batch behavior explicit.');
+}
+
+if (
+  input.mode === 'run' &&
+  mutationRequested &&
+  input.mutationConfirmation !== oneTaskConfirmationValue
+) {
+  fail(
+    `Mutation-capable one-task behavior requires mutation_confirmation=${oneTaskConfirmationValue}.`,
+  );
+}
+
+if (input.mode === 'first-5' && input.mutationConfirmation !== firstFiveConfirmationValue) {
+  fail(
+    `Mutation-capable first-5 behavior requires mutation_confirmation=${firstFiveConfirmationValue}.`,
+  );
 }
 
 if (input.createBranch && !githubTokenPresent) {
@@ -103,9 +127,13 @@ const sanitizedInputs = {
   notion_token_present: notionTokenPresent,
 };
 
-const runnerMode = input.mode === 'run' ? 'run' : 'dry-run';
+const runnerMode = input.mode;
+const runnerCommand =
+  input.mode === 'first-5'
+    ? 'node ./.github/scripts/eng-loop-runner.cjs --mode=first-5 --confirm-first-5'
+    : `node ./.github/scripts/eng-loop-runner.cjs --mode=${runnerMode}`;
 const commandPlan = [
-  '# ENG-LOOP-23 Manual Workflow Command Plan',
+  '# ENG-LOOP Manual Workflow Command Plan',
   '',
   `- Mode: ${input.mode}`,
   `- Runner mode: ${runnerMode}`,
@@ -123,7 +151,7 @@ const commandPlan = [
   '## Planned commands',
   '',
   '```bash',
-  `node ./.github/scripts/eng-loop-runner.cjs --mode=${runnerMode}`,
+  runnerCommand,
   input.runValidation
     ? `node ./.github/scripts/eng-loop-validation-executor.cjs -- --command "${input.validationCommand}"`
     : '# validation skipped by input',
@@ -134,20 +162,23 @@ const commandPlan = [
   '',
   '## Safety notes',
   '',
-  '- max_tasks is locked to 1 until ENG-LOOP-24 implements batch mode.',
   '- dry-run is the default and safest mode.',
+  '- first-5-dry-run only creates a plan and local evidence artifacts.',
+  '- first-5 mutation-capable behavior requires exact ENG-LOOP-24 confirmation.',
   '- Mutation-capable behavior requires explicit confirmation and required secrets.',
   '- This plan intentionally does not print secret values.',
 ].join('\n');
 
 fs.writeFileSync(
   path.join(tmpDir, 'eng-loop-workflow-inputs.json'),
-  `${JSON.stringify(sanitizedInputs, null, 2)}\n`,
+  `${JSON.stringify(sanitizedInputs, null, 2)}
+`,
   'utf8',
 );
 fs.writeFileSync(
   path.join(tmpDir, 'eng-loop-workflow-command-plan.md'),
-  `${commandPlan}\n`,
+  `${commandPlan}
+`,
   'utf8',
 );
 
