@@ -1,6 +1,6 @@
 # GarageOS Progress Tracker
 
-**Last Notion alignment:** 2026-07-06  
+**Last Notion alignment:** 2026-07-07  
 **Source of truth:** Notion database `GarageOS — Full Build Task Tracker`  
 **Repository path:** `docs/progress-tracker.md`
 
@@ -10,17 +10,17 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 
 | Status                  |   Cards |
 | ----------------------- | ------: |
-| Done                    |     210 |
+| Done                    |     211 |
 | In Progress             |       0 |
 | Ready                   |       1 |
 | Backlog                 |      99 |
-| **Total tracked cards** | **310** |
+| **Total tracked cards** | **311** |
 
 ## Milestone Status Summary
 
 | Milestone    | Status Summary      | Notes                                        |
 | ------------ | ------------------- | -------------------------------------------- |
-| M0           | 45 Done             | Complete                                     |
+| M0           | 46 Done             | Complete                                     |
 | M1           | 18 Done             | Complete                                     |
 | M2           | 22 Done             | Complete                                     |
 | M3           | 19 Done             | Complete                                     |
@@ -49,6 +49,7 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - [x] **Done** — ENG-LOOP-24 — Add first-5 batch mode
 - [x] **Done** — ENG-LOOP-25 — Add Codex-powered first-5 PR automation
 - [x] **Done** — ENG-LOOP-26 — Generalize engineering loop task selection to all tracker tasks
+- [x] **Done** — ENG-LOOP-27 — Stream Codex execution output during automation
 - [ ] **Ready** — M10.01 — Implement expense categories
 
 ---
@@ -97,6 +98,7 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - [x] **Done** — ENG-LOOP-24 — Add first-5 batch mode
 - [x] **Done** — ENG-LOOP-25 — Add Codex-powered first-5 PR automation
 - [x] **Done** — ENG-LOOP-26 — Generalize engineering loop task selection to all tracker tasks
+- [x] **Done** — ENG-LOOP-27 — Stream Codex execution output during automation
 
 ## M1 — Database Foundation and Core Migrations
 
