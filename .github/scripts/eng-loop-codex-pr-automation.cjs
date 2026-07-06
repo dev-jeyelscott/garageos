@@ -6,6 +6,7 @@ const fsp = require('node:fs/promises');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const runner = require('./eng-loop-runner.cjs');
+const taskScopePolicy = require('./eng-loop-task-scope.cjs');
 
 const DEFAULT_LIMIT = 5;
 const DEFAULT_SCAN_LIMIT = 250;
@@ -45,6 +46,7 @@ function parseCliArgs(argv = process.argv.slice(2), env = process.env) {
         env.NOTION_DATABASE_ID ||
         '',
     ),
+    taskScope: taskScopePolicy.parseTaskScopeFromArgs(argv, env),
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -95,6 +97,16 @@ function parseCliArgs(argv = process.argv.slice(2), env = process.env) {
       case '--confirm-codex-pr':
         args.confirmCodexPr = true;
         break;
+      case '--task-scope':
+        args.taskScope = taskScopePolicy.normalizeTaskScope(nextValue);
+        if (inlineValue === undefined) index += 1;
+        break;
+      case '--eng-loop-only':
+        args.taskScope = 'eng-loop';
+        break;
+      case '--all-tasks':
+        args.taskScope = 'all';
+        break;
       case '--allow-dirty':
         args.allowDirty = true;
         break;
@@ -138,6 +150,7 @@ Environment:
   ENG_LOOP_BASE_BRANCH=develop
   ENG_LOOP_REPOSITORY=dev-jeyelscott/garageos
   ENG_LOOP_VALIDATION_COMMAND=pnpm validate:quick
+  ENG_LOOP_TASK_SCOPE=all | eng-loop
 `);
 }
 
@@ -716,7 +729,12 @@ async function runLive({ args, client, selectedTasks, cwd = process.cwd() }) {
 async function runAutomation({ args, cwd = process.cwd() }) {
   const client = createTaskClient(args);
   const pages = await client.listTaskPages();
-  const selectedTasks = runner.selectEligibleTasks(pages, { limit: args.limit });
+  const selectedTasks = runner.selectEligibleTasks(pages, {
+    limit: args.limit,
+    taskScope: args.taskScope,
+    mode: args.mode,
+    mutationCapable: args.mode === 'live',
+  });
 
   console.log(`Scanned task pages: ${pages.length}`);
   console.log(`Selected tasks: ${selectedTasks.length}`);

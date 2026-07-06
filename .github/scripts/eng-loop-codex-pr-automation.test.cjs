@@ -17,11 +17,23 @@ function task(overrides = {}) {
 }
 
 function testParseCliArgs() {
-  const parsed = automation.parseCliArgs(['--mode=dry-run', '--limit=5', '--scan-limit=250'], {});
+  const parsed = automation.parseCliArgs(
+    ['--mode=dry-run', '--limit=5', '--scan-limit=250', '--task-scope=all'],
+    {},
+  );
   assert.equal(parsed.mode, 'dry-run');
   assert.equal(parsed.limit, 5);
   assert.equal(parsed.scanLimit, 250);
   assert.equal(parsed.baseBranch, 'develop');
+  assert.equal(parsed.taskScope, 'all');
+}
+
+function testTaskScopeAliases() {
+  assert.equal(
+    automation.parseCliArgs(['--mode=dry-run', '--eng-loop-only'], {}).taskScope,
+    'eng-loop',
+  );
+  assert.equal(automation.parseCliArgs(['--mode=dry-run', '--all-tasks'], {}).taskScope, 'all');
 }
 
 function testRejectsUnsafeModeAndLimit() {
@@ -119,6 +131,7 @@ function testTaskKeyExtraction() {
 const tests = [
   testParseCliArgs,
   testRejectsUnsafeModeAndLimit,
+  testTaskScopeAliases,
   testSafeBranchValidation,
   testValidationCommandGuard,
   testPromptIncludesAutomationBoundaries,
