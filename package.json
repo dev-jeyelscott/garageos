@@ -49,12 +49,13 @@
     "eng-loop:dry-run": "node ./.github/scripts/eng-loop-runner.cjs --mode=dry-run",
     "test:eng-loop": "node --test ./.github/scripts/tests/run-engineering-loop-dry-run.test.cjs",
     "eng-loop:claim": "node ./.github/scripts/eng-loop-runner.cjs --mode=claim",
-    "eng-loop:test": "node ./.github/scripts/eng-loop-runner.test.cjs && node ./.github/scripts/eng-loop-pr-automation.test.cjs && node ./.github/scripts/eng-loop-follow-up-task.test.cjs",
+    "eng-loop:test": "node ./.github/scripts/eng-loop-runner.test.cjs && node ./.github/scripts/eng-loop-pr-automation.test.cjs && node ./.github/scripts/eng-loop-follow-up-task.test.cjs && node ./.github/scripts/eng-loop-workflow-preflight.test.cjs",
     "eng-loop:validate": "node ./.github/scripts/eng-loop-validation-executor.cjs",
     "eng-loop:validation-executor:test": "node --test ./.github/scripts/eng-loop-validation-executor.test.cjs",
     "eng-loop:prepare-pr": "node ./.github/scripts/eng-loop-pr-automation.cjs",
     "eng-loop:follow-up": "node ./.github/scripts/eng-loop-follow-up-task.cjs",
-    "eng-loop:follow-up:test": "node ./.github/scripts/eng-loop-follow-up-task.test.cjs"
+    "eng-loop:follow-up:test": "node ./.github/scripts/eng-loop-follow-up-task.test.cjs",
+    "eng-loop:workflow-preflight:test": "node ./.github/scripts/eng-loop-workflow-preflight.test.cjs"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,json,md,yml,yaml}": [

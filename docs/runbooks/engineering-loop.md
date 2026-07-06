@@ -436,3 +436,13 @@ PR_BODY="$(cat .tmp/eng-loop-pr-body.md)" node ./.github/scripts/validate-pr-evi
 ```
 
 <!-- ENG-LOOP-20-PR-AUTOMATION:END -->
+
+## ENG-LOOP-23 — Manual GitHub workflow entrypoint
+
+The engineering loop now has a manual GitHub Actions entrypoint:
+
+```text
+.github/workflows/engineering-loop-manual.yml
+```
+
+Dry-run is the default. Mutation-capable behavior requires explicit inputs and preflight validation. See `docs/runbooks/engineering-loop-manual-workflow.md` for operator instructions.
