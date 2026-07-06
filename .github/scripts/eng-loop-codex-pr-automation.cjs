@@ -4,7 +4,7 @@
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const path = require('node:path');
-const { spawnSync } = require('node:child_process');
+const { spawn, spawnSync } = require('node:child_process');
 const runner = require('./eng-loop-runner.cjs');
 const taskScopePolicy = require('./eng-loop-task-scope.cjs');
 
@@ -186,6 +186,118 @@ function runCommand(command, args = [], options = {}) {
     stdout,
     stderr,
     ok: result.status === 0 && !result.error,
+  };
+}
+
+function createRedactedArtifactWriter(filePath, options = {}) {
+  const maxCaptureBytes = options.maxCaptureBytes || 1024 * 1024 * 40;
+  const liveStream = options.liveStream || null;
+  const stream = fs.createWriteStream(filePath, { encoding: 'utf8' });
+  let pending = '';
+  let captured = '';
+  let capturedBytes = 0;
+
+  function capture(value) {
+    if (capturedBytes >= maxCaptureBytes) return;
+    const remaining = maxCaptureBytes - capturedBytes;
+    const chunk = Buffer.byteLength(value, 'utf8') > remaining ? value.slice(0, remaining) : value;
+    captured += chunk;
+    capturedBytes += Buffer.byteLength(chunk, 'utf8');
+  }
+
+  function writeRedacted(value) {
+    if (!value) return;
+    const redacted = redactSensitiveText(value);
+    stream.write(redacted);
+    if (liveStream) {
+      liveStream.write(redacted);
+    }
+    capture(redacted);
+  }
+
+  return {
+    write(chunk) {
+      pending += String(chunk ?? '');
+      let newlineIndex = pending.indexOf('\n');
+      while (newlineIndex !== -1) {
+        const line = pending.slice(0, newlineIndex + 1);
+        pending = pending.slice(newlineIndex + 1);
+        writeRedacted(line);
+        newlineIndex = pending.indexOf('\n');
+      }
+    },
+    async end() {
+      writeRedacted(pending);
+      pending = '';
+      await new Promise((resolve, reject) => {
+        stream.once('error', reject);
+        stream.end(resolve);
+      });
+      return captured;
+    },
+  };
+}
+
+async function runStreamingCommand(command, args = [], options = {}) {
+  const shell = options.shell ?? false;
+  const cwd = options.cwd || process.cwd();
+  if (!options.stdoutPath) throw new Error('Streaming command stdoutPath is required.');
+  if (!options.stderrPath) throw new Error('Streaming command stderrPath is required.');
+  const stdoutWriter = createRedactedArtifactWriter(options.stdoutPath, {
+    maxCaptureBytes: options.maxCaptureBytes,
+    liveStream: options.streamStdout ? process.stdout : null,
+  });
+  const stderrWriter = createRedactedArtifactWriter(options.stderrPath, {
+    maxCaptureBytes: options.maxCaptureBytes,
+    liveStream: options.streamStderr ? process.stderr : null,
+  });
+
+  let status = null;
+  let signal = null;
+  let error = null;
+
+  await new Promise((resolve) => {
+    const child = spawn(command, args, {
+      cwd,
+      shell,
+      env: { ...process.env, ...(options.env || {}) },
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (chunk) => stdoutWriter.write(chunk));
+    child.stderr.on('data', (chunk) => stderrWriter.write(chunk));
+    child.on('error', (spawnError) => {
+      error = spawnError;
+      stderrWriter.write(`${spawnError.message}\n`);
+    });
+    child.on('close', (code, closeSignal) => {
+      status = code;
+      signal = closeSignal;
+      resolve();
+    });
+
+    if (options.input !== undefined) {
+      child.stdin.end(options.input);
+    } else {
+      child.stdin.end();
+    }
+  });
+
+  const [stdout, stderr] = await Promise.all([stdoutWriter.end(), stderrWriter.end()]);
+
+  return {
+    command,
+    args,
+    cwd,
+    shell,
+    status,
+    signal,
+    error,
+    stdout,
+    stderr,
+    ok: status === 0 && !error,
   };
 }
 
@@ -499,12 +611,12 @@ function createWorktree({ cwd, task, baseBranch }) {
   return { branch, worktreePath };
 }
 
-function runCodex({ worktreePath, prompt, runDir }) {
+async function runCodex({ worktreePath, prompt, runDir }) {
   const finalMessagePath = path.join(runDir, 'codex-final-message.md');
   const stdoutPath = path.join(runDir, 'codex-stdout.jsonl');
   const stderrPath = path.join(runDir, 'codex-stderr.txt');
 
-  const result = runCommand(
+  const result = await runStreamingCommand(
     'codex',
     [
       '--ask-for-approval',
@@ -519,11 +631,16 @@ function runCodex({ worktreePath, prompt, runDir }) {
       finalMessagePath,
       '-',
     ],
-    { input: prompt, cwd: worktreePath, maxBuffer: 1024 * 1024 * 40 },
+    {
+      input: prompt,
+      cwd: worktreePath,
+      stdoutPath,
+      stderrPath,
+      maxCaptureBytes: 1024 * 1024 * 40,
+      streamStdout: true,
+      streamStderr: true,
+    },
   );
-
-  fs.writeFileSync(stdoutPath, result.stdout, 'utf8');
-  fs.writeFileSync(stderrPath, result.stderr, 'utf8');
 
   if (!result.ok) {
     throw new Error(`Codex execution failed. See ${stdoutPath} and ${stderrPath}.`);
@@ -670,7 +787,7 @@ async function runLive({ args, client, selectedTasks, cwd = process.cwd() }) {
       const worktree = createWorktree({ cwd, task: claim.selected, baseBranch: args.baseBranch });
       taskResult.worktree_path = worktree.worktreePath;
 
-      const codex = runCodex({ worktreePath: worktree.worktreePath, prompt, runDir });
+      const codex = await runCodex({ worktreePath: worktree.worktreePath, prompt, runDir });
       const validation = runValidation({
         worktreePath: worktree.worktreePath,
         validationCommand,
@@ -784,6 +901,7 @@ module.exports = {
   parseCliArgs,
   redactSensitiveText,
   runCommand,
+  runStreamingCommand,
   taskKeyFromTitle,
   validateSafeBranchName,
   validateSafeValidationCommand,

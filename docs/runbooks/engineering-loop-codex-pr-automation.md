@@ -35,6 +35,8 @@ pnpm eng-loop:first-5:claim
 
 The Codex CLI non-interactive path uses `codex exec`, which is designed for scripted or CI-style runs that finish without human interaction. The runner uses `--sandbox workspace-write`, `--ask-for-approval never`, `--json`, and `--output-last-message` so each task has captured execution evidence.
 
+As of ENG-LOOP-27, Codex execution uses a streaming child process instead of buffered `spawnSync`. Stdout is streamed to `codex-stdout.jsonl`, stderr is streamed to `codex-stderr.txt`, and the last-message file remains written through Codex CLI `--output-last-message`.
+
 ## Required environment
 
 ```bash
@@ -66,7 +68,7 @@ For each selected task, the automation performs this sequence:
 2. Create a task branch and isolated git worktree under `.tmp/eng-loop-worktrees/`.
 3. Generate `.tmp/eng-loop-runs/<run-id>/codex-prompt.md`.
 4. Run Codex CLI in non-interactive mode.
-5. Capture Codex stdout/stderr and final message.
+5. Stream Codex stdout/stderr and capture the final message.
 6. Run the task validation command.
 7. Generate a PR body.
 8. Commit changes.
