@@ -493,3 +493,7 @@ pnpm eng-loop:first-5:claim
 ```
 
 See `docs/runbooks/engineering-loop-codex-pr-automation.md` for preflight requirements, stop conditions, and evidence files.
+
+## Task scope selection
+
+Task selection scope is documented in [Engineering Loop Task Scope](./engineering-loop-task-scope.md). Use `--task-scope=all` to select any eligible GarageOS tracker task and `--task-scope=eng-loop` to preserve ENG-LOOP-only selection.

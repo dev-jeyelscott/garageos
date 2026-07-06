@@ -1,6 +1,13 @@
 #!/usr/bin/env node
 'use strict';
 
+const taskScopePolicy = require('./eng-loop-task-scope.cjs');
+const ACTIVE_TASK_SCOPE = taskScopePolicy.parseTaskScopeFromArgs(
+  process.argv.slice(2),
+  process.env,
+);
+process.env.ENG_LOOP_TASK_SCOPE = ACTIVE_TASK_SCOPE;
+
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const path = require('node:path');
@@ -1054,3 +1061,7 @@ module.exports = {
   writeJsonAtomic,
   writeRunLedger,
 };
+
+// ENG-LOOP-26 task-scope integration marker
+// The reusable task-scope policy lives in .github/scripts/eng-loop-task-scope.cjs.
+// Runner implementations should call taskScopePolicy.explainTrackerTaskEligibility(task, { taskScope: ACTIVE_TASK_SCOPE, mode }).

@@ -62,7 +62,8 @@ function testPromptIncludesAutomationBoundaries() {
     baseBranch: 'develop',
   });
 
-  assert.match(prompt, /Implement exactly one claimed GarageOS engineering-loop task/);
+  assert.match(prompt, /Implement exactly one claimed GarageOS tracker task/);
+  assert.doesNotMatch(prompt, /GarageOS GarageOS tracker task/);
   assert.match(prompt, /Do not commit/);
   assert.match(prompt, /Do not push/);
   assert.match(prompt, /Do not create a PR/);

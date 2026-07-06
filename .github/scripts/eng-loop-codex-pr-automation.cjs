@@ -301,7 +301,7 @@ function preflightLive(args, cwd = process.cwd()) {
 function buildCodexPrompt({ task, validationCommand, baseBranch }) {
   return `You are Codex CLI working in the GarageOS repository.
 
-Implement exactly one claimed GarageOS engineering-loop task.
+Implement exactly one claimed GarageOS tracker task.
 
 ## Task
 

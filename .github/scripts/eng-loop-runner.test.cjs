@@ -365,3 +365,6 @@ runTests().catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });
+
+// ENG-LOOP-26 task scope smoke tests
+require('./eng-loop-task-scope.test.cjs');
