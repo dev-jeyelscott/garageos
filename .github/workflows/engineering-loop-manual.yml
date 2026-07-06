@@ -1,0 +1,285 @@
+name: Manual Engineering Loop
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Execution mode. dry-run is default and safest.'
+        required: true
+        type: choice
+        default: dry-run
+        options:
+          - dry-run
+          - run
+      task_id:
+        description: 'Optional task key or Notion page id. Example: ENG-LOOP-23.'
+        required: false
+        type: string
+        default: ''
+      max_tasks:
+        description: 'Maximum tasks to process. ENG-LOOP-23 allows only 1 until ENG-LOOP-24 batch mode exists.'
+        required: true
+        type: choice
+        default: '1'
+        options:
+          - '1'
+      dry_run:
+        description: 'Keep the run non-mutating. Must stay true unless mode is run and mutation confirmation is provided.'
+        required: true
+        type: boolean
+        default: true
+      create_branch:
+        description: 'Allow branch-producing behavior when the runner supports it. Requires mode=run and confirmation.'
+        required: true
+        type: boolean
+        default: false
+      create_pr_body:
+        description: 'Generate PR body/evidence when task metadata is available.'
+        required: true
+        type: boolean
+        default: true
+      mutate_notion:
+        description: 'Allow Notion mutations. Requires mode=run, confirmation, and Notion token secret.'
+        required: true
+        type: boolean
+        default: false
+      run_validation:
+        description: 'Run the validation executor after runner execution.'
+        required: true
+        type: boolean
+        default: true
+      validation_command:
+        description: 'Validation command passed to the validation executor.'
+        required: true
+        type: string
+        default: 'pnpm validate:quick'
+      mutation_confirmation:
+        description: 'Required exact value for mutation-capable mode: ENG-LOOP-23-RUN'
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+  actions: read
+  checks: read
+  pull-requests: read
+
+concurrency:
+  group: engineering-loop-manual-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: Preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate manual workflow inputs
+        run: node ./.github/scripts/eng-loop-workflow-preflight.cjs
+        env:
+          INPUT_MODE: ${{ inputs.mode }}
+          INPUT_TASK_ID: ${{ inputs.task_id }}
+          INPUT_MAX_TASKS: ${{ inputs.max_tasks }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
+          INPUT_CREATE_BRANCH: ${{ inputs.create_branch }}
+          INPUT_CREATE_PR_BODY: ${{ inputs.create_pr_body }}
+          INPUT_MUTATE_NOTION: ${{ inputs.mutate_notion }}
+          INPUT_RUN_VALIDATION: ${{ inputs.run_validation }}
+          INPUT_VALIDATION_COMMAND: ${{ inputs.validation_command }}
+          INPUT_MUTATION_CONFIRMATION: ${{ inputs.mutation_confirmation }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
+
+      - name: Upload preflight plan
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: engineering-loop-preflight-${{ github.run_id }}
+          path: |
+            .tmp/eng-loop-workflow-command-plan.md
+            .tmp/eng-loop-workflow-inputs.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  dry-run:
+    name: Dry-run engineering loop
+    needs: preflight
+    if: ${{ inputs.mode == 'dry-run' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+      checks: read
+      pull-requests: read
+    env:
+      INPUT_MODE: ${{ inputs.mode }}
+      INPUT_TASK_ID: ${{ inputs.task_id }}
+      INPUT_MAX_TASKS: ${{ inputs.max_tasks }}
+      INPUT_DRY_RUN: ${{ inputs.dry_run }}
+      INPUT_CREATE_BRANCH: ${{ inputs.create_branch }}
+      INPUT_CREATE_PR_BODY: ${{ inputs.create_pr_body }}
+      INPUT_MUTATE_NOTION: ${{ inputs.mutate_notion }}
+      INPUT_RUN_VALIDATION: ${{ inputs.run_validation }}
+      INPUT_VALIDATION_COMMAND: ${{ inputs.validation_command }}
+      INPUT_MUTATION_CONFIRMATION: ${{ inputs.mutation_confirmation }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+      NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate manual workflow inputs
+        run: node ./.github/scripts/eng-loop-workflow-preflight.cjs
+
+      - name: Run engineering loop runner in dry-run mode
+        run: |
+          mkdir -p .tmp
+          node ./.github/scripts/eng-loop-runner.cjs --mode=dry-run
+
+      - name: Run local validation executor
+        if: ${{ inputs.run_validation == true }}
+        run: node ./.github/scripts/eng-loop-validation-executor.cjs -- --command "${INPUT_VALIDATION_COMMAND}"
+
+      - name: Generate PR body evidence when task metadata exists
+        if: ${{ inputs.create_pr_body == true }}
+        run: |
+          if [ -f .tmp/eng-loop-task.json ]; then
+            node ./.github/scripts/eng-loop-pr-automation.cjs --task .tmp/eng-loop-task.json
+          else
+            echo "::notice::No .tmp/eng-loop-task.json found; skipping PR body evidence generation."
+          fi
+
+      - name: Run CI status watcher when available
+        continue-on-error: true
+        run: |
+          if [ -f ./.github/scripts/eng-loop-ci-status-watcher.cjs ]; then
+            node ./.github/scripts/eng-loop-ci-status-watcher.cjs
+          else
+            echo "::notice::CI status watcher script not found; skipping."
+          fi
+
+      - name: Upload engineering loop evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: engineering-loop-manual-dry-run-${{ github.run_id }}
+          path: |
+            .tmp/eng-loop-*.json
+            .tmp/eng-loop-*.md
+            .tmp/eng-loop-*.txt
+          if-no-files-found: warn
+          retention-days: 14
+
+  controlled-run:
+    name: Controlled engineering loop run
+    needs: preflight
+    if: ${{ inputs.mode == 'run' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      actions: read
+      checks: read
+      pull-requests: write
+    env:
+      INPUT_MODE: ${{ inputs.mode }}
+      INPUT_TASK_ID: ${{ inputs.task_id }}
+      INPUT_MAX_TASKS: ${{ inputs.max_tasks }}
+      INPUT_DRY_RUN: ${{ inputs.dry_run }}
+      INPUT_CREATE_BRANCH: ${{ inputs.create_branch }}
+      INPUT_CREATE_PR_BODY: ${{ inputs.create_pr_body }}
+      INPUT_MUTATE_NOTION: ${{ inputs.mutate_notion }}
+      INPUT_RUN_VALIDATION: ${{ inputs.run_validation }}
+      INPUT_VALIDATION_COMMAND: ${{ inputs.validation_command }}
+      INPUT_MUTATION_CONFIRMATION: ${{ inputs.mutation_confirmation }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+      NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate mutation-capable inputs
+        run: node ./.github/scripts/eng-loop-workflow-preflight.cjs
+
+      - name: Run engineering loop runner in controlled mode
+        run: |
+          mkdir -p .tmp
+          node ./.github/scripts/eng-loop-runner.cjs --mode=run
+
+      - name: Run local validation executor
+        if: ${{ inputs.run_validation == true }}
+        run: node ./.github/scripts/eng-loop-validation-executor.cjs -- --command "${INPUT_VALIDATION_COMMAND}"
+
+      - name: Generate PR body evidence when task metadata exists
+        if: ${{ inputs.create_pr_body == true }}
+        run: |
+          if [ -f .tmp/eng-loop-task.json ]; then
+            node ./.github/scripts/eng-loop-pr-automation.cjs --task .tmp/eng-loop-task.json
+          else
+            echo "::notice::No .tmp/eng-loop-task.json found; skipping PR body evidence generation."
+          fi
+
+      - name: Create follow-up task on failure when explicitly enabled
+        if: ${{ failure() && inputs.mutate_notion == true }}
+        continue-on-error: true
+        run: |
+          if [ -f ./.github/scripts/eng-loop-follow-up-task.cjs ]; then
+            node ./.github/scripts/eng-loop-follow-up-task.cjs
+          else
+            echo "::notice::Follow-up task creation script not found; skipping."
+          fi
+
+      - name: Upload engineering loop evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: engineering-loop-manual-controlled-run-${{ github.run_id }}
+          path: |
+            .tmp/eng-loop-*.json
+            .tmp/eng-loop-*.md
+            .tmp/eng-loop-*.txt
+          if-no-files-found: warn
+          retention-days: 14
