@@ -119,6 +119,17 @@ function testTaskParsing() {
   assert.equal(parsed.repository, 'dev-jeyelscott/garageos');
 }
 
+function testParseTaskScopeCliArgs() {
+  const all = runner.parseCliArgs(['--mode=dry-run', '--task-scope=all'], {});
+  assert.equal(all.taskScope, 'all');
+
+  const engLoopOnly = runner.parseCliArgs(['--mode=dry-run', '--eng-loop-only'], {});
+  assert.equal(engLoopOnly.taskScope, 'eng-loop');
+
+  const allAlias = runner.parseCliArgs(['--mode=dry-run', '--all-tasks'], {});
+  assert.equal(allAlias.taskScope, 'all');
+}
+
 function testEligibility() {
   assert.equal(
     runner.isEligibleTask(
@@ -165,6 +176,36 @@ function testEligibility() {
     ),
     false,
   );
+}
+
+function testAllScopeAllowsNonEngLoopTrackerTasks() {
+  const selected = runner.selectEligibleTask(
+    [
+      page({
+        id: 'm10-01',
+        task: 'M10.01 — Implement expense categories',
+        branch: 'feat/m10-01-expense-categories',
+      }),
+    ],
+    { taskScope: 'all' },
+  );
+
+  assert.equal(selected.id, 'm10-01');
+}
+
+function testEngLoopScopeRejectsNonEngLoopTrackerTasks() {
+  const selected = runner.selectEligibleTask(
+    [
+      page({
+        id: 'm10-01',
+        task: 'M10.01 — Implement expense categories',
+        branch: 'feat/m10-01-expense-categories',
+      }),
+    ],
+    { taskScope: 'eng-loop' },
+  );
+
+  assert.equal(selected, null);
 }
 
 function testDeterministicSelection() {
@@ -337,9 +378,12 @@ async function testFirstFiveRequiresConfirmation() {
 }
 
 const tests = [
+  testParseTaskScopeCliArgs,
   testTaskParsing,
   testEligibility,
   testDeterministicSelection,
+  testAllScopeAllowsNonEngLoopTrackerTasks,
+  testEngLoopScopeRejectsNonEngLoopTrackerTasks,
   testClaimPatchUsesExistingNotionPropertyTypes,
   testClaimSummaryAndClaimExtraction,
   testLedgerLifecycle,
@@ -365,6 +409,3 @@ runTests().catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });
-
-// ENG-LOOP-26 task scope smoke tests
-require('./eng-loop-task-scope.test.cjs');

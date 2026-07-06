@@ -30,7 +30,7 @@ function nowIso() {
   return new Date().toISOString();
 }
 
-function parseCliArgs(argv = process.argv.slice(2)) {
+function parseCliArgs(argv = process.argv.slice(2), env = process.env) {
   const args = {
     mode: 'dry-run',
     actor:
@@ -43,6 +43,7 @@ function parseCliArgs(argv = process.argv.slice(2)) {
     maxTasks: 100,
     confirmFirstFive: false,
     firstFiveConfirmation: '',
+    taskScope: taskScopePolicy.parseTaskScopeFromArgs(argv, env),
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -88,6 +89,16 @@ function parseCliArgs(argv = process.argv.slice(2)) {
         args.firstFiveConfirmation = nextValue;
         if (inlineValue === undefined) index += 1;
         break;
+      case '--task-scope':
+        args.taskScope = taskScopePolicy.normalizeTaskScope(nextValue);
+        if (inlineValue === undefined) index += 1;
+        break;
+      case '--eng-loop-only':
+        args.taskScope = 'eng-loop';
+        break;
+      case '--all-tasks':
+        args.taskScope = 'all';
+        break;
       case '--help':
       case '-h':
         args.help = true;
@@ -131,6 +142,7 @@ Environment:
   GARAGEOS_NOTION_TASK_DATABASE_ID or NOTION_TASK_DATABASE_ID
   ENG_LOOP_ACTOR
   ENG_LOOP_STALE_CLAIM_HOURS
+  ENG_LOOP_TASK_SCOPE=all | eng-loop
 
 Options:
   --tasks-file <path>           Read a local Notion-like fixture file for dry-run/test use.
@@ -138,6 +150,9 @@ Options:
   --database-id <id>            Notion task database id.
   --token <token>               Notion integration token.
   --stale-claim-hours <hours>   Stale claim threshold. Default: ${DEFAULT_STALE_CLAIM_HOURS}.
+  --task-scope <scope>           Select all tracker tasks or only ENG-LOOP tasks. Values: all, eng-loop.
+  --all-tasks                    Alias for --task-scope all.
+  --eng-loop-only                Alias for --task-scope eng-loop.
 `);
 }
 
@@ -302,14 +317,23 @@ function isEligibleTask(task, options = {}) {
   const status = normalizeComparable(task.status);
   const title = normalizeText(task.title);
 
-  if (!title || !/ENG-LOOP-\d+/i.test(title)) return false;
+  if (!title) return false;
   if (!task.codexReady) return false;
   if (!allowedStatuses.includes(status)) return false;
 
   const claim = extractClaimFromProgressSource(task.progressSource);
   if (claim.hasClaimMarker) return false;
 
-  return true;
+  const trackerEligibility = taskScopePolicy.explainTrackerTaskEligibility(task.raw ?? task, {
+    taskScope: options.taskScope || ACTIVE_TASK_SCOPE,
+    mode: options.mode || 'dry-run',
+    requireCodexReady: false,
+    strictMetadata: Boolean(options.strictMetadata),
+    mutationCapable: Boolean(options.mutationCapable),
+    allowAnySelectableStatus: true,
+  });
+
+  return trackerEligibility.eligible;
 }
 
 function compareTasks(left, right) {
@@ -704,7 +728,7 @@ function createClientFromArgs(args) {
 async function runDryRun({ client, args, cwd = process.cwd() }) {
   void cwd;
   const pages = await client.listTaskPages();
-  const selected = selectEligibleTask(pages);
+  const selected = selectEligibleTask(pages, { taskScope: args.taskScope });
 
   console.log('Engineering loop dry-run mode');
   console.log(`Scanned task pages: ${pages.length}`);
@@ -750,7 +774,7 @@ async function claimSelectedTask({ client, args, cwd = process.cwd(), selected, 
     const beforePage = await client.fetchPage(selected.id);
     const beforeTask = taskFromPage(beforePage);
 
-    if (!isEligibleTask(beforeTask)) {
+    if (!isEligibleTask(beforeTask, { taskScope: args.taskScope })) {
       const stale = isClaimStale(beforeTask, args.staleClaimHours);
       const message = stale
         ? `Claim conflict: selected task has a stale or existing claim. Manual recovery required before reuse. Task status is ${beforeTask.status}.`
@@ -837,7 +861,7 @@ async function runClaim({ client, args, cwd = process.cwd() }) {
   }
 
   const pages = await client.listTaskPages();
-  const selected = selectEligibleTask(pages);
+  const selected = selectEligibleTask(pages, { taskScope: args.taskScope });
 
   console.log('Engineering loop claim mode');
   console.log(`Scanned task pages: ${pages.length}`);
@@ -853,7 +877,10 @@ async function runClaim({ client, args, cwd = process.cwd() }) {
 
 async function runFirstFiveDryRun({ client, args, cwd = process.cwd() }) {
   const pages = await client.listTaskPages();
-  const selectedTasks = selectEligibleTasks(pages, { limit: FIRST_FIVE_BATCH_LIMIT });
+  const selectedTasks = selectEligibleTasks(pages, {
+    limit: FIRST_FIVE_BATCH_LIMIT,
+    taskScope: args.taskScope,
+  });
   const summary = createBatchSummary({
     mode: 'first-5-dry-run',
     dryRun: true,
@@ -904,7 +931,10 @@ async function runFirstFive({ client, args, cwd = process.cwd() }) {
   }
 
   const pages = await client.listTaskPages();
-  const selectedTasks = selectEligibleTasks(pages, { limit: FIRST_FIVE_BATCH_LIMIT });
+  const selectedTasks = selectEligibleTasks(pages, {
+    limit: FIRST_FIVE_BATCH_LIMIT,
+    taskScope: args.taskScope,
+  });
   const summary = createBatchSummary({
     mode: 'first-5',
     dryRun: false,
