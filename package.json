@@ -49,7 +49,9 @@
     "eng-loop:dry-run": "node ./.github/scripts/eng-loop-runner.cjs --mode=dry-run",
     "test:eng-loop": "node --test ./.github/scripts/tests/run-engineering-loop-dry-run.test.cjs",
     "eng-loop:claim": "node ./.github/scripts/eng-loop-runner.cjs --mode=claim",
-    "eng-loop:test": "node ./.github/scripts/eng-loop-runner.test.cjs"
+    "eng-loop:test": "node ./.github/scripts/eng-loop-runner.test.cjs",
+    "eng-loop:validate": "node ./.github/scripts/eng-loop-validation-executor.cjs",
+    "eng-loop:validation-executor:test": "node --test ./.github/scripts/eng-loop-validation-executor.test.cjs"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,json,md,yml,yaml}": [
