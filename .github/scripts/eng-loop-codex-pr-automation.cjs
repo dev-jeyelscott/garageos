@@ -501,16 +501,17 @@ function runCodex({ worktreePath, prompt, runDir }) {
   const finalMessagePath = path.join(runDir, 'codex-final-message.md');
   const stdoutPath = path.join(runDir, 'codex-stdout.jsonl');
   const stderrPath = path.join(runDir, 'codex-stderr.txt');
+
   const result = runCommand(
     'codex',
     [
+      '--ask-for-approval',
+      'never',
       'exec',
       '--cd',
       worktreePath,
       '--sandbox',
       'workspace-write',
-      '--ask-for-approval',
-      'never',
       '--json',
       '--output-last-message',
       finalMessagePath,
@@ -529,6 +530,7 @@ function runCodex({ worktreePath, prompt, runDir }) {
   const finalMessage = fs.existsSync(finalMessagePath)
     ? fs.readFileSync(finalMessagePath, 'utf8')
     : '';
+
   return { finalMessagePath, stdoutPath, stderrPath, finalMessage };
 }
 
