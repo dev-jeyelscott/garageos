@@ -2,6 +2,9 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const automation = require('./eng-loop-codex-pr-automation.cjs');
 
 function task(overrides = {}) {
@@ -141,6 +144,47 @@ function testTaskKeyExtraction() {
   assert.equal(automation.taskKeyFromTitle('M10.01 — Implement expense categories'), 'M10.01');
 }
 
+async function testStreamingCommandWritesRedactedArtifacts() {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'eng-loop-codex-stream-'));
+  const stdoutPath = path.join(tmpDir, 'codex-stdout.jsonl');
+  const stderrPath = path.join(tmpDir, 'codex-stderr.txt');
+
+  const result = await automation.runStreamingCommand(
+    process.execPath,
+    [
+      '-e',
+      [
+        'process.stdout.write(\'{"type":"started"}\\n\')',
+        "process.stderr.write('NOTION_TOKEN=secret_abc\\n')",
+        'setTimeout(() => { process.stdout.write(\'{"type":"finished"}\\n\') }, 10)',
+      ].join(';'),
+    ],
+    { stdoutPath, stderrPath },
+  );
+
+  assert.equal(result.ok, true, result.stderr || result.error?.message || 'stream command failed');
+  assert.match(fs.readFileSync(stdoutPath, 'utf8'), /"type":"started"/);
+  assert.match(fs.readFileSync(stdoutPath, 'utf8'), /"type":"finished"/);
+  assert.equal(fs.readFileSync(stderrPath, 'utf8').includes('secret_abc'), false);
+  assert.match(fs.readFileSync(stderrPath, 'utf8'), /NOTION_TOKEN=\[REDACTED\]/);
+}
+
+async function testStreamingCommandPreservesFailureStatus() {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'eng-loop-codex-stream-failure-'));
+  const stdoutPath = path.join(tmpDir, 'codex-stdout.jsonl');
+  const stderrPath = path.join(tmpDir, 'codex-stderr.txt');
+
+  const result = await automation.runStreamingCommand(
+    process.execPath,
+    ['-e', "process.stderr.write('codex failed\\n'); process.exit(7)"],
+    { stdoutPath, stderrPath },
+  );
+
+  assert.equal(result.ok, false);
+  assert.equal(result.status, 7);
+  assert.match(fs.readFileSync(stderrPath, 'utf8'), /codex failed/);
+}
+
 const tests = [
   testParseCliArgs,
   testRejectsUnsafeModeAndLimit,
@@ -153,11 +197,20 @@ const tests = [
   testPlanMarkdownIncludesCodexFlow,
   testRedactsSensitiveOutput,
   testTaskKeyExtraction,
+  testStreamingCommandWritesRedactedArtifacts,
+  testStreamingCommandPreservesFailureStatus,
 ];
 
-for (const test of tests) {
-  test();
-  console.log(`passed: ${test.name}`);
+async function main() {
+  for (const test of tests) {
+    await test();
+    console.log(`passed: ${test.name}`);
+  }
+
+  console.log(`All ${tests.length} Codex PR automation tests passed.`);
 }
 
-console.log(`All ${tests.length} Codex PR automation tests passed.`);
+main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});
