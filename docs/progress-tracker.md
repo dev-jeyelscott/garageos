@@ -409,7 +409,3 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 ## Unmilestoned Notion Records
 
 - [x] **Done** — [Review] garageos@aa88188 — AI code review completed with 10 findings
-
-<!-- ENG-LOOP-23 manual workflow update -->
-
-ENG-LOOP-23 — Add manual GitHub workflow entrypoint is In Progress. Manual workflow entrypoint implementation bundle applied.
