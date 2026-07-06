@@ -49,15 +49,17 @@
     "eng-loop:dry-run": "node ./.github/scripts/eng-loop-runner.cjs --mode=dry-run",
     "test:eng-loop": "node --test ./.github/scripts/tests/run-engineering-loop-dry-run.test.cjs",
     "eng-loop:claim": "node ./.github/scripts/eng-loop-runner.cjs --mode=claim",
-    "eng-loop:test": "node ./.github/scripts/eng-loop-runner.test.cjs && node ./.github/scripts/eng-loop-pr-automation.test.cjs && node ./.github/scripts/eng-loop-follow-up-task.test.cjs && node ./.github/scripts/eng-loop-workflow-preflight.test.cjs",
+    "eng-loop:test": "node ./.github/scripts/eng-loop-runner.test.cjs && node ./.github/scripts/eng-loop-pr-automation.test.cjs && node ./.github/scripts/eng-loop-follow-up-task.test.cjs && node ./.github/scripts/eng-loop-workflow-preflight.test.cjs && node ./.github/scripts/eng-loop-codex-pr-automation.test.cjs",
     "eng-loop:validate": "node ./.github/scripts/eng-loop-validation-executor.cjs",
     "eng-loop:validation-executor:test": "node --test ./.github/scripts/eng-loop-validation-executor.test.cjs",
     "eng-loop:prepare-pr": "node ./.github/scripts/eng-loop-pr-automation.cjs",
     "eng-loop:follow-up": "node ./.github/scripts/eng-loop-follow-up-task.cjs",
     "eng-loop:follow-up:test": "node ./.github/scripts/eng-loop-follow-up-task.test.cjs",
     "eng-loop:workflow-preflight:test": "node ./.github/scripts/eng-loop-workflow-preflight.test.cjs",
-    "eng-loop:first-5:dry-run": "node ./.github/scripts/eng-loop-runner.cjs --mode=first-5-dry-run",
-    "eng-loop:first-5": "node ./.github/scripts/eng-loop-runner.cjs --mode=first-5 --confirm-first-5"
+    "eng-loop:first-5:dry-run": "node ./.github/scripts/eng-loop-codex-pr-automation.cjs --mode=dry-run --limit=5",
+    "eng-loop:first-5": "node ./.github/scripts/eng-loop-codex-pr-automation.cjs --mode=live --limit=5 --confirm-codex-pr",
+    "eng-loop:first-5:claim": "node ./.github/scripts/eng-loop-runner.cjs --mode=first-5 --confirm-first-5",
+    "eng-loop:codex-pr:test": "node ./.github/scripts/eng-loop-codex-pr-automation.test.cjs"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,json,md,yml,yaml}": [
