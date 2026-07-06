@@ -1,0 +1,11 @@
+{
+  "required_checks": ["validate", "PR Validation Evidence"],
+  "aliases": {
+    "validate": ["validate", "CI / validate", "Validation / validate", "pnpm validate:quick"],
+    "PR Validation Evidence": [
+      "PR Validation Evidence",
+      "pr-validation-evidence",
+      "validate-pr-evidence"
+    ]
+  }
+}
