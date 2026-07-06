@@ -238,6 +238,20 @@ function createRedactedArtifactWriter(filePath, options = {}) {
   };
 }
 
+function resolveCodexSpawnOptions() {
+  if (process.platform === 'win32') {
+    return {
+      command: 'codex.cmd',
+      shell: true,
+    };
+  }
+
+  return {
+    command: 'codex',
+    shell: false,
+  };
+}
+
 async function runStreamingCommand(command, args = [], options = {}) {
   const shell = options.shell ?? false;
   const cwd = options.cwd || process.cwd();
@@ -301,14 +315,20 @@ async function runStreamingCommand(command, args = [], options = {}) {
   };
 }
 
-function requireCommand(command, args = ['--version']) {
-  const result = runCommand(command, args);
-  if (!result.ok) {
+function requireCommand(command, options = {}) {
+  const result = spawnSync(command, ['--version'], {
+    encoding: 'utf8',
+    shell: options.shell === true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  if (result.error || result.status !== 0) {
+    const stderr = result.stderr ? result.stderr.trim() : '';
+    const errorMessage = result.error ? result.error.message : stderr;
     throw new Error(
-      `Required command is unavailable or not authenticated: ${command}. STDERR: ${result.stderr || result.error?.message || '(empty)'}`,
+      `Required command is unavailable or not authenticated: ${command}. STDERR: ${errorMessage}`,
     );
   }
-  return result;
 }
 
 function validateSafeBranchName(branch) {
@@ -416,7 +436,8 @@ function preflightLive(args, cwd = process.cwd()) {
   assertCleanGitTree(cwd, args.allowDirty);
   requireCommand('git');
   requireCommand('gh');
-  requireCommand('codex');
+  const codexSpawnOptions = resolveCodexSpawnOptions();
+  requireCommand(codexSpawnOptions.command, { shell: codexSpawnOptions.shell });
 
   const ghAuth = runCommand('gh', ['auth', 'status'], { cwd });
   if (!ghAuth.ok) throw new Error(`GitHub CLI auth is not ready: ${ghAuth.stderr}`);
@@ -615,9 +636,10 @@ async function runCodex({ worktreePath, prompt, runDir }) {
   const finalMessagePath = path.join(runDir, 'codex-final-message.md');
   const stdoutPath = path.join(runDir, 'codex-stdout.jsonl');
   const stderrPath = path.join(runDir, 'codex-stderr.txt');
+  const codexSpawnOptions = resolveCodexSpawnOptions();
 
   const result = await runStreamingCommand(
-    'codex',
+    codexSpawnOptions.command,
     [
       '--ask-for-approval',
       'never',
@@ -634,6 +656,7 @@ async function runCodex({ worktreePath, prompt, runDir }) {
     {
       input: prompt,
       cwd: worktreePath,
+      shell: codexSpawnOptions.shell,
       stdoutPath,
       stderrPath,
       maxCaptureBytes: 1024 * 1024 * 40,
