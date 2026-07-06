@@ -10,39 +10,39 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 
 | Status                  |   Cards |
 | ----------------------- | ------: |
-| Done                    |     203 |
-| In Progress             |       1 |
+| Done                    |     204 |
+| In Progress             |       0 |
 | Ready                   |       1 |
 | Backlog                 |     103 |
 | **Total tracked cards** | **308** |
 
 ## Milestone Status Summary
 
-| Milestone    | Status Summary                    | Notes                                                                             |
-| ------------ | --------------------------------- | --------------------------------------------------------------------------------- |
-| M0           | 38 Done, 1 In Progress, 4 Backlog | ENG-LOOP-19 done; ENG-LOOP-20 in progress; ENG-LOOP-21 through ENG-LOOP-24 queued |
-| M1           | 18 Done                           | Complete                                                                          |
-| M2           | 22 Done                           | Complete                                                                          |
-| M3           | 19 Done                           | Complete                                                                          |
-| M4           | 15 Done                           | Complete                                                                          |
-| M5           | 16 Done                           | Complete                                                                          |
-| M6           | 16 Done                           | Complete                                                                          |
-| M7           | 16 Done                           | Complete                                                                          |
-| M8           | 14 Done                           | Complete                                                                          |
-| M9           | 28 Done                           | Complete                                                                          |
-| M10          | 15 Backlog, 1 Ready               | M10.01 ready                                                                      |
-| M11          | 18 Backlog                        | Not started                                                                       |
-| M12          | 16 Backlog                        | Not started                                                                       |
-| M13          | 20 Backlog                        | Security and observability hardening backlog                                      |
-| M14          | 40 Backlog                        | Not started                                                                       |
-| No milestone | 1 Done                            | Review record                                                                     |
+| Milestone    | Status Summary      | Notes                                                    |
+| ------------ | ------------------- | -------------------------------------------------------- |
+| M0           | 39 Done, 4 Backlog  | ENG-LOOP-20 done; ENG-LOOP-21 through ENG-LOOP-24 queued |
+| M1           | 18 Done             | Complete                                                 |
+| M2           | 22 Done             | Complete                                                 |
+| M3           | 19 Done             | Complete                                                 |
+| M4           | 15 Done             | Complete                                                 |
+| M5           | 16 Done             | Complete                                                 |
+| M6           | 16 Done             | Complete                                                 |
+| M7           | 16 Done             | Complete                                                 |
+| M8           | 14 Done             | Complete                                                 |
+| M9           | 28 Done             | Complete                                                 |
+| M10          | 15 Backlog, 1 Ready | M10.01 ready                                             |
+| M11          | 18 Backlog          | Not started                                              |
+| M12          | 16 Backlog          | Not started                                              |
+| M13          | 20 Backlog          | Security and observability hardening backlog             |
+| M14          | 40 Backlog          | Not started                                              |
+| No milestone | 1 Done              | Review record                                            |
 
 ## Current Focus
 
 - [x] **Done** — ENG-LOOP-17 — Add engineering loop runner dry-run mode
 - [x] **Done** — ENG-LOOP-18 — Add task claiming and run ledger
 - [x] **Done** — ENG-LOOP-19 — Add local validation executor
-- [ ] **In Progress** — ENG-LOOP-20 — Add PR body and branch automation
+- [x] **Done** — ENG-LOOP-20 — Add PR body and branch automation
 - [ ] **Backlog** — ENG-LOOP-21 — Add GitHub CI status watcher
 - [ ] **Backlog** — ENG-LOOP-22 — Add follow-up task creation
 - [ ] **Backlog** — ENG-LOOP-23 — Add manual GitHub workflow entrypoint
@@ -88,7 +88,7 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - [x] **Done** — ENG-LOOP-17 — Add engineering loop runner dry-run mode
 - [x] **Done** — ENG-LOOP-18 — Add task claiming and run ledger
 - [x] **Done** — ENG-LOOP-19 — Add local validation executor
-- [ ] **In Progress** — ENG-LOOP-20 — Add PR body and branch automation
+- [x] **Done** — ENG-LOOP-20 — Add PR body and branch automation
 - [ ] **Backlog** — ENG-LOOP-21 — Add GitHub CI status watcher
 - [ ] **Backlog** — ENG-LOOP-22 — Add follow-up task creation
 - [ ] **Backlog** — ENG-LOOP-23 — Add manual GitHub workflow entrypoint
