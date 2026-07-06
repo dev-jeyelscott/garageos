@@ -9,7 +9,7 @@ require('dotenv').config({
 const DATABASE_URL = process.env.DATABASE_URL;
 
 const EXPECTED = {
-  migrationCount: 29,
+  migrationCount: 30,
   publicTableCount: 109,
   subscriptionPlans: 3,
   subscriptionPlanLimits: 27,
