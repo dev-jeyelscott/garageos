@@ -67,6 +67,19 @@ function testValidationCommandGuard() {
   );
 }
 
+function testRunCommandDefaultsToArgvMode() {
+  const commitMessage = 'chore(engineering): m10.01 automation task';
+  const result = automation.runCommand(process.execPath, [
+    '-e',
+    'process.stdout.write(JSON.stringify(process.argv.slice(1)))',
+    commitMessage,
+  ]);
+
+  assert.equal(result.shell, false);
+  assert.equal(result.ok, true, result.stderr || result.error?.message || 'runCommand failed');
+  assert.deepEqual(JSON.parse(result.stdout), [commitMessage]);
+}
+
 function testPromptIncludesAutomationBoundaries() {
   const prompt = automation.buildCodexPrompt({
     task: task(),
@@ -134,6 +147,7 @@ const tests = [
   testTaskScopeAliases,
   testSafeBranchValidation,
   testValidationCommandGuard,
+  testRunCommandDefaultsToArgvMode,
   testPromptIncludesAutomationBoundaries,
   testPrBodyContainsRequiredSections,
   testPlanMarkdownIncludesCodexFlow,
