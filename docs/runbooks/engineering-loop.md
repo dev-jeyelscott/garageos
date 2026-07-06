@@ -470,3 +470,26 @@ Manual workflow execution must use `max_tasks=5`, `dry_run=false`, and `mutation
 ### Stop conditions
 
 The batch stops immediately on claim conflict, malformed task, validation failure, CI failure, unsafe state, follow-up creation, or unexpected runner error. Downstream tasks must not be processed after the first failure.
+
+## Codex-Powered First-5 PR Automation
+
+The live first-5 command now delegates implementation work to Codex CLI and creates reviewable PRs:
+
+```bash
+pnpm eng-loop:first-5
+```
+
+Use the dry-run command first to inspect the planned task, branch, Codex, validation, push, and PR actions:
+
+```bash
+pnpm eng-loop:first-5:dry-run
+cat .tmp/eng-loop-codex-pr-plan.md
+```
+
+The previous claim-only behavior remains available as:
+
+```bash
+pnpm eng-loop:first-5:claim
+```
+
+See `docs/runbooks/engineering-loop-codex-pr-automation.md` for preflight requirements, stop conditions, and evidence files.
