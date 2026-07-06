@@ -388,3 +388,51 @@ Before marking a milestone complete or approving release-candidate work, use `do
 Before closing a GarageOS milestone or preparing release-candidate work, use `docs/runbooks/release-readiness.md` as the canonical readiness checklist.
 
 This checklist must be used with the existing PR evidence guard, branch protection requirements, validation profiles, QA acceptance criteria, and progress tracker closeout steps.
+
+<!-- ENG-LOOP-20-PR-AUTOMATION:START -->
+
+## ENG-LOOP-20 — Branch and PR Body Automation
+
+The engineering loop can prepare local branch and pull-request artifacts for the currently selected or claimed task.
+
+### Commands
+
+```bash
+pnpm eng-loop:prepare-pr
+```
+
+The script writes these local artifacts:
+
+```text
+.tmp/eng-loop-pr-body.md
+.tmp/eng-loop-pr-automation-metadata.json
+.tmp/eng-loop-pr-command-plan.md
+```
+
+### Resolution Rules
+
+- Branch name comes from the task `Branch` field when present.
+- Commit message comes from the task `Commit Message` field when present.
+- PR title comes from the task `Task` title.
+- Missing optional branch and commit metadata use deterministic fallbacks.
+- Unsafe branch names are rejected before output is written.
+
+### Safety Rules
+
+- The script does not run `git push`.
+- The script does not create remote branches.
+- The script does not create GitHub pull requests.
+- Remote mutation flags are rejected in ENG-LOOP-20.
+- Generated PR body content is checked by `.github/scripts/validate-pr-evidence.cjs`.
+
+### Required Sequence
+
+```bash
+pnpm eng-loop:test
+pnpm eng-loop:dry-run
+pnpm eng-loop:validate -- --command "pnpm validate:quick"
+pnpm eng-loop:prepare-pr
+PR_BODY="$(cat .tmp/eng-loop-pr-body.md)" node ./.github/scripts/validate-pr-evidence.cjs
+```
+
+<!-- ENG-LOOP-20-PR-AUTOMATION:END -->

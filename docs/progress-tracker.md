@@ -10,17 +10,17 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 
 | Status                  |   Cards |
 | ----------------------- | ------: |
-| Done                    |     203 |
+| Done                    |     204 |
 | In Progress             |       0 |
 | Ready                   |       1 |
-| Backlog                 |     104 |
+| Backlog                 |     103 |
 | **Total tracked cards** | **308** |
 
 ## Milestone Status Summary
 
 | Milestone    | Status Summary      | Notes                                                    |
 | ------------ | ------------------- | -------------------------------------------------------- |
-| M0           | 38 Done, 5 Backlog  | ENG-LOOP-19 done; ENG-LOOP-20 through ENG-LOOP-24 queued |
+| M0           | 39 Done, 4 Backlog  | ENG-LOOP-20 done; ENG-LOOP-21 through ENG-LOOP-24 queued |
 | M1           | 18 Done             | Complete                                                 |
 | M2           | 22 Done             | Complete                                                 |
 | M3           | 19 Done             | Complete                                                 |
@@ -42,7 +42,7 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - [x] **Done** — ENG-LOOP-17 — Add engineering loop runner dry-run mode
 - [x] **Done** — ENG-LOOP-18 — Add task claiming and run ledger
 - [x] **Done** — ENG-LOOP-19 — Add local validation executor
-- [ ] **Backlog** — ENG-LOOP-20 — Add PR body and branch automation
+- [x] **Done** — ENG-LOOP-20 — Add PR body and branch automation
 - [ ] **Backlog** — ENG-LOOP-21 — Add GitHub CI status watcher
 - [ ] **Backlog** — ENG-LOOP-22 — Add follow-up task creation
 - [ ] **Backlog** — ENG-LOOP-23 — Add manual GitHub workflow entrypoint
@@ -88,7 +88,7 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - [x] **Done** — ENG-LOOP-17 — Add engineering loop runner dry-run mode
 - [x] **Done** — ENG-LOOP-18 — Add task claiming and run ledger
 - [x] **Done** — ENG-LOOP-19 — Add local validation executor
-- [ ] **Backlog** — ENG-LOOP-20 — Add PR body and branch automation
+- [x] **Done** — ENG-LOOP-20 — Add PR body and branch automation
 - [ ] **Backlog** — ENG-LOOP-21 — Add GitHub CI status watcher
 - [ ] **Backlog** — ENG-LOOP-22 — Add follow-up task creation
 - [ ] **Backlog** — ENG-LOOP-23 — Add manual GitHub workflow entrypoint
