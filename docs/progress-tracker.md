@@ -10,32 +10,32 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 
 | Status                  |   Cards |
 | ----------------------- | ------: |
-| Done                    |     208 |
-| In Progress             |       1 |
+| Done                    |     209 |
+| In Progress             |       0 |
 | Ready                   |       1 |
 | Backlog                 |      99 |
 | **Total tracked cards** | **309** |
 
 ## Milestone Status Summary
 
-| Milestone    | Status Summary         | Notes                                        |
-| ------------ | ---------------------- | -------------------------------------------- |
-| M0           | 43 Done, 1 In Progress | ENG-LOOP-25 Codex PR automation in progress  |
-| M1           | 18 Done                | Complete                                     |
-| M2           | 22 Done                | Complete                                     |
-| M3           | 19 Done                | Complete                                     |
-| M4           | 15 Done                | Complete                                     |
-| M5           | 16 Done                | Complete                                     |
-| M6           | 16 Done                | Complete                                     |
-| M7           | 16 Done                | Complete                                     |
-| M8           | 14 Done                | Complete                                     |
-| M9           | 28 Done                | Complete                                     |
-| M10          | 15 Backlog, 1 Ready    | M10.01 ready                                 |
-| M11          | 18 Backlog             | Not started                                  |
-| M12          | 16 Backlog             | Not started                                  |
-| M13          | 20 Backlog             | Security and observability hardening backlog |
-| M14          | 40 Backlog             | Not started                                  |
-| No milestone | 1 Done                 | Review record                                |
+| Milestone    | Status Summary      | Notes                                        |
+| ------------ | ------------------- | -------------------------------------------- |
+| M0           | 44 Done             | Complete                                     |
+| M1           | 18 Done             | Complete                                     |
+| M2           | 22 Done             | Complete                                     |
+| M3           | 19 Done             | Complete                                     |
+| M4           | 15 Done             | Complete                                     |
+| M5           | 16 Done             | Complete                                     |
+| M6           | 16 Done             | Complete                                     |
+| M7           | 16 Done             | Complete                                     |
+| M8           | 14 Done             | Complete                                     |
+| M9           | 28 Done             | Complete                                     |
+| M10          | 15 Backlog, 1 Ready | M10.01 ready                                 |
+| M11          | 18 Backlog          | Not started                                  |
+| M12          | 16 Backlog          | Not started                                  |
+| M13          | 20 Backlog          | Security and observability hardening backlog |
+| M14          | 40 Backlog          | Not started                                  |
+| No milestone | 1 Done              | Review record                                |
 
 ## Current Focus
 
@@ -47,7 +47,7 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - [x] **Done** — ENG-LOOP-22 — Add follow-up task creation
 - [x] **Done** — ENG-LOOP-23 — Add manual GitHub workflow entrypoint
 - [x] **Done** — ENG-LOOP-24 — Add first-5 batch mode
-- [ ] **In Progress** — ENG-LOOP-25 — Add Codex-powered first-5 PR automation
+- [x] **Done** — ENG-LOOP-25 — Add Codex-powered first-5 PR automation
 - [ ] **Ready** — M10.01 — Implement expense categories
 
 ---
@@ -94,7 +94,7 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - [x] **Done** — ENG-LOOP-22 — Add follow-up task creation
 - [x] **Done** — ENG-LOOP-23 — Add manual GitHub workflow entrypoint
 - [x] **Done** — ENG-LOOP-24 — Add first-5 batch mode
-- [ ] **In Progress** — ENG-LOOP-25 — Add Codex-powered first-5 PR automation
+- [x] **Done** — ENG-LOOP-25 — Add Codex-powered first-5 PR automation
 
 ## M1 — Database Foundation and Core Migrations
 
