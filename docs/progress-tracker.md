@@ -10,33 +10,33 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 
 | Status                  |   Cards |
 | ----------------------- | ------: |
-| Done                    |     215 |
-| Ready                   |       1 |
+| Done                    |     217 |
+| Ready                   |       8 |
 | Review                  |       1 |
 | Reviewed                |       1 |
 | Backlog                 |     114 |
-| **Total tracked cards** | **332** |
+| **Total tracked cards** | **341** |
 
 ## Milestone Status Summary
 
-| Milestone    | Status Summary                | Notes                                        |
-| ------------ | ----------------------------- | -------------------------------------------- |
-| M0           | 49 Done, 6 Backlog            | Engineering loop complete; hardening backlog |
-| M1           | 18 Done                       | Complete                                     |
-| M2           | 22 Done                       | Complete                                     |
-| M3           | 19 Done                       | Complete                                     |
-| M4           | 15 Done                       | Complete                                     |
-| M5           | 16 Done                       | Complete                                     |
-| M6           | 16 Done                       | Complete                                     |
-| M7           | 16 Done                       | Complete                                     |
-| M8           | 14 Done                       | Complete                                     |
-| M9           | 28 Done                       | Complete                                     |
-| M10          | 1 Done, 1 Ready, 14 Backlog   | M10.02 ready; M10.01 done                    |
-| M11          | 18 Backlog                    | Not started                                  |
-| M12          | 16 Backlog                    | Not started                                  |
-| M13          | 19 Backlog, 1 Review          | Security and observability hardening backlog |
-| M14          | 40 Backlog                    | Not started                                  |
-| No milestone | 1 Done, 1 Reviewed, 1 Backlog | Review/follow-up records                     |
+| Milestone    | Status Summary                | Notes                                                   |
+| ------------ | ----------------------------- | ------------------------------------------------------- |
+| M0           | 49 Done, 8 Ready, 6 Backlog   | Engineering loop complete; PR AI/merge automation ready |
+| M1           | 18 Done                       | Complete                                                |
+| M2           | 22 Done                       | Complete                                                |
+| M3           | 19 Done                       | Complete                                                |
+| M4           | 15 Done                       | Complete                                                |
+| M5           | 16 Done                       | Complete                                                |
+| M6           | 16 Done                       | Complete                                                |
+| M7           | 16 Done                       | Complete                                                |
+| M8           | 14 Done                       | Complete                                                |
+| M9           | 28 Done                       | Complete                                                |
+| M10          | 3 Done, 14 Backlog            | M10.01, M10.02, and M10.02-FU01 done                    |
+| M11          | 18 Backlog                    | Not started                                             |
+| M12          | 16 Backlog                    | Not started                                             |
+| M13          | 19 Backlog, 1 Review          | Security and observability hardening backlog            |
+| M14          | 40 Backlog                    | Not started                                             |
+| No milestone | 1 Done, 1 Reviewed, 1 Backlog | Review/follow-up records                                |
 
 ---
 
@@ -85,6 +85,14 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - [x] **Done** — ENG-LOOP-25 — Add Codex-powered first-5 PR automation
 - [x] **Done** — ENG-LOOP-26 — Generalize engineering loop task selection to all tracker tasks
 - [x] **Done** — ENG-LOOP-27 — Stream Codex execution output during automation
+- [ ] **Ready** — ENG-LOOP-28 — Audit existing AI reviewer and merge-readiness reuse
+- [ ] **Ready** — ENG-LOOP-29 — Add deterministic PR merge gate
+- [ ] **Ready** — ENG-LOOP-30 — Add PR risk classifier
+- [ ] **Ready** — ENG-LOOP-31 — Add AI PR review runner
+- [ ] **Ready** — ENG-LOOP-32 — Add PR AI review gate workflow
+- [ ] **Ready** — ENG-LOOP-33 — Add guarded merge executor in manual mode
+- [ ] **Ready** — ENG-LOOP-34 — Integrate merge gate failures with follow-up task creation
+- [ ] **Ready** — ENG-LOOP-35 — Auto-complete merged PR task tracker updates
 - [x] **Done** — [Review] garageos develop after d670010 — 1 finding
 - [x] **Done** — [Review] garageos develop@2420bbc — 1 finding
 - [x] **Done** — [Review] garageos develop@ec8b55d — 1 finding
@@ -292,7 +300,8 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 ## M10 — Expenses, Reminders, Notifications, Integrations
 
 - [x] **Done** — M10.01 — Implement expense categories
-- [ ] **Ready** — M10.02 — Implement expense create/read/update/void
+- [x] **Done** — M10.02 — Implement expense create/read/update/void
+- [x] **Done** — M10.02-FU01 — Fix PR #45 expense API review findings before merge
 - [ ] **Backlog** — M10.03 — Implement expense financial report basis
 - [ ] **Backlog** — M10.04 — Implement reminder rules
 - [ ] **Backlog** — M10.05 — Implement reminder scheduling worker
