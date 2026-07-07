@@ -430,7 +430,7 @@ Validation profile scripts are package-level commands. GitHub branch protection 
 
 Current emitted validation-related checks:
 
-- `Advisory AI PR Review`
+- `GarageOS AI Review / advisory`
 - `Dependency audit and security profile`
 - `Semgrep static security scan`
 - `Validate PR evidence`

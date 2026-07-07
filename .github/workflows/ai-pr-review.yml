@@ -1,4 +1,4 @@
-name: AI PR Review
+name: GarageOS AI Review
 
 on:
   pull_request:
@@ -31,8 +31,8 @@ env:
   OPENAI_CONFIGURED: 'false'
 
 jobs:
-  ai-pr-review:
-    name: Advisory AI PR Review
+  advisory:
+    name: advisory
     runs-on: ubuntu-latest
     timeout-minutes: 15
     if: >-
@@ -66,14 +66,28 @@ jobs:
             echo "OPENAI_CONFIGURED=false" >> "$GITHUB_ENV"
           fi
 
-      - name: Skip when OpenAI key is not configured
-        if: ${{ env.OPENAI_CONFIGURED != 'true' }}
-        run: |
-          echo "OPENAI_API_KEY is not configured; skipping advisory AI PR review."
+      - name: Classify PR risk
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: node ./.github/scripts/pr-risk-classifier.cjs --git --base "origin/${{ github.base_ref }}"
 
-      - name: Run advisory OpenAI review
-        if: ${{ env.OPENAI_CONFIGURED == 'true' }}
+      - name: Run advisory AI review gate
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GITHUB_TOKEN: ${{ github.token }}
-        run: node scripts/ai-pr-review.mjs
+          AI_REVIEW_FAIL_MODE: open
+        run: node ./.github/scripts/pr-ai-review.cjs
+
+      - name: Upload AI review gate evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pr-ai-review-gate-${{ github.event.pull_request.number }}-${{ github.run_id }}
+          path: |
+            .tmp/pr-risk-classifier-result.json
+            .tmp/pr-risk-classifier-summary.md
+            .tmp/pr-ai-review-result.json
+            .tmp/pr-ai-review-summary.md
+            .tmp/eng-loop-run-ledger.json
+          if-no-files-found: warn
+          retention-days: 14
