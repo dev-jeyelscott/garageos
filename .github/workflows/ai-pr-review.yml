@@ -25,7 +25,6 @@ env:
   NODE_VERSION: '22'
   MAX_DIFF_CHARS: '60000'
   OPENAI_MODEL: ${{ vars.OPENAI_REVIEW_MODEL || 'gpt-4.1-mini' }}
-  GITHUB_TOKEN: ${{ github.token }}
   GITHUB_REPOSITORY: ${{ github.repository }}
   GITHUB_API_URL: ${{ github.api_url }}
   PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -55,11 +54,24 @@ jobs:
       - name: Validate AI reviewer script syntax
         run: node --check scripts/ai-pr-review.mjs
 
+      - name: Detect OpenAI key configuration
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          if [ -z "$OPENAI_API_KEY" ]; then
+            echo "OPENAI_CONFIGURED=false" >> "$GITHUB_ENV"
+          else
+            echo "OPENAI_CONFIGURED=true" >> "$GITHUB_ENV"
+          fi
+
       - name: Skip when OpenAI key is not configured
-        if: ${{ env.OPENAI_API_KEY == '' }}
+        if: ${{ env.OPENAI_CONFIGURED != 'true' }}
         run: |
           echo "OPENAI_API_KEY is not configured; skipping advisory AI PR review."
 
       - name: Run advisory OpenAI review
-        if: ${{ env.OPENAI_API_KEY != '' }}
+        if: ${{ env.OPENAI_CONFIGURED == 'true' }}
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/ai-pr-review.mjs
