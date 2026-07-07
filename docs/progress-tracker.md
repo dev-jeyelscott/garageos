@@ -10,47 +10,33 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 
 | Status                  |   Cards |
 | ----------------------- | ------: |
-| Done                    |     211 |
-| In Progress             |       0 |
+| Done                    |     215 |
 | Ready                   |       1 |
-| Backlog                 |      99 |
-| **Total tracked cards** | **311** |
+| Review                  |       1 |
+| Reviewed                |       1 |
+| Backlog                 |     114 |
+| **Total tracked cards** | **332** |
 
 ## Milestone Status Summary
 
-| Milestone    | Status Summary      | Notes                                        |
-| ------------ | ------------------- | -------------------------------------------- |
-| M0           | 46 Done             | Complete                                     |
-| M1           | 18 Done             | Complete                                     |
-| M2           | 22 Done             | Complete                                     |
-| M3           | 19 Done             | Complete                                     |
-| M4           | 15 Done             | Complete                                     |
-| M5           | 16 Done             | Complete                                     |
-| M6           | 16 Done             | Complete                                     |
-| M7           | 16 Done             | Complete                                     |
-| M8           | 14 Done             | Complete                                     |
-| M9           | 28 Done             | Complete                                     |
-| M10          | 15 Backlog, 1 Ready | M10.01 ready                                 |
-| M11          | 18 Backlog          | Not started                                  |
-| M12          | 16 Backlog          | Not started                                  |
-| M13          | 20 Backlog          | Security and observability hardening backlog |
-| M14          | 40 Backlog          | Not started                                  |
-| No milestone | 1 Done              | Review record                                |
-
-## Current Focus
-
-- [x] **Done** — ENG-LOOP-17 — Add engineering loop runner dry-run mode
-- [x] **Done** — ENG-LOOP-18 — Add task claiming and run ledger
-- [x] **Done** — ENG-LOOP-19 — Add local validation executor
-- [x] **Done** — ENG-LOOP-20 — Add PR body and branch automation
-- [x] **Done** — ENG-LOOP-21 — Add GitHub CI status watcher
-- [x] **Done** — ENG-LOOP-22 — Add follow-up task creation
-- [x] **Done** — ENG-LOOP-23 — Add manual GitHub workflow entrypoint
-- [x] **Done** — ENG-LOOP-24 — Add first-5 batch mode
-- [x] **Done** — ENG-LOOP-25 — Add Codex-powered first-5 PR automation
-- [x] **Done** — ENG-LOOP-26 — Generalize engineering loop task selection to all tracker tasks
-- [x] **Done** — ENG-LOOP-27 — Stream Codex execution output during automation
-- [ ] **Ready** — M10.01 — Implement expense categories
+| Milestone    | Status Summary                | Notes                                        |
+| ------------ | ----------------------------- | -------------------------------------------- |
+| M0           | 49 Done, 6 Backlog            | Engineering loop complete; hardening backlog |
+| M1           | 18 Done                       | Complete                                     |
+| M2           | 22 Done                       | Complete                                     |
+| M3           | 19 Done                       | Complete                                     |
+| M4           | 15 Done                       | Complete                                     |
+| M5           | 16 Done                       | Complete                                     |
+| M6           | 16 Done                       | Complete                                     |
+| M7           | 16 Done                       | Complete                                     |
+| M8           | 14 Done                       | Complete                                     |
+| M9           | 28 Done                       | Complete                                     |
+| M10          | 1 Done, 1 Ready, 14 Backlog   | M10.02 ready; M10.01 done                    |
+| M11          | 18 Backlog                    | Not started                                  |
+| M12          | 16 Backlog                    | Not started                                  |
+| M13          | 19 Backlog, 1 Review          | Security and observability hardening backlog |
+| M14          | 40 Backlog                    | Not started                                  |
+| No milestone | 1 Done, 1 Reviewed, 1 Backlog | Review/follow-up records                     |
 
 ---
 
@@ -99,6 +85,18 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - [x] **Done** — ENG-LOOP-25 — Add Codex-powered first-5 PR automation
 - [x] **Done** — ENG-LOOP-26 — Generalize engineering loop task selection to all tracker tasks
 - [x] **Done** — ENG-LOOP-27 — Stream Codex execution output during automation
+- [x] **Done** — [Review] garageos develop after d670010 — 1 finding
+- [x] **Done** — [Review] garageos develop@2420bbc — 1 finding
+- [x] **Done** — [Review] garageos develop@ec8b55d — 1 finding
+- [x] **Done** — [Review] garageos@18faf9b — No actionable findings
+- [x] **Done** — [Review] garageos@2ec9639 — No actionable findings
+- [x] **Done** — [Review] garageos@9cab225 — No actionable findings
+- [ ] **Backlog** — [Finding] CI status check document references missing verification script
+- [ ] **Backlog** — [Finding] Claim verification accepts missing claim marker
+- [ ] **Backlog** — [Finding] Engineering loop dry-run schema source fallback recurses indefinitely
+- [ ] **Backlog** — ENG-LOOP-CODEX — Add timeout handling for Codex exec
+- [ ] **Backlog** — ENG-LOOP-CODEX — Record failure follow-ups after claimed live task failures
+- [ ] **Backlog** — ENG-LOOP-PR — Align prepared PR evidence with actual task scope
 
 ## M1 — Database Foundation and Core Migrations
 
@@ -143,6 +141,7 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - [x] **Done** — M2.18 — Implement shared audit service
 - [x] **Done** — M2.19 — Implement auth/session UI screens
 - [x] **Done** — M2.20 — Add contract, integration, and security tests
+- [x] **Done** — M2.BUG — Validation script removes cross-platform prepare-commit entry
 - [x] **Done** — M2 — API Foundation, Auth, Tenant Context, RBAC
 
 ## M3 — Tenant Lifecycle, Onboarding, Platform Admin
@@ -286,12 +285,14 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - [x] **Done** — M9.BUG — Invoice list lacks cursor pagination UI
 - [x] **Done** — M9.BUG — Invoice UI blocks pending invoice cancellation
 - [x] **Done** — M9.BUG — Refund UI estimates per-receipt refundable amount from invoice totals
+- [x] **Done** — [Review] garageos@e1c5891 — No actionable findings
+- [x] **Done** — [Review] garageos@f00d962 — No actionable findings
 - [x] **Done** — [Review] garageos@eff0b976 — No actionable findings
 
 ## M10 — Expenses, Reminders, Notifications, Integrations
 
-- [ ] **Ready** — M10.01 — Implement expense categories
-- [ ] **Backlog** — M10.02 — Implement expense create/read/update/void
+- [x] **Done** — M10.01 — Implement expense categories
+- [ ] **Ready** — M10.02 — Implement expense create/read/update/void
 - [ ] **Backlog** — M10.03 — Implement expense financial report basis
 - [ ] **Backlog** — M10.04 — Implement reminder rules
 - [ ] **Backlog** — M10.05 — Implement reminder scheduling worker
@@ -367,6 +368,7 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 - [ ] **Backlog** — M13.16 — Perform restore rehearsal
 - [ ] **Backlog** — M13.17 — Validate or formally waive RPO 24h and RTO 4h targets
 - [ ] **Backlog** — M13.18 — Complete operational runbooks
+- [ ] **Review** — SEC — Add OWASP ZAP baseline security scan pipeline
 - [ ] **Backlog** — M13 — Security, Observability, Performance, DR Hardening
 
 ## M14 — End-to-End UAT and Launch Readiness
@@ -415,3 +417,5 @@ This tracker is a repository snapshot of the current Notion cards. Notion remain
 ## Unmilestoned Notion Records
 
 - [x] **Done** — [Review] garageos@aa88188 — AI code review completed with 10 findings
+- [ ] **Reviewed** — [Review] garageos develop@f2c794a — 1 finding
+- [ ] **Backlog** — CR-2026-07-06-005 — Follow-up task creation can write to the wrong Notion database
