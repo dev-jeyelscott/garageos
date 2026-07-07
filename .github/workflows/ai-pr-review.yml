@@ -28,6 +28,7 @@ env:
   GITHUB_REPOSITORY: ${{ github.repository }}
   GITHUB_API_URL: ${{ github.api_url }}
   PR_NUMBER: ${{ github.event.pull_request.number }}
+  OPENAI_CONFIGURED: 'false'
 
 jobs:
   ai-pr-review:
@@ -45,6 +46,7 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -56,12 +58,12 @@ jobs:
 
       - name: Detect OpenAI key configuration
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_API_KEY_CONFIGURED: ${{ secrets.OPENAI_API_KEY != '' }}
         run: |
-          if [ -z "$OPENAI_API_KEY" ]; then
-            echo "OPENAI_CONFIGURED=false" >> "$GITHUB_ENV"
-          else
+          if [ "$OPENAI_API_KEY_CONFIGURED" = "true" ]; then
             echo "OPENAI_CONFIGURED=true" >> "$GITHUB_ENV"
+          else
+            echo "OPENAI_CONFIGURED=false" >> "$GITHUB_ENV"
           fi
 
       - name: Skip when OpenAI key is not configured
