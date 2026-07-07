@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Headers,
+  HttpCode,
   Param,
   Patch,
   Post,
@@ -119,6 +120,7 @@ export class ExpensesController {
   }
 
   @Post(':expense_id/void')
+  @HttpCode(200)
   async voidExpense(
     @Headers('authorization') authorizationHeader: string | undefined,
     @Headers('idempotency-key') idempotencyKey: string | undefined,

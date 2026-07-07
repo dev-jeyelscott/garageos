@@ -257,12 +257,12 @@ export class ExpensesService {
       await this.assertActiveReferences(context.tenantId, input, transaction);
       const reason = normalizeNullableText(request.reason);
 
-      if (isReportAffectingChange(existing, input) && reason === null) {
+      if (reason === null) {
         throw GarageOsApiException.validationFailed([
           {
             field: 'reason',
             code: 'expense_edit_reason_required',
-            message: 'An edit reason is required for report-affecting expense changes.',
+            message: 'An edit reason is required when updating an expense.',
           },
         ]);
       }
@@ -503,16 +503,6 @@ function normalizeExpenseInput(request: CreateExpenseRequest): NormalizedExpense
     referenceNumber: normalizeNullableText(request.reference_number),
     description: normalizeRequiredText(request.description, 'description'),
   };
-}
-
-function isReportAffectingChange(existing: ExpenseRecord, input: NormalizedExpenseInput): boolean {
-  return (
-    existing.amount !== input.amount ||
-    existing.expenseDate !== input.expenseDate ||
-    existing.branchId !== input.branchId ||
-    existing.categoryId !== input.categoryId ||
-    existing.description !== input.description
-  );
 }
 
 function toExpenseResponse(expense: ExpenseRecord): ExpenseResponse {

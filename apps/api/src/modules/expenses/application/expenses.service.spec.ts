@@ -25,6 +25,9 @@ import {
 } from './expense.store';
 import { ExpensesService } from './expenses.service';
 
+type ExpensePaymentMethod =
+  'cash' | 'gcash' | 'maya' | 'bank_transfer' | 'credit_card' | 'check' | 'other';
+
 const TENANT_ID = '11111111-1111-4111-8111-111111111111';
 const USER_ID = '22222222-2222-4222-8222-222222222222';
 const BRANCH_ID = '33333333-3333-4333-8333-333333333333';
@@ -109,7 +112,19 @@ describe('ExpensesService', () => {
     });
   });
 
-  it('requires an edit reason for report-affecting active expense updates', async () => {
+  it('blocks expense creation when the branch is inactive', async () => {
+    const { service, store } = createService();
+    store.reference = createReferenceRecord({ branchStatus: 'inactive' });
+
+    await expect(
+      service.createExpense(createExpenseRequest(), createTenantSession(['expenses.create'])),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.WORKFLOW_TRANSITION_BLOCKED,
+      details: [expect.objectContaining({ code: 'branch_inactive' })],
+    });
+  });
+
+  it('requires an edit reason for active expense updates', async () => {
     const { service, store } = createService();
     store.lockedExpense = createExpenseRecord();
 
@@ -123,6 +138,23 @@ describe('ExpensesService', () => {
       code: API_ERROR_CODES.VALIDATION_FAILED,
       details: [expect.objectContaining({ code: 'expense_edit_reason_required' })],
     });
+  });
+
+  it('requires an edit reason when only the payment method changes', async () => {
+    const { service, store } = createService();
+    store.lockedExpense = createExpenseRecord();
+
+    await expect(
+      service.updateExpense(
+        EXPENSE_ID,
+        createUpdateExpenseRequest({ payment_method: 'gcash', reason: undefined }),
+        createTenantSession(['expenses.update']),
+      ),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.VALIDATION_FAILED,
+      details: [expect.objectContaining({ code: 'expense_edit_reason_required' })],
+    });
+    expect(store.updatedInputs).toHaveLength(0);
   });
 
   it('updates an active expense with optimistic locking, history, and audit logging', async () => {
@@ -312,19 +344,26 @@ function createTenantSession(
   };
 }
 
-function createExpenseRequest(overrides: Partial<ReturnType<typeof baseExpenseRequest>> = {}) {
+type ExpenseRequest = ReturnType<typeof baseExpenseRequest>;
+
+type CreateExpenseRequestOverrides = Partial<ExpenseRequest>;
+
+type UpdateExpenseRequestOverrides = Partial<
+  Omit<ExpenseRequest, 'payment_method'> & {
+    readonly lock_version: number;
+    readonly payment_method: ExpensePaymentMethod;
+    readonly reason: string | undefined;
+  }
+>;
+
+function createExpenseRequest(overrides: CreateExpenseRequestOverrides = {}) {
   return {
     ...baseExpenseRequest(),
     ...overrides,
   };
 }
 
-type ExpenseRequestOverrides = Partial<ReturnType<typeof baseExpenseRequest>> & {
-  readonly lock_version?: number;
-  readonly reason?: string | undefined;
-};
-
-function createUpdateExpenseRequest(overrides: ExpenseRequestOverrides = {}) {
+function createUpdateExpenseRequest(overrides: UpdateExpenseRequestOverrides = {}) {
   return {
     ...baseExpenseRequest(),
     lock_version: 0,
