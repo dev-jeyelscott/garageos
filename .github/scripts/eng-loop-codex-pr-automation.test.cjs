@@ -104,15 +104,53 @@ function testPrBodyContainsRequiredSections() {
     validationCommand: 'pnpm validate:quick',
     validationOutput: 'All checks passed.',
     codexFinalMessage: 'Implemented task and ran validation.',
+    filesChanged: ['.github/scripts/eng-loop-codex-pr-automation.cjs'],
   });
 
-  assert.match(body, /## Summary/);
-  assert.match(body, /## Source Alignment/);
-  assert.match(body, /## Changes/);
-  assert.match(body, /## Validation Evidence/);
-  assert.match(body, /## Risk Review/);
-  assert.match(body, /## Rollback Plan/);
+  const requiredSections = [
+    '## Summary',
+    '## Source Alignment',
+    '## Scope',
+    '## Files Changed',
+    '## Runtime Impact',
+    '## Validation Evidence',
+    '## Risk Class',
+    '## Failure/Follow-Up Notes',
+    '## Manual Review Notes',
+    '## Merge Readiness Checklist',
+  ];
+
+  for (const section of requiredSections) {
+    assert.match(body, new RegExp(section.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
+
   assert.match(body, /`pnpm validate:quick` — Passed/);
+  assert.match(body, /`\.github\/scripts\/eng-loop-codex-pr-automation\.cjs`/);
+  assert.match(body, /- \[ \] CI completed successfully\./);
+  assert.doesNotMatch(body, /## Changes/);
+  assert.doesNotMatch(body, /## Risk Review/);
+  assert.doesNotMatch(body, /## Rollback Plan/);
+}
+
+function testFormatFilesChangedFallback() {
+  assert.equal(
+    automation.formatFilesChanged([]),
+    '- See the PR diff for the complete file list.',
+  );
+  assert.equal(
+    automation.formatFilesChanged(['package.json', '', 'docs/runbooks/engineering-loop.md']),
+    '- `package.json`\n- `docs/runbooks/engineering-loop.md`',
+  );
+}
+
+function testChangedFilesForPrBodyIncludesUntrackedFiles() {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'eng-loop-codex-pr-files-'));
+  const init = automation.runCommand('git', ['init'], { cwd: tmpDir });
+  assert.equal(init.ok, true, init.stderr || init.error?.message || 'git init failed');
+
+  fs.writeFileSync(path.join(tmpDir, 'new-file.txt'), 'new file\n', 'utf8');
+
+  assert.deepEqual(automation.changedFilesForPrBody(tmpDir), ['new-file.txt']);
 }
 
 function testPlanMarkdownIncludesCodexFlow() {
@@ -194,6 +232,8 @@ const tests = [
   testRunCommandDefaultsToArgvMode,
   testPromptIncludesAutomationBoundaries,
   testPrBodyContainsRequiredSections,
+  testFormatFilesChangedFallback,
+  testChangedFilesForPrBodyIncludesUntrackedFiles,
   testPlanMarkdownIncludesCodexFlow,
   testRedactsSensitiveOutput,
   testTaskKeyExtraction,
