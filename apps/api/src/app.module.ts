@@ -23,6 +23,7 @@ import { InventoryAdjustmentsModule } from './modules/inventory-adjustments/inve
 import { InventoryTransfersModule } from './modules/inventory-transfers/inventory-transfers.module';
 import { InvoicesModule } from './modules/invoices/invoices.module';
 import { PurchaseOrdersModule } from './modules/purchase-orders/purchase-orders.module';
+import { ReportsModule } from './modules/reports/reports.module';
 import { SupplierReturnsModule } from './modules/supplier-returns/supplier-returns.module';
 import { SuppliersModule } from './modules/suppliers/suppliers.module';
 import { AccountsModule } from './modules/accounts/accounts.module';
@@ -57,6 +58,7 @@ export class HealthController {
     InventoryTransfersModule,
     InvoicesModule,
     PurchaseOrdersModule,
+    ReportsModule,
     SupplierReturnsModule,
     SuppliersModule,
     AccountsModule,
