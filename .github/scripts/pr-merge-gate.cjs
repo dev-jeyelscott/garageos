@@ -115,7 +115,9 @@ function buildMarkdownSummary(result) {
   } else {
     for (const check of result.required_checks) {
       const state = check.classification || check.conclusion || check.state || check.status;
-      lines.push(`- ${check.name}: ${state}${check.matched_name ? ` (${check.matched_name})` : ''}`);
+      lines.push(
+        `- ${check.name}: ${state}${check.matched_name ? ` (${check.matched_name})` : ''}`,
+      );
     }
   }
 
@@ -166,13 +168,16 @@ function writeOutputs(result, options = {}) {
 }
 
 function resolveGateOptions(args, cwd = process.cwd()) {
-  const watcherOptions = watcher.resolveRuntimeOptions({
-    ...args,
-    once: args.once === undefined ? true : args.once,
-    out: args.ciOut || args.ciOutput || '.tmp/eng-loop-ci-status-result.json',
-    summary: args.ciSummary || '.tmp/eng-loop-ci-status-summary.md',
-    ledger: args.ledger || DEFAULT_LEDGER_FILE,
-  }, cwd);
+  const watcherOptions = watcher.resolveRuntimeOptions(
+    {
+      ...args,
+      once: args.once === undefined ? true : args.once,
+      out: args.ciOut || args.ciOutput || '.tmp/eng-loop-ci-status-result.json',
+      summary: args.ciSummary || '.tmp/eng-loop-ci-status-summary.md',
+      ledger: args.ledger || DEFAULT_LEDGER_FILE,
+    },
+    cwd,
+  );
 
   return {
     watcherOptions,
