@@ -133,10 +133,7 @@ function testPrBodyContainsRequiredSections() {
 }
 
 function testFormatFilesChangedFallback() {
-  assert.equal(
-    automation.formatFilesChanged([]),
-    '- See the PR diff for the complete file list.',
-  );
+  assert.equal(automation.formatFilesChanged([]), '- See the PR diff for the complete file list.');
   assert.equal(
     automation.formatFilesChanged(['package.json', '', 'docs/runbooks/engineering-loop.md']),
     '- `package.json`\n- `docs/runbooks/engineering-loop.md`',

@@ -509,9 +509,7 @@ Return a concise implementation summary with:
 }
 
 function formatFilesChanged(filesChanged) {
-  const files = Array.isArray(filesChanged)
-    ? filesChanged.map(normalizeText).filter(Boolean)
-    : [];
+  const files = Array.isArray(filesChanged) ? filesChanged.map(normalizeText).filter(Boolean) : [];
 
   if (!files.length) {
     return '- See the PR diff for the complete file list.';
