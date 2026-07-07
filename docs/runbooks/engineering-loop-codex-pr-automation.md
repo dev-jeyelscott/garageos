@@ -112,3 +112,29 @@ The automation creates PRs only. It does not auto-merge and does not mark a task
 - `.tmp/eng-loop-runs/<run-id>/validation-output.txt`
 - `.tmp/eng-loop-runs/<run-id>/pr-body.md`
 - `.tmp/eng-loop-runs/<run-id>/pr-url.txt`
+
+## Codex Terminal Output
+
+Codex automation writes raw JSONL artifacts for audit/debug evidence while rendering readable terminal progress by default.
+
+Human-readable terminal output includes:
+
+- Codex agent messages.
+- File changes.
+- Command/check starts and results.
+- Failed command summaries.
+- Final Codex turn summaries when emitted by the CLI.
+
+Raw machine output remains available in the run directory:
+
+```text
+.tmp/eng-loop-runs/<run_id>/codex-stdout.jsonl
+.tmp/eng-loop-runs/<run_id>/codex-stderr.txt
+.tmp/eng-loop-runs/<run_id>/validation-output.txt
+```
+
+To force raw Codex events to the terminal for debugging:
+
+```bash
+CODEX_OUTPUT=raw pnpm eng-loop:first-5
+```

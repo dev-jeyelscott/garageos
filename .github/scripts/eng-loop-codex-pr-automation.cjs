@@ -7,6 +7,10 @@ const path = require('node:path');
 const { spawn, spawnSync } = require('node:child_process');
 const runner = require('./eng-loop-runner.cjs');
 const taskScopePolicy = require('./eng-loop-task-scope.cjs');
+const {
+  createCodexTerminalRenderer,
+  shouldUseRawCodexEvents,
+} = require('./lib/codex-terminal-renderer.cjs');
 
 const DEFAULT_LIMIT = 5;
 const DEFAULT_SCAN_LIMIT = 250;
@@ -259,7 +263,7 @@ async function runStreamingCommand(command, args = [], options = {}) {
   if (!options.stderrPath) throw new Error('Streaming command stderrPath is required.');
   const stdoutWriter = createRedactedArtifactWriter(options.stdoutPath, {
     maxCaptureBytes: options.maxCaptureBytes,
-    liveStream: options.streamStdout ? process.stdout : null,
+    liveStream: shouldUseRawCodexEvents() && options.streamStdout ? process.stdout : null,
   });
   const stderrWriter = createRedactedArtifactWriter(options.stderrPath, {
     maxCaptureBytes: options.maxCaptureBytes,
@@ -269,6 +273,10 @@ async function runStreamingCommand(command, args = [], options = {}) {
   let status = null;
   let signal = null;
   let error = null;
+  const stdoutTerminalRenderer = createCodexTerminalRenderer({
+    enabled: options.streamStdout && !shouldUseRawCodexEvents(),
+    stream: process.stdout,
+  });
 
   await new Promise((resolve) => {
     const child = spawn(command, args, {
@@ -280,7 +288,10 @@ async function runStreamingCommand(command, args = [], options = {}) {
 
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
-    child.stdout.on('data', (chunk) => stdoutWriter.write(chunk));
+    child.stdout.on('data', (chunk) => {
+      stdoutWriter.write(chunk);
+      stdoutTerminalRenderer.write(chunk);
+    });
     child.stderr.on('data', (chunk) => stderrWriter.write(chunk));
     child.on('error', (spawnError) => {
       error = spawnError;
@@ -298,7 +309,7 @@ async function runStreamingCommand(command, args = [], options = {}) {
       child.stdin.end();
     }
   });
-
+  await stdoutTerminalRenderer.end();
   const [stdout, stderr] = await Promise.all([stdoutWriter.end(), stderrWriter.end()]);
 
   return {
