@@ -192,6 +192,31 @@ assertPassed('testMergePrWithConfirmationIsAllowed', {
   INPUT_MERGE_CONFIRMATION: 'ENG-LOOP-33-MERGE',
 });
 
+assertFailed(
+  'testMergePrCompletionRequiresTaskIdWhenMutatingNotion',
+  {
+    INPUT_MODE: 'run',
+    INPUT_DRY_RUN: 'false',
+    INPUT_MUTATION_CONFIRMATION: 'ENG-LOOP-23-RUN',
+    INPUT_MERGE_PR: 'true',
+    INPUT_MERGE_CONFIRMATION: 'ENG-LOOP-33-MERGE',
+    INPUT_MUTATE_NOTION: 'true',
+    NOTION_TOKEN: 'unit-test-secret-token',
+  },
+  /requires task_id/i,
+);
+
+assertPassed('testMergePrCompletionWithTaskIdIsAllowed', {
+  INPUT_MODE: 'run',
+  INPUT_DRY_RUN: 'false',
+  INPUT_MUTATION_CONFIRMATION: 'ENG-LOOP-23-RUN',
+  INPUT_MERGE_PR: 'true',
+  INPUT_MERGE_CONFIRMATION: 'ENG-LOOP-33-MERGE',
+  INPUT_MUTATE_NOTION: 'true',
+  INPUT_TASK_ID: '396e87eb-c38b-81e6-93e2-f46abef6cf69',
+  NOTION_TOKEN: 'unit-test-secret-token',
+});
+
 const secretResult = assertPassed('testSecretValueIsNotPrinted', {
   INPUT_MODE: 'run',
   INPUT_DRY_RUN: 'false',
@@ -203,4 +228,4 @@ const combinedOutput = `${secretResult.stdout}
 ${secretResult.stderr}`;
 assert.equal(combinedOutput.includes('super-secret-token-that-must-not-print'), false);
 
-console.log('All 20 engineering loop manual workflow preflight tests passed.');
+console.log('All 22 engineering loop manual workflow preflight tests passed.');

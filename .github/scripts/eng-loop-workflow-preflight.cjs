@@ -120,6 +120,10 @@ if (input.mergePr && !githubTokenPresent) {
   fail('merge_pr=true requires GITHUB_TOKEN to be available.');
 }
 
+if (input.mergePr && input.mutateNotion && !input.taskId) {
+  fail('merged PR task completion requires task_id when mutate_notion=true.');
+}
+
 if (!allowedMergeMethods.has(input.mergeMethod)) {
   fail('merge_method must be merge, squash, or rebase.');
 }
@@ -190,6 +194,9 @@ const commandPlan = [
     ? [
         'node ./.github/scripts/pr-merge-gate.cjs',
         `node ./.github/scripts/pr-guarded-merge.cjs --mode=manual --confirm "${mergeConfirmationValue}" --merge-method ${input.mergeMethod}`,
+        input.mutateNotion
+          ? 'node ./.github/scripts/eng-loop-merged-pr-completion.cjs --mode=live --confirm "ENG-LOOP-35-COMPLETE" --task-id "${INPUT_TASK_ID}"'
+          : '# merged PR task tracker completion skipped because mutate_notion=false',
       ].join('\n')
     : '# guarded merge execution skipped by input',
   '```',
@@ -201,6 +208,7 @@ const commandPlan = [
   '- first-5 mutation-capable behavior requires exact ENG-LOOP-24 confirmation.',
   '- Mutation-capable behavior requires explicit confirmation and required secrets.',
   '- Guarded merge execution is manual-only, requires exact ENG-LOOP-33 confirmation, and relies on GitHub branch protection.',
+  '- Merged PR task completion runs only after guarded merge evidence and when Notion mutation is explicitly enabled.',
   '- This plan intentionally does not print secret values.',
 ].join('\n');
 

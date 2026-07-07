@@ -305,6 +305,10 @@ jobs:
         if: ${{ inputs.merge_pr == true }}
         run: node ./.github/scripts/pr-guarded-merge.cjs --mode=manual --confirm "${INPUT_MERGE_CONFIRMATION}" --merge-method "${INPUT_MERGE_METHOD}"
 
+      - name: Complete merged PR task tracker update
+        if: ${{ inputs.merge_pr == true && inputs.mutate_notion == true }}
+        run: node ./.github/scripts/eng-loop-merged-pr-completion.cjs --mode=live --confirm "ENG-LOOP-35-COMPLETE" --task-id "${INPUT_TASK_ID}"
+
       - name: Create follow-up task on failure when explicitly enabled
         if: ${{ failure() && inputs.mutate_notion == true }}
         continue-on-error: true
