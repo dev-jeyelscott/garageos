@@ -1,4 +1,4 @@
-name: AI PR Review
+name: GarageOS AI Review
 
 on:
   pull_request:
@@ -30,8 +30,8 @@ env:
   PR_NUMBER: ${{ github.event.pull_request.number }}
 
 jobs:
-  ai-pr-review:
-    name: Advisory AI PR Review
+  advisory:
+    name: advisory
     runs-on: ubuntu-latest
     timeout-minutes: 15
     if: >-
@@ -52,26 +52,33 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Validate AI reviewer script syntax
-        run: node --check scripts/ai-pr-review.mjs
+        run: |
+          node --check scripts/ai-pr-review.mjs
+          node --check ./.github/scripts/pr-ai-review.cjs
+          node --check ./.github/scripts/pr-risk-classifier.cjs
 
-      - name: Detect OpenAI key configuration
+      - name: Classify PR risk
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: |
-          if [ -z "$OPENAI_API_KEY" ]; then
-            echo "OPENAI_CONFIGURED=false" >> "$GITHUB_ENV"
-          else
-            echo "OPENAI_CONFIGURED=true" >> "$GITHUB_ENV"
-          fi
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: node ./.github/scripts/pr-risk-classifier.cjs --git --base "origin/${{ github.base_ref }}"
 
-      - name: Skip when OpenAI key is not configured
-        if: ${{ env.OPENAI_CONFIGURED != 'true' }}
-        run: |
-          echo "OPENAI_API_KEY is not configured; skipping advisory AI PR review."
-
-      - name: Run advisory OpenAI review
-        if: ${{ env.OPENAI_CONFIGURED == 'true' }}
+      - name: Run advisory AI review gate
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GITHUB_TOKEN: ${{ github.token }}
-        run: node scripts/ai-pr-review.mjs
+          AI_REVIEW_FAIL_MODE: open
+        run: node ./.github/scripts/pr-ai-review.cjs
+
+      - name: Upload AI review gate evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pr-ai-review-gate-${{ github.event.pull_request.number }}-${{ github.run_id }}
+          path: |
+            .tmp/pr-risk-classifier-result.json
+            .tmp/pr-risk-classifier-summary.md
+            .tmp/pr-ai-review-result.json
+            .tmp/pr-ai-review-summary.md
+            .tmp/eng-loop-run-ledger.json
+          if-no-files-found: warn
+          retention-days: 14

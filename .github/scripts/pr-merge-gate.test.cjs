@@ -234,7 +234,7 @@ function testRequiredCheckConfigUsesDeterministicChecks() {
   assert.equal(config.requiredChecks.includes('Validate PR evidence'), true);
   assert.equal(config.requiredChecks.includes('Dependency audit and security profile'), true);
   assert.equal(config.requiredChecks.includes('Semgrep static security scan'), true);
-  assert.equal(config.requiredChecks.includes('Advisory AI PR Review'), false);
+  assert.equal(config.requiredChecks.includes('GarageOS AI Review / advisory'), false);
 }
 
 async function run() {

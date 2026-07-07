@@ -176,7 +176,7 @@ pnpm validate:e2e
 These checks are useful but should be treated carefully:
 
 ```text
-AI PR Review / Advisory AI PR Review
+GarageOS AI Review / advisory
 ```
 
 AI review should:
@@ -245,7 +245,7 @@ validation-e2e
 Recommended advisory check:
 
 ```text
-AI PR Review / Advisory AI PR Review
+GarageOS AI Review / advisory
 ```
 
 For solo development, required approval count may remain `0` initially while still requiring pull requests, checks, and conversation resolution.
@@ -294,7 +294,7 @@ validation-e2e
 Recommended advisory check:
 
 ```text
-AI PR Review / Advisory AI PR Review
+GarageOS AI Review / advisory
 ```
 
 For `main`, prefer stricter controls than `develop`.
@@ -572,7 +572,7 @@ GarageOS branch protection must require status checks by exact emitted GitHub Ac
 
 | Status check name                     | Workflow location                                                   | `main` requirement | `develop` requirement |
 | ------------------------------------- | ------------------------------------------------------------------- | ------------------ | --------------------- |
-| Advisory AI PR Review                 | `.github/workflows/ai-pr-review.yml` / `ai-pr-review`               | Required           | Required              |
+| GarageOS AI Review / advisory         | `.github/workflows/ai-pr-review.yml` / `advisory`                   | Advisory           | Advisory              |
 | validation-${{ matrix.profile }}      | `.github/workflows/ci.yml` / `validation`                           | Required           | Required              |
 | Dependency audit and security profile | `.github/workflows/dependency-security.yml` / `dependency-security` | Required           | Required              |
 | Validate PR evidence                  | `.github/workflows/pr-validation-evidence.yml` / `validate`         | Required           | Required              |
@@ -605,7 +605,7 @@ Required deterministic checks discovered from the current workflow configuration
 
 Advisory checks:
 
-- `Advisory AI PR Review` — advisory only, not authoritative for production merge approval.
+- `GarageOS AI Review / advisory` — advisory only, not authoritative for production merge approval.
 
 Before changing branch protection, run:
 

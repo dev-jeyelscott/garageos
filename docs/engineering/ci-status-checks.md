@@ -12,7 +12,7 @@ GitHub branch protection matches status checks by their emitted check names. The
 
 ## Canonical Emitted Status Checks
 
-- `Advisory AI PR Review` from `.github/workflows/ai-pr-review.yml` (`ai-pr-review`)
+- `GarageOS AI Review / advisory` from `.github/workflows/ai-pr-review.yml` (`advisory`)
 - `validation-${{ matrix.profile }}` from `.github/workflows/ci.yml` (`validation`)
 - `Dependency audit and security profile` from `.github/workflows/dependency-security.yml` (`dependency-security`)
 - `Validate PR evidence` from `.github/workflows/pr-validation-evidence.yml` (`validate`)
@@ -22,7 +22,7 @@ GitHub branch protection matches status checks by their emitted check names. The
 
 | Status check name                     | Workflow location                                                   | `main` requirement | `develop` requirement |
 | ------------------------------------- | ------------------------------------------------------------------- | ------------------ | --------------------- |
-| Advisory AI PR Review                 | `.github/workflows/ai-pr-review.yml` / `ai-pr-review`               | Advisory           | Advisory              |
+| GarageOS AI Review / advisory         | `.github/workflows/ai-pr-review.yml` / `advisory`                   | Advisory           | Advisory              |
 | validation-${{ matrix.profile }}      | `.github/workflows/ci.yml` / `validation`                           | Required           | Required              |
 | Dependency audit and security profile | `.github/workflows/dependency-security.yml` / `dependency-security` | Required           | Required              |
 | Validate PR evidence                  | `.github/workflows/pr-validation-evidence.yml` / `validate`         | Required           | Required              |
