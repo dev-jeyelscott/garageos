@@ -145,11 +145,7 @@ function blocked(reason, message, options, extra) {
 
 function validatePreconditions(options) {
   if (!options.guardedMergeResult) {
-    return blocked(
-      'guarded_merge_result_missing',
-      'Guarded merge result is missing.',
-      options,
-    );
+    return blocked('guarded_merge_result_missing', 'Guarded merge result is missing.', options);
   }
 
   if (
@@ -214,16 +210,8 @@ function buildCompletionPatch(page, result, timestamp = nowIso()) {
     'progress_source',
   ]);
   const reviewName = firstPropertyName(properties, ['Review ID', 'ReviewID', 'review_id']);
-  const commitShaName = firstPropertyName(properties, [
-    'Commit SHA',
-    'CommitSHA',
-    'commit_sha',
-  ]);
-  const commitUrlName = firstPropertyName(properties, [
-    'Commit URL',
-    'CommitURL',
-    'commit_url',
-  ]);
+  const commitShaName = firstPropertyName(properties, ['Commit SHA', 'CommitSHA', 'commit_sha']);
+  const commitUrlName = firstPropertyName(properties, ['Commit URL', 'CommitURL', 'commit_url']);
 
   if (!statusName) {
     throw new Error(

@@ -188,7 +188,10 @@ async function testAlreadyDoneIsIdempotentNoOp() {
   });
 
   assert.equal(result.status, 'merged_pr_task_already_done');
-  assert.equal(client.calls.some((call) => call.type === 'update'), false);
+  assert.equal(
+    client.calls.some((call) => call.type === 'update'),
+    false,
+  );
 }
 
 async function testUnsupportedStatusBlocksWithoutMutation() {
@@ -200,7 +203,10 @@ async function testUnsupportedStatusBlocksWithoutMutation() {
 
   assert.equal(result.status, 'merged_pr_completion_blocked');
   assert.equal(result.reason, 'unsupported_task_status');
-  assert.equal(client.calls.some((call) => call.type === 'update'), false);
+  assert.equal(
+    client.calls.some((call) => call.type === 'update'),
+    false,
+  );
 }
 
 function testResolveRuntimeOptionsReadsArtifacts() {
