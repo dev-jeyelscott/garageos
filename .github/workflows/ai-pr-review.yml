@@ -54,13 +54,13 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Validate AI reviewer script syntax
-        run: node --check scripts/ai-pr-review.mjs
+        run: node --check ./.github/scripts/pr-ai-review.cjs
 
       - name: Detect OpenAI key configuration
         env:
           OPENAI_API_KEY_CONFIGURED: ${{ secrets.OPENAI_API_KEY != '' }}
         run: |
-          if [ "$OPENAI_API_KEY_CONFIGURED" = "true" ]; then
+          if [ "${OPENAI_API_KEY_CONFIGURED:-false}" = "true" ]; then
             echo "OPENAI_CONFIGURED=true" >> "$GITHUB_ENV"
           else
             echo "OPENAI_CONFIGURED=false" >> "$GITHUB_ENV"
@@ -68,10 +68,23 @@ jobs:
 
       - name: Classify PR risk
         env:
+          PR_BASE_REF: ${{ github.base_ref }}
           PR_BODY: ${{ github.event.pull_request.body }}
-        run: node ./.github/scripts/pr-risk-classifier.cjs --git --base "origin/${{ github.base_ref }}"
+        run: |
+          if [ -z "${PR_BASE_REF:-}" ]; then
+            echo "Missing pull request base ref."
+            exit 1
+          fi
+
+          node ./.github/scripts/pr-risk-classifier.cjs --git --base "origin/$PR_BASE_REF"
+
+      - name: Skip advisory AI review gate when OpenAI key is not configured
+        if: ${{ env.OPENAI_CONFIGURED != 'true' }}
+        run: |
+          echo "OPENAI_API_KEY is not configured; skipping advisory AI review gate."
 
       - name: Run advisory AI review gate
+        if: ${{ env.OPENAI_CONFIGURED == 'true' }}
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GITHUB_TOKEN: ${{ github.token }}
