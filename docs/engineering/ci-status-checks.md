@@ -22,7 +22,7 @@ GitHub branch protection matches status checks by their emitted check names. The
 
 | Status check name                     | Workflow location                                                   | `main` requirement | `develop` requirement |
 | ------------------------------------- | ------------------------------------------------------------------- | ------------------ | --------------------- |
-| Advisory AI PR Review                 | `.github/workflows/ai-pr-review.yml` / `ai-pr-review`               | Required           | Required              |
+| Advisory AI PR Review                 | `.github/workflows/ai-pr-review.yml` / `ai-pr-review`               | Advisory           | Advisory              |
 | validation-${{ matrix.profile }}      | `.github/workflows/ci.yml` / `validation`                           | Required           | Required              |
 | Dependency audit and security profile | `.github/workflows/dependency-security.yml` / `dependency-security` | Required           | Required              |
 | Validate PR evidence                  | `.github/workflows/pr-validation-evidence.yml` / `validate`         | Required           | Required              |
@@ -33,7 +33,7 @@ GitHub branch protection matches status checks by their emitted check names. The
 - Required branch protection checks must use the exact names listed above.
 - If a workflow job `name:` changes, this matrix must be updated in the same PR.
 - Matrix workflow names must be verified using the expanded emitted names, not only the raw YAML expression.
-- Advisory AI review may remain advisory unless the branch-protection runbook explicitly promotes it to required.
+- Advisory AI review remains advisory unless a later approved task updates the branch-protection policy, validation profile documentation, and merge-readiness automation together.
 - This document does not add product scope or runtime behavior.
 
 ## Local Verification
