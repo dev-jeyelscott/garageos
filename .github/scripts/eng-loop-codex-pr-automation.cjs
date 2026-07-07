@@ -508,7 +508,36 @@ Return a concise implementation summary with:
 `;
 }
 
-function buildPrBody({ task, validationCommand, validationOutput, codexFinalMessage }) {
+function formatFilesChanged(filesChanged) {
+  const files = Array.isArray(filesChanged) ? filesChanged.map(normalizeText).filter(Boolean) : [];
+
+  if (!files.length) {
+    return '- See the PR diff for the complete file list.';
+  }
+
+  return files.map((file) => `- \`${file}\``).join('\n');
+}
+
+function changedFilesForPrBody(worktreePath) {
+  const result = runCommand('git', ['status', '--short'], { cwd: worktreePath });
+  if (!result.ok) {
+    throw new Error(`Unable to collect changed files for PR body: ${result.stderr}`);
+  }
+  return result.stdout
+    .split(/\r?\n/)
+    .map(normalizeText)
+    .map((line) => line.slice(3).trim())
+    .map((file) => file.replace(/^.* -> /, '').trim())
+    .filter(Boolean);
+}
+
+function buildPrBody({
+  task,
+  validationCommand,
+  validationOutput,
+  codexFinalMessage,
+  filesChanged = [],
+}) {
   const title = task.title;
   return `## Summary
 
@@ -527,7 +556,21 @@ This is an engineering-loop automation task only.
 - Does not auto-merge.
 - Does not mark the task Done before CI/review success.
 
-## Changes
+## Scope
+
+- Claimed task: ${title}
+- Task id: ${task.id || '(missing)'}
+- Branch: ${task.branch || '(missing)'}
+- Repository: ${task.repository || DEFAULT_REPOSITORY}
+
+## Files Changed
+
+${formatFilesChanged(filesChanged)}
+
+## Runtime Impact
+
+- Impact is limited to the claimed GarageOS tracker task and the files shown in this PR diff.
+- The engineering-loop runner does not auto-merge and does not mark the task Done before CI/review success.
 
 Codex final message:
 
@@ -543,13 +586,27 @@ ${normalizeText(codexFinalMessage) || 'No final Codex message captured.'}
 ${normalizeText(validationOutput).slice(-6000) || 'Validation command passed with no captured output.'}
 \`\`\`
 
-## Risk Review
+## Risk Class
 
-Primary risk is incorrect AI-generated implementation. This PR mitigates that by using one task per branch/worktree, requiring local validation before commit/push, and leaving the PR open for maintainer review.
+- Medium: AI-generated implementation requires maintainer review even after local validation passes.
 
-## Rollback Plan
+## Failure/Follow-Up Notes
 
-Revert this PR if the implementation is incorrect or unsafe. No automatic merge is performed by the engineering loop.
+- No failed local validation was observed by the runner before PR creation.
+- Follow-up is required if CI, maintainer review, or product QA identifies a gap.
+
+## Manual Review Notes
+
+- Human review remains required before merge.
+- Verify the implementation matches the claimed task, approved GarageOS documentation, and the PR diff.
+- Rollback plan: revert this PR if the implementation is incorrect or unsafe.
+
+## Merge Readiness Checklist
+
+- [x] Claimed task implemented in an isolated task worktree.
+- [x] Local validation command completed successfully before commit/push.
+- [ ] CI completed successfully.
+- [ ] Maintainer review completed.
 `;
 }
 
@@ -827,11 +884,13 @@ async function runLive({ args, client, selectedTasks, cwd = process.cwd() }) {
         validationCommand,
         runDir,
       });
+      const filesChanged = changedFilesForPrBody(worktree.worktreePath);
       const prBody = buildPrBody({
         task: claim.selected,
         validationCommand,
         validationOutput: validation.output,
         codexFinalMessage: codex.finalMessage,
+        filesChanged,
       });
       const prBodyPath = path.join(runDir, 'pr-body.md');
       fs.writeFileSync(prBodyPath, prBody, 'utf8');
@@ -931,7 +990,9 @@ module.exports = {
   LIVE_CONFIRMATION,
   buildCodexPrompt,
   buildPrBody,
+  changedFilesForPrBody,
   createPlanMarkdown,
+  formatFilesChanged,
   parseCliArgs,
   redactSensitiveText,
   runCommand,
