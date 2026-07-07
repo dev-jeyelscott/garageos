@@ -149,6 +149,21 @@ function testResolveRuntimeOptionsReadsEnvironment() {
   assert.equal(options.reviewScript, 'scripts/ai-pr-review.mjs');
 }
 
+function testWorkflowUsesAdvisoryGateRunner() {
+  const workflow = fs.readFileSync(
+    path.join(__dirname, '..', 'workflows', 'ai-pr-review.yml'),
+    'utf8',
+  );
+
+  assert.match(workflow, /^name:\s*GarageOS AI Review/m);
+  assert.match(workflow, /^\s+name:\s*advisory$/m);
+  assert.match(workflow, /node \.\/\.github\/scripts\/pr-risk-classifier\.cjs --git --base/);
+  assert.match(workflow, /node \.\/\.github\/scripts\/pr-ai-review\.cjs/);
+  assert.match(workflow, /AI_REVIEW_FAIL_MODE:\s*open/);
+  assert.match(workflow, /actions\/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02/);
+  assert.doesNotMatch(workflow, /^\s*run:\s*node scripts\/ai-pr-review\.mjs$/m);
+}
+
 async function run() {
   const tests = [
     testParseArgs,
@@ -157,6 +172,7 @@ async function run() {
     testScriptFailureIsReported,
     testWriteOutputsUpdatesLedger,
     testResolveRuntimeOptionsReadsEnvironment,
+    testWorkflowUsesAdvisoryGateRunner,
   ];
 
   for (const test of tests) {
