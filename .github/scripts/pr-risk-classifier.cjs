@@ -132,7 +132,8 @@ const RULES = [
       /^docs\/engineering\/observability/i,
       /^\.github\/scripts\/validate-observability-profile\.cjs$/i,
     ],
-    keywordPattern: /\b(background job|worker|scheduler|cron|export|observability|operational reliability|retry)\b/i,
+    keywordPattern:
+      /\b(background job|worker|scheduler|cron|export|observability|operational reliability|retry)\b/i,
   },
   {
     risk: 'R6',
@@ -146,7 +147,8 @@ const RULES = [
   },
   {
     risk: 'R5',
-    reason: 'Auth, tenant isolation, RBAC, branch access, plan gate, or sensitive-data area changed.',
+    reason:
+      'Auth, tenant isolation, RBAC, branch access, plan gate, or sensitive-data area changed.',
     pathPatterns: [
       /\/(?:auth|authentication|authorization|rbac|roles|permissions|tenant|tenants|subscription|subscriptions|plan|plans|branch-access|platform-admin|support-access|security)\//i,
       /^docs\/.*(?:permission|tenant|subscription|branch|security|auth|rbac|support-access)/i,
@@ -163,7 +165,8 @@ const RULES = [
       /\/(?:migrations?|persistence|repositories|repository|schema|seed|seeds)\//i,
       /^docs\/(?:database-design|database-schema)\.md$/i,
     ],
-    keywordPattern: /\b(database|migration|schema|constraint|index|foreign key|transaction|repository|persistence)\b/i,
+    keywordPattern:
+      /\b(database|migration|schema|constraint|index|foreign key|transaction|repository|persistence)\b/i,
   },
   {
     risk: 'R3',
@@ -174,7 +177,11 @@ const RULES = [
   {
     risk: 'R2',
     reason: 'Web UI path changed.',
-    pathPatterns: [/^apps\/web\//i, /^e2e\//i, /^docs\/(?:ux-sreen-map|ui-registry|ui-tokens)\.md$/i],
+    pathPatterns: [
+      /^apps\/web\//i,
+      /^e2e\//i,
+      /^docs\/(?:ux-sreen-map|ui-registry|ui-tokens)\.md$/i,
+    ],
     keywordPattern: /\b(web ui|frontend|pwa|screen|component|layout|offline read-only)\b/i,
   },
   {
@@ -191,7 +198,8 @@ const RULES = [
       /^docs\/engineering\/validation-profiles\.md$/i,
       /^docs\/engineering\/ci-status-checks\.md$/i,
     ],
-    keywordPattern: /\b(tooling|ci|workflow|runbook|pr template|branch protection|validation profile)\b/i,
+    keywordPattern:
+      /\b(tooling|ci|workflow|runbook|pr template|branch protection|validation profile)\b/i,
   },
 ];
 
@@ -231,7 +239,10 @@ function parseArgs(argv) {
 }
 
 function normalizePath(filePath) {
-  return String(filePath || '').replace(/\\/g, '/').replace(/^\.\//, '').trim();
+  return String(filePath || '')
+    .replace(/\\/g, '/')
+    .replace(/^\.\//, '')
+    .trim();
 }
 
 function asLines(value) {
@@ -402,7 +413,9 @@ function classifyPrRisk({ changedFiles = [], prBody = '', evaluatedAt = nowIso()
   }
 
   if (files.length === 0) {
-    warnings.push('No changed files were provided or resolved; classification used R0 baseline only.');
+    warnings.push(
+      'No changed files were provided or resolved; classification used R0 baseline only.',
+    );
   }
 
   const riskClass = RISK_BY_ID.get(computedRisk);
@@ -479,7 +492,11 @@ function buildMarkdownSummary(result) {
     }
   }
 
-  lines.push('', 'This classifier is advisory evidence only; deterministic CI and human review remain authoritative.', '');
+  lines.push(
+    '',
+    'This classifier is advisory evidence only; deterministic CI and human review remain authoritative.',
+    '',
+  );
 
   return `${lines.join('\n')}\n`;
 }

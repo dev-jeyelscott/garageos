@@ -135,7 +135,10 @@ function testBodyKeywordsCanRaiseRisk() {
   });
 
   assert.equal(result.risk_class, 'R5');
-  assert.equal(result.body_keyword_matches.some((match) => match.risk === 'R5'), true);
+  assert.equal(
+    result.body_keyword_matches.some((match) => match.risk === 'R5'),
+    true,
+  );
 }
 
 function testWriteOutputsUpdatesLedger() {
