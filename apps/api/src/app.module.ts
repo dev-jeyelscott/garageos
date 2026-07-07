@@ -11,6 +11,7 @@ import { MechanicSessionsModule } from './modules/mechanic-sessions/mechanic-ses
 import { ProductsModule } from './modules/products/products.module';
 import { MotorcyclesModule } from './modules/motorcycles/motorcycles.module';
 import { ExpenseCategoriesModule } from './modules/expense-categories/expense-categories.module';
+import { ExpensesModule } from './modules/expenses/expenses.module';
 import { ProductCategoriesModule } from './modules/product-categories/product-categories.module';
 import { ServicesModule } from './modules/services/services.module';
 import { PlatformModule } from './modules/platform/platform.module';
@@ -65,6 +66,7 @@ export class HealthController {
     ServicesModule,
     ProductCategoriesModule,
     ExpenseCategoriesModule,
+    ExpensesModule,
     AuditModule,
     IdempotencyModule,
     BackgroundJobsModule,
