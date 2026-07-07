@@ -70,7 +70,9 @@ function resolveRepositoryParts(repository) {
 }
 
 function normalizeMergeMethod(value) {
-  const method = String(value || 'squash').trim().toLowerCase();
+  const method = String(value || 'squash')
+    .trim()
+    .toLowerCase();
   if (!ALLOWED_MERGE_METHODS.has(method)) {
     throw new Error(`Unsupported merge method "${value}". Use merge, squash, or rebase.`);
   }
@@ -158,12 +160,11 @@ function validatePreconditions(options) {
     return blocked('merge_gate_result_missing', 'PR merge gate result is missing.', options);
   }
 
-  if (options.gateResult.status !== 'merge_gate_passed' || options.gateResult.merge_allowed !== true) {
-    return blocked(
-      'merge_gate_not_passed',
-      'Deterministic PR merge gate did not pass.',
-      options,
-    );
+  if (
+    options.gateResult.status !== 'merge_gate_passed' ||
+    options.gateResult.merge_allowed !== true
+  ) {
+    return blocked('merge_gate_not_passed', 'Deterministic PR merge gate did not pass.', options);
   }
 
   if (!options.repository) {
@@ -185,13 +186,20 @@ function validatePreconditions(options) {
   }
 
   if (!options.token) {
-    return blocked('github_token_missing', 'Missing GitHub token. Set GITHUB_TOKEN or GH_TOKEN.', options);
+    return blocked(
+      'github_token_missing',
+      'Missing GitHub token. Set GITHUB_TOKEN or GH_TOKEN.',
+      options,
+    );
   }
 
   return null;
 }
 
-async function githubRequest(apiPath, { token, method = 'GET', body, fetchImpl = globalThis.fetch }) {
+async function githubRequest(
+  apiPath,
+  { token, method = 'GET', body, fetchImpl = globalThis.fetch },
+) {
   if (!fetchImpl) {
     throw new Error('global fetch is unavailable. Use Node 18+ or provide a fetch implementation.');
   }
@@ -249,10 +257,13 @@ async function executeGuardedMerge(options, dependencies = {}) {
   const request = dependencies.githubRequest || githubRequest;
 
   try {
-    const pull = await request(`/repos/${repoParts.owner}/${repoParts.repo}/pulls/${options.prNumber}`, {
-      token: options.token,
-      fetchImpl: dependencies.fetchImpl,
-    });
+    const pull = await request(
+      `/repos/${repoParts.owner}/${repoParts.repo}/pulls/${options.prNumber}`,
+      {
+        token: options.token,
+        fetchImpl: dependencies.fetchImpl,
+      },
+    );
     const pullSummary = summarizePullRequest(pull);
 
     if (pullSummary.state !== 'open') {
@@ -262,9 +273,14 @@ async function executeGuardedMerge(options, dependencies = {}) {
     }
 
     if (pullSummary.draft) {
-      return blocked('pr_is_draft', 'Draft pull requests cannot be merged by this executor.', options, {
-        pullRequest: pullSummary,
-      });
+      return blocked(
+        'pr_is_draft',
+        'Draft pull requests cannot be merged by this executor.',
+        options,
+        {
+          pullRequest: pullSummary,
+        },
+      );
     }
 
     if (pullSummary.head_sha !== options.expectedHeadSha) {
