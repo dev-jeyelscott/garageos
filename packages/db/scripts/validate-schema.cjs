@@ -9,8 +9,8 @@ require('dotenv').config({
 const DATABASE_URL = process.env.DATABASE_URL;
 
 const EXPECTED = {
-  migrationCount: 30,
-  publicTableCount: 109,
+  migrationCount: 31,
+  publicTableCount: 110,
   subscriptionPlans: 3,
   subscriptionPlanLimits: 27,
   permissions: 128,
@@ -898,6 +898,69 @@ async function validatePurchaseOrderLineSchema(client) {
 
   assertEqual('purchase order line columns', purchaseOrderLineColumnCount, 9);
 }
+
+async function validateReminderRulesSchema(client) {
+  const columnCount = await count(
+    client,
+    `
+      select count(*)
+      from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'reminder_rules'
+        and column_name in (
+          'id',
+          'tenant_id',
+          'name',
+          'normalized_name',
+          'reminder_type',
+          'channel',
+          'status',
+          'schedule_config_json',
+          'template_id',
+          'created_by_user_id',
+          'updated_by_user_id',
+          'created_at',
+          'updated_at',
+          'deactivated_at',
+          'reactivated_at',
+          'lock_version'
+        )
+    `,
+  );
+
+  const channelConstraintCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_constraint
+      where conname = 'chk_reminder_rules_channel'
+    `,
+  );
+
+  const statusConstraintCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_constraint
+      where conname = 'chk_reminder_rules_status'
+    `,
+  );
+
+  const activeTypeIndexCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_indexes
+      where schemaname = 'public'
+        and indexname = 'idx_reminder_rules_active_type'
+    `,
+  );
+
+  assertEqual('reminder rules columns', columnCount, 16);
+  assertEqual('reminder rules channel constraint', channelConstraintCount, 1);
+  assertEqual('reminder rules status constraint', statusConstraintCount, 1);
+  assertEqual('reminder rules active type index', activeTypeIndexCount, 1);
+}
 async function validateMoneyPrecision(client) {
   const result = await client.query(`
     select table_name, column_name, numeric_precision, numeric_scale
@@ -986,6 +1049,7 @@ async function main() {
     await validateFifoLayerFoundationSchema(client);
     await validateEstimatesBaselineSchema(client);
     await validatePurchaseOrderLineSchema(client);
+    await validateReminderRulesSchema(client);
     await validateMoneyPrecision(client);
     await validateQuantityPrecision(client);
 
