@@ -28,6 +28,9 @@ const input = {
   runValidation: asBool(process.env.INPUT_RUN_VALIDATION, true),
   validationCommand: safeValue(process.env.INPUT_VALIDATION_COMMAND || 'pnpm validate:quick'),
   mutationConfirmation: safeValue(process.env.INPUT_MUTATION_CONFIRMATION || ''),
+  mergePr: asBool(process.env.INPUT_MERGE_PR, false),
+  mergeConfirmation: safeValue(process.env.INPUT_MERGE_CONFIRMATION || ''),
+  mergeMethod: safeValue(process.env.INPUT_MERGE_METHOD || 'squash'),
 };
 
 const notionTokenPresent = Boolean(process.env.NOTION_TOKEN || process.env.NOTION_API_KEY);
@@ -43,6 +46,8 @@ const mutationRequested =
   input.dryRun === false;
 const oneTaskConfirmationValue = 'ENG-LOOP-23-RUN';
 const firstFiveConfirmationValue = 'ENG-LOOP-24-FIRST-5';
+const mergeConfirmationValue = 'ENG-LOOP-33-MERGE';
+const allowedMergeMethods = new Set(['merge', 'squash', 'rebase']);
 const expectedMaxTasks = firstFiveMode ? 5 : 1;
 
 if (!allowedModes.has(input.mode)) {
@@ -99,6 +104,26 @@ if (input.mutateNotion && !notionTokenPresent) {
   );
 }
 
+if (input.mergePr && dryRunMode) {
+  fail('merge_pr cannot be true in dry-run mode.');
+}
+
+if (input.mergePr && input.mode !== 'run') {
+  fail('merge_pr requires mode=run. Batch modes must not merge pull requests.');
+}
+
+if (input.mergePr && input.mergeConfirmation !== mergeConfirmationValue) {
+  fail(`merge_pr=true requires merge_confirmation=${mergeConfirmationValue}.`);
+}
+
+if (input.mergePr && !githubTokenPresent) {
+  fail('merge_pr=true requires GITHUB_TOKEN to be available.');
+}
+
+if (!allowedMergeMethods.has(input.mergeMethod)) {
+  fail('merge_method must be merge, squash, or rebase.');
+}
+
 if (!input.validationCommand) {
   fail('validation_command is required.');
 }
@@ -123,6 +148,9 @@ const sanitizedInputs = {
   run_validation: input.runValidation,
   validation_command: input.validationCommand,
   mutation_confirmation_present: Boolean(input.mutationConfirmation),
+  merge_pr: input.mergePr,
+  merge_confirmation_present: Boolean(input.mergeConfirmation),
+  merge_method: input.mergeMethod,
   github_token_present: githubTokenPresent,
   notion_token_present: notionTokenPresent,
 };
@@ -158,6 +186,12 @@ const commandPlan = [
   input.createPrBody
     ? 'node ./.github/scripts/eng-loop-pr-automation.cjs --task .tmp/eng-loop-task.json'
     : '# PR body/evidence generation skipped by input',
+  input.mergePr
+    ? [
+        'node ./.github/scripts/pr-merge-gate.cjs',
+        `node ./.github/scripts/pr-guarded-merge.cjs --mode=manual --confirm "${mergeConfirmationValue}" --merge-method ${input.mergeMethod}`,
+      ].join('\n')
+    : '# guarded merge execution skipped by input',
   '```',
   '',
   '## Safety notes',
@@ -166,6 +200,7 @@ const commandPlan = [
   '- first-5-dry-run only creates a plan and local evidence artifacts.',
   '- first-5 mutation-capable behavior requires exact ENG-LOOP-24 confirmation.',
   '- Mutation-capable behavior requires explicit confirmation and required secrets.',
+  '- Guarded merge execution is manual-only, requires exact ENG-LOOP-33 confirmation, and relies on GitHub branch protection.',
   '- This plan intentionally does not print secret values.',
 ].join('\n');
 

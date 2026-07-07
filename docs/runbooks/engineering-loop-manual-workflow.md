@@ -44,6 +44,26 @@ For Notion mutation, configure one of these repository secrets:
 
 The workflow must not print secret values. The preflight script records only whether required secrets are present.
 
+## Guarded manual merge
+
+Guarded merge execution is available only in one-task manual run mode. It is disabled by default.
+
+To attempt a guarded merge after deterministic merge-gate evaluation:
+
+```text
+mode: run
+dry_run: false
+max_tasks: 1
+mutation_confirmation: ENG-LOOP-23-RUN
+merge_pr: true
+merge_confirmation: ENG-LOOP-33-MERGE
+merge_method: squash
+```
+
+The guarded merge executor first runs `.github/scripts/pr-merge-gate.cjs`, then `.github/scripts/pr-guarded-merge.cjs`. The executor requires the merge gate to pass, the PR head SHA to match the evaluated gate result, and the exact merge confirmation before calling GitHub's pull request merge API.
+
+GitHub branch protection, required checks, repository permissions, and maintainer decision-making remain authoritative. The executor does not approve PRs, bypass branch protection, change repository settings, or merge batch-mode tasks.
+
 ## Stop conditions
 
 - Stop when `max_tasks` is greater than `1`.
@@ -51,10 +71,15 @@ The workflow must not print secret values. The preflight script records only whe
 - Stop when run mode does not include `mutation_confirmation: ENG-LOOP-23-RUN`.
 - Stop when Notion mutation is requested but the Notion token secret is missing.
 - Stop when the validation command contains shell metacharacters.
+- Stop when guarded merge is requested outside `mode: run`.
+- Stop when guarded merge is requested without `merge_confirmation: ENG-LOOP-33-MERGE`.
+- Stop when the deterministic merge gate blocks the PR.
+- Stop when the PR head SHA no longer matches the merge gate result.
+- Stop when GitHub rejects the merge because branch protection, required checks, permissions, or PR state are not satisfied.
 
 ## Evidence artifacts
 
-The workflow uploads `.tmp/eng-loop-*` files as artifacts when available, including:
+The workflow uploads engineering-loop evidence files as artifacts when available, including:
 
 - `.tmp/eng-loop-workflow-command-plan.md`
 - `.tmp/eng-loop-workflow-inputs.json`
@@ -65,12 +90,17 @@ The workflow uploads `.tmp/eng-loop-*` files as artifacts when available, includ
 - `.tmp/eng-loop-pr-automation-metadata.json`
 - `.tmp/eng-loop-ci-status.json`
 - `.tmp/eng-loop-follow-up-task.json`
+- `.tmp/pr-merge-gate-result.json`
+- `.tmp/pr-merge-gate-summary.md`
+- `.tmp/pr-guarded-merge-result.json`
+- `.tmp/pr-guarded-merge-summary.md`
 
 ## Local validation
 
 Run:
 
 ```bash
+node ./.github/scripts/pr-guarded-merge.test.cjs
 node ./.github/scripts/eng-loop-workflow-preflight.test.cjs
 pnpm eng-loop:test
 pnpm validate:quick

@@ -20,6 +20,9 @@ function runPreflight(env) {
       INPUT_RUN_VALIDATION: 'true',
       INPUT_VALIDATION_COMMAND: 'pnpm validate:quick',
       INPUT_MUTATION_CONFIRMATION: '',
+      INPUT_MERGE_PR: 'false',
+      INPUT_MERGE_CONFIRMATION: '',
+      INPUT_MERGE_METHOD: 'squash',
       NOTION_TOKEN: '',
       NOTION_API_KEY: '',
       GITHUB_TOKEN: 'unit-test-github-token',
@@ -145,6 +148,50 @@ assertFailed(
   /must not contain shell metacharacters/i,
 );
 
+assertFailed(
+  'testDryRunCannotMergePr',
+  { INPUT_MERGE_PR: 'true', INPUT_MERGE_CONFIRMATION: 'ENG-LOOP-33-MERGE' },
+  /merge_pr cannot be true in dry-run mode/i,
+);
+
+assertFailed(
+  'testMergePrRequiresRunMode',
+  {
+    INPUT_MODE: 'first-5',
+    INPUT_MAX_TASKS: '5',
+    INPUT_DRY_RUN: 'false',
+    INPUT_MUTATION_CONFIRMATION: 'ENG-LOOP-24-FIRST-5',
+    INPUT_MERGE_PR: 'true',
+    INPUT_MERGE_CONFIRMATION: 'ENG-LOOP-33-MERGE',
+  },
+  /merge_pr requires mode=run/i,
+);
+
+assertFailed(
+  'testMergePrRequiresConfirmation',
+  {
+    INPUT_MODE: 'run',
+    INPUT_DRY_RUN: 'false',
+    INPUT_MUTATION_CONFIRMATION: 'ENG-LOOP-23-RUN',
+    INPUT_MERGE_PR: 'true',
+  },
+  /requires merge_confirmation=ENG-LOOP-33-MERGE/i,
+);
+
+assertFailed(
+  'testInvalidMergeMethodRejected',
+  { INPUT_MERGE_METHOD: 'octopus' },
+  /merge_method must be merge, squash, or rebase/i,
+);
+
+assertPassed('testMergePrWithConfirmationIsAllowed', {
+  INPUT_MODE: 'run',
+  INPUT_DRY_RUN: 'false',
+  INPUT_MUTATION_CONFIRMATION: 'ENG-LOOP-23-RUN',
+  INPUT_MERGE_PR: 'true',
+  INPUT_MERGE_CONFIRMATION: 'ENG-LOOP-33-MERGE',
+});
+
 const secretResult = assertPassed('testSecretValueIsNotPrinted', {
   INPUT_MODE: 'run',
   INPUT_DRY_RUN: 'false',
@@ -156,4 +203,4 @@ const combinedOutput = `${secretResult.stdout}
 ${secretResult.stderr}`;
 assert.equal(combinedOutput.includes('super-secret-token-that-must-not-print'), false);
 
-console.log('All 15 engineering loop manual workflow preflight tests passed.');
+console.log('All 20 engineering loop manual workflow preflight tests passed.');
