@@ -49,6 +49,51 @@ function ciResult(overrides = {}) {
   };
 }
 
+class FakeFollowUpClient {
+  constructor() {
+    this.created = [];
+  }
+
+  async fetchDatabase() {
+    return {
+      Task: { type: 'title' },
+      Status: { type: 'status' },
+      'Codex Ready': { type: 'checkbox' },
+      Branch: { type: 'rich_text' },
+      Repository: { type: 'rich_text' },
+      Priority: { type: 'select' },
+      Category: { type: 'select' },
+      'Item Type': { type: 'select' },
+      Milestone: { type: 'select' },
+      Dependencies: { type: 'rich_text' },
+      'Progress Source': { type: 'rich_text' },
+      'Validation Commands': { type: 'rich_text' },
+      'Commit Message': { type: 'rich_text' },
+    };
+  }
+
+  async findExistingFollowUp() {
+    return {
+      dedupeSafe: true,
+      existingPage: null,
+    };
+  }
+
+  async createFollowUpTask(page) {
+    this.created.push(page);
+    return {
+      id: 'created-follow-up',
+      url: 'https://app.notion.com/p/created-follow-up',
+    };
+  }
+}
+
+class FailingFollowUpClient {
+  async fetchDatabase() {
+    throw new Error('Injected follow-up creation failure.');
+  }
+}
+
 function testPassingCiAllowsMerge() {
   const result = gate.buildMergeGateResult(ciResult(), {
     evaluatedAt: '2026-07-07T01:00:00.000Z',
@@ -149,6 +194,121 @@ function testWriteOutputsUpdatesLedger() {
   assert.equal(ledger.events.at(-1).type, 'pr_merge_gate_passed');
 }
 
+async function testBlockedMergeGateCreatesFollowUpTask() {
+  const dir = makeTempDir();
+  const taskFile = path.join(dir, 'task.json');
+  fs.writeFileSync(
+    taskFile,
+    JSON.stringify(
+      {
+        id: 'task-34',
+        title: 'ENG-LOOP-34 - Integrate merge gate failures with follow-up task creation',
+        url: 'https://app.notion.com/p/task-34',
+        branch: 'chore/eng-loop-34-merge-gate-follow-up-tasks',
+        repository: 'dev-jeyelscott/garageos',
+      },
+      null,
+      2,
+    ),
+  );
+  const result = gate.buildMergeGateResult(
+    ciResult({
+      status: 'ci_failed',
+      safe_to_mark_done: false,
+      failed_checks: [{ name: 'validation-quick', classification: 'failed' }],
+    }),
+    {
+      evaluatedAt: '2026-07-07T01:00:00.000Z',
+    },
+  );
+  const client = new FakeFollowUpClient();
+
+  gate.writeOutputs(result, {
+    resultFile: path.join(dir, 'gate-result.json'),
+    summaryFile: path.join(dir, 'gate-summary.md'),
+    ledgerFile: path.join(dir, 'ledger.json'),
+  });
+  const outcome = await gate.createFollowUpForMergeGateFailure(
+    result,
+    {
+      taskFile,
+      ledgerFile: path.join(dir, 'ledger.json'),
+      followUpResultFile: path.join(dir, 'follow-up-result.json'),
+      followUpSummaryFile: path.join(dir, 'follow-up-summary.md'),
+    },
+    {
+      followUpClient: client,
+      now: () => '2026-07-07T01:01:00.000Z',
+    },
+  );
+
+  const ledger = JSON.parse(fs.readFileSync(path.join(dir, 'ledger.json'), 'utf8'));
+
+  assert.equal(outcome.result.status, 'created');
+  assert.equal(client.created.length, 1);
+  assert.equal(outcome.result.task_url, 'https://app.notion.com/p/created-follow-up');
+  assert.equal(ledger.pr_merge_gate.status, 'merge_gate_blocked');
+  assert.equal(ledger.follow_up_task.status, 'created');
+  assert.equal(ledger.events.at(-1).type, 'follow_up_task_created');
+}
+
+async function testPendingMergeGateDoesNotCreateFollowUpTask() {
+  const result = gate.buildMergeGateResult(
+    ciResult({
+      status: 'ci_pending',
+      safe_to_mark_done: false,
+      pending_checks: [{ name: 'validation-security', classification: 'pending' }],
+    }),
+  );
+  const client = new FakeFollowUpClient();
+  const outcome = await gate.createFollowUpForMergeGateFailure(
+    result,
+    {
+      followUpResultFile: path.join(makeTempDir(), 'follow-up-result.json'),
+    },
+    {
+      followUpClient: client,
+    },
+  );
+
+  assert.equal(outcome, null);
+  assert.equal(client.created.length, 0);
+}
+
+async function testFollowUpCreationFailureWritesFailureArtifacts() {
+  const dir = makeTempDir();
+  const result = gate.buildMergeGateResult(
+    ciResult({
+      status: 'ci_failed',
+      safe_to_mark_done: false,
+      failed_checks: [{ name: 'validation-quick', classification: 'failed' }],
+    }),
+  );
+
+  await assert.rejects(
+    () =>
+      gate.createFollowUpForMergeGateFailure(
+        result,
+        {
+          ledgerFile: path.join(dir, 'ledger.json'),
+          followUpResultFile: path.join(dir, 'follow-up-result.json'),
+          followUpSummaryFile: path.join(dir, 'follow-up-summary.md'),
+        },
+        {
+          followUpClient: new FailingFollowUpClient(),
+        },
+      ),
+    /Injected follow-up creation failure/,
+  );
+
+  const savedResult = JSON.parse(fs.readFileSync(path.join(dir, 'follow-up-result.json'), 'utf8'));
+  const ledger = JSON.parse(fs.readFileSync(path.join(dir, 'ledger.json'), 'utf8'));
+
+  assert.equal(savedResult.status, 'failed');
+  assert.equal(savedResult.reason, 'follow_up_creation_failed');
+  assert.equal(ledger.follow_up_task.status, 'failed');
+}
+
 function testResolveGateOptionsUsesSeparateCiAndGateOutputs() {
   const dir = makeTempDir();
   const options = gate.resolveGateOptions(
@@ -168,6 +328,17 @@ function testResolveGateOptionsUsesSeparateCiAndGateOutputs() {
   assert.equal(options.watcherOptions.resultFile, '.tmp/eng-loop-ci-status-result.json');
   assert.equal(options.watcherOptions.summaryFile, '.tmp/eng-loop-ci-status-summary.md');
   assert.equal(options.watcherOptions.watch, false);
+}
+
+function testResolveGateOptionsCanDisableFollowUp() {
+  const options = gate.resolveGateOptions(
+    {
+      followUp: 'false',
+    },
+    makeTempDir(),
+  );
+
+  assert.equal(options.followUpEnabled, false);
 }
 
 async function testEvaluateWritesWatcherEvidenceWhenRunningWatcher() {
@@ -246,7 +417,11 @@ async function run() {
     testUnknownCheckBlocksMerge,
     testEvaluateReusesWatcherResult,
     testWriteOutputsUpdatesLedger,
+    testBlockedMergeGateCreatesFollowUpTask,
+    testPendingMergeGateDoesNotCreateFollowUpTask,
+    testFollowUpCreationFailureWritesFailureArtifacts,
     testResolveGateOptionsUsesSeparateCiAndGateOutputs,
+    testResolveGateOptionsCanDisableFollowUp,
     testEvaluateWritesWatcherEvidenceWhenRunningWatcher,
     testRequiredCheckConfigUsesDeterministicChecks,
   ];
