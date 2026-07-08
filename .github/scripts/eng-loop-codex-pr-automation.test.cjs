@@ -58,7 +58,11 @@ function testSafeBranchValidation() {
 function testValidationCommandGuard() {
   assert.equal(
     automation.validateSafeValidationCommand('pnpm validate:quick'),
-    'pnpm validate:quick',
+    'corepack pnpm validate:quick',
+  );
+  assert.equal(
+    automation.validateSafeValidationCommand('corepack pnpm validate:quick'),
+    'corepack pnpm validate:quick',
   );
   assert.equal(
     automation.validateSafeValidationCommand('node ./.github/scripts/eng-loop-runner.test.cjs'),
@@ -86,7 +90,7 @@ function testRunCommandDefaultsToArgvMode() {
 function testPromptIncludesAutomationBoundaries() {
   const prompt = automation.buildCodexPrompt({
     task: task(),
-    validationCommand: 'pnpm validate:quick',
+    validationCommand: 'corepack pnpm validate:quick',
     baseBranch: 'develop',
   });
 
@@ -95,13 +99,13 @@ function testPromptIncludesAutomationBoundaries() {
   assert.match(prompt, /Do not commit/);
   assert.match(prompt, /Do not push/);
   assert.match(prompt, /Do not create a PR/);
-  assert.match(prompt, /pnpm validate:quick/);
+  assert.match(prompt, /corepack pnpm validate:quick/);
 }
 
 function testPrBodyContainsRequiredSections() {
   const body = automation.buildPrBody({
     task: task(),
-    validationCommand: 'pnpm validate:quick',
+    validationCommand: 'corepack pnpm validate:quick',
     validationOutput: 'All checks passed.',
     codexFinalMessage: 'Implemented task and ran validation.',
     filesChanged: ['.github/scripts/eng-loop-codex-pr-automation.cjs'],
@@ -124,7 +128,7 @@ function testPrBodyContainsRequiredSections() {
     assert.match(body, new RegExp(section.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   }
 
-  assert.match(body, /`pnpm validate:quick` — Passed/);
+  assert.match(body, /`corepack pnpm validate:quick` — Passed/);
   assert.match(body, /`\.github\/scripts\/eng-loop-codex-pr-automation\.cjs`/);
   assert.match(body, /- \[ \] CI completed successfully\./);
   assert.doesNotMatch(body, /## Changes/);
@@ -157,13 +161,16 @@ function testPlanMarkdownIncludesCodexFlow() {
       limit: 5,
       baseBranch: 'develop',
       repository: 'dev-jeyelscott/garageos',
-      validationCommand: 'pnpm validate:quick',
+      validationCommand: 'corepack pnpm validate:quick',
     },
     selectedTasks: [task()],
   });
 
   assert.match(markdown, /Codex-Powered First-5 PR Automation Plan/);
-  assert.match(markdown, /claim → worktree → Codex exec → validation → commit → push → PR/);
+  assert.match(
+    markdown,
+    /claim → worktree → Codex exec → format → validation → commit → push → PR/,
+  );
 }
 
 function testRedactsSensitiveOutput() {

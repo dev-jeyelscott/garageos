@@ -16,13 +16,24 @@ const DEFAULT_LIMIT = 5;
 const DEFAULT_SCAN_LIMIT = 250;
 const DEFAULT_BASE_BRANCH = 'develop';
 const DEFAULT_REPOSITORY = 'dev-jeyelscott/garageos';
-const DEFAULT_VALIDATION_COMMAND = 'pnpm validate:quick';
+const DEFAULT_FORMAT_COMMAND = 'corepack pnpm format';
+const DEFAULT_VALIDATION_COMMAND = 'corepack pnpm validate:quick';
 const LIVE_CONFIRMATION = 'RUN_CODEX_AND_CREATE_PRS';
 const SENSITIVE_TEXT_PATTERN =
   /(?:secret|token|api[_-]?key|authorization|bearer|password|passwd|pwd)\s*[:=]\s*[^\s'\"]+/gi;
 
 function normalizeText(value) {
   return String(value ?? '').trim();
+}
+
+function normalizeCommand(value) {
+  return normalizeText(value).replace(/\s+/g, ' ');
+}
+
+function forceCorepackPnpmCommand(command) {
+  const value = normalizeCommand(command || DEFAULT_VALIDATION_COMMAND);
+  if (value === 'pnpm' || value.startsWith('pnpm ')) return `corepack ${value}`;
+  return value;
 }
 
 function nowIso() {
@@ -39,7 +50,9 @@ function parseCliArgs(argv = process.argv.slice(2), env = process.env) {
     actor: normalizeText(
       env.ENG_LOOP_ACTOR || env.GITHUB_ACTOR || env.USER || env.USERNAME || 'local',
     ),
-    validationCommand: normalizeText(env.ENG_LOOP_VALIDATION_COMMAND || DEFAULT_VALIDATION_COMMAND),
+    validationCommand: forceCorepackPnpmCommand(
+      env.ENG_LOOP_VALIDATION_COMMAND || DEFAULT_VALIDATION_COMMAND,
+    ),
     confirmCodexPr: false,
     allowDirty: false,
     tasksFile: '',
@@ -135,6 +148,8 @@ function parseCliArgs(argv = process.argv.slice(2), env = process.env) {
     throw new Error('--scan-limit must be an integer greater than or equal to --limit.');
   }
 
+  args.validationCommand = validateSafeValidationCommand(args.validationCommand);
+
   return args;
 }
 
@@ -146,14 +161,14 @@ Usage:
   node ./.github/scripts/eng-loop-codex-pr-automation.cjs --mode=live --limit=5 --confirm-codex-pr
 
 Live mode automatically claims each selected task, creates a task branch/worktree, runs Codex CLI,
-runs validation, commits, pushes, creates a PR, and then moves to the next task.
+runs formatting, runs validation, commits, pushes, creates a PR, and then moves to the next task.
 
 Environment:
   GARAGEOS_NOTION_TOKEN or NOTION_TOKEN
   GARAGEOS_NOTION_TASK_DATABASE_ID or NOTION_TASK_DATABASE_ID
   ENG_LOOP_BASE_BRANCH=develop
   ENG_LOOP_REPOSITORY=dev-jeyelscott/garageos
-  ENG_LOOP_VALIDATION_COMMAND=pnpm validate:quick
+  ENG_LOOP_VALIDATION_COMMAND=corepack pnpm validate:quick
   ENG_LOOP_TASK_SCOPE=all | eng-loop
 `);
 }
@@ -359,10 +374,10 @@ function validateSafeBranchName(branch) {
 }
 
 function validateSafeValidationCommand(command) {
-  const value = normalizeText(command || DEFAULT_VALIDATION_COMMAND);
-  if (!/^(pnpm|node|npm|npx)\s+[A-Za-z0-9_./:@=\s-]+$/.test(value)) {
+  const value = forceCorepackPnpmCommand(command || DEFAULT_VALIDATION_COMMAND);
+  if (!/^(corepack\s+pnpm|node|npm|npx)\s+[A-Za-z0-9_./:@=\s-]+$/.test(value)) {
     throw new Error(
-      'Validation command must start with pnpm, node, npm, or npx and must not contain shell metacharacters.',
+      'Validation command must start with corepack pnpm, node, npm, or npx and must not contain shell metacharacters.',
     );
   }
   return value;
@@ -447,6 +462,7 @@ function preflightLive(args, cwd = process.cwd()) {
   assertCleanGitTree(cwd, args.allowDirty);
   requireCommand('git');
   requireCommand('gh');
+  requireCommand('corepack');
   const codexSpawnOptions = resolveCodexSpawnOptions();
   requireCommand(codexSpawnOptions.command, { shell: codexSpawnOptions.shell });
 
@@ -495,8 +511,9 @@ Follow GarageOS source-of-truth order:
 1. Review relevant docs and current code.
 2. Implement the task with the smallest safe change.
 3. Run focused checks when useful.
-4. Run ${validationCommand} before finishing.
-5. Leave final notes describing changed files, validation commands, and any risks.
+4. Run ${DEFAULT_FORMAT_COMMAND} after implementation and any fixes.
+5. Run ${validationCommand} after formatting.
+6. Leave final notes describing changed files, validation commands, and any risks.
 
 ## Final Response Format
 
@@ -533,6 +550,8 @@ function changedFilesForPrBody(worktreePath) {
 
 function buildPrBody({
   task,
+  formatCommand = DEFAULT_FORMAT_COMMAND,
+  formatOutput,
   validationCommand,
   validationOutput,
   codexFinalMessage,
@@ -580,6 +599,12 @@ ${normalizeText(codexFinalMessage) || 'No final Codex message captured.'}
 
 ## Validation Evidence
 
+\`${formatCommand}\` — Passed
+
+\`\`\`text
+${normalizeText(formatOutput).slice(-3000) || 'Format command passed with no captured output.'}
+\`\`\`
+
 \`${validationCommand}\` — Passed
 
 \`\`\`text
@@ -604,6 +629,7 @@ ${normalizeText(validationOutput).slice(-6000) || 'Validation command passed wit
 ## Merge Readiness Checklist
 
 - [x] Claimed task implemented in an isolated task worktree.
+- [x] Local formatting completed successfully before validation.
 - [x] Local validation command completed successfully before commit/push.
 - [ ] CI completed successfully.
 - [ ] Maintainer review completed.
@@ -632,7 +658,9 @@ function createPlanMarkdown({ args, selectedTasks }) {
       lines.push(`${index + 1}. ${task.title}`);
       lines.push(`   - Branch: ${task.branch || '(missing)'}`);
       lines.push(`   - Repository: ${task.repository || args.repository}`);
-      lines.push('   - Flow: claim → worktree → Codex exec → validation → commit → push → PR');
+      lines.push(
+        '   - Flow: claim → worktree → Codex exec → format → validation → commit → push → PR',
+      );
     }
   }
 
@@ -744,18 +772,35 @@ async function runCodex({ worktreePath, prompt, runDir }) {
   return { finalMessagePath, stdoutPath, stderrPath, finalMessage };
 }
 
-function runValidation({ worktreePath, validationCommand, runDir }) {
-  const result = runCommand(validationCommand, [], {
+function runFormat({ worktreePath, runDir }) {
+  const result = runCommand(DEFAULT_FORMAT_COMMAND, [], {
     cwd: worktreePath,
     shell: true,
     maxBuffer: 1024 * 1024 * 40,
+    env: { COREPACK_ENABLE_DOWNLOAD_PROMPT: '0' },
+  });
+  const output = `${result.stdout}\n${result.stderr}`.trim();
+  const outputPath = path.join(runDir, 'format-output.txt');
+  fs.writeFileSync(outputPath, output, 'utf8');
+
+  if (!result.ok) throw new Error(`Format failed. See ${outputPath}.`);
+  return { output, outputPath };
+}
+
+function runValidation({ worktreePath, validationCommand, runDir }) {
+  const command = validateSafeValidationCommand(validationCommand);
+  const result = runCommand(command, [], {
+    cwd: worktreePath,
+    shell: true,
+    maxBuffer: 1024 * 1024 * 40,
+    env: { COREPACK_ENABLE_DOWNLOAD_PROMPT: '0' },
   });
   const output = `${result.stdout}\n${result.stderr}`.trim();
   const outputPath = path.join(runDir, 'validation-output.txt');
   fs.writeFileSync(outputPath, output, 'utf8');
 
   if (!result.ok) throw new Error(`Validation failed. See ${outputPath}.`);
-  return { output, outputPath };
+  return { command, output, outputPath };
 }
 
 function commitPushAndCreatePr({ task, args, worktreePath, runDir, prBodyPath }) {
@@ -879,6 +924,7 @@ async function runLive({ args, client, selectedTasks, cwd = process.cwd() }) {
       taskResult.worktree_path = worktree.worktreePath;
 
       const codex = await runCodex({ worktreePath: worktree.worktreePath, prompt, runDir });
+      const format = runFormat({ worktreePath: worktree.worktreePath, runDir });
       const validation = runValidation({
         worktreePath: worktree.worktreePath,
         validationCommand,
@@ -887,7 +933,9 @@ async function runLive({ args, client, selectedTasks, cwd = process.cwd() }) {
       const filesChanged = changedFilesForPrBody(worktree.worktreePath);
       const prBody = buildPrBody({
         task: claim.selected,
-        validationCommand,
+        formatCommand: DEFAULT_FORMAT_COMMAND,
+        formatOutput: format.output,
+        validationCommand: validation.command,
         validationOutput: validation.output,
         codexFinalMessage: codex.finalMessage,
         filesChanged,
@@ -987,15 +1035,19 @@ if (require.main === module) {
 }
 
 module.exports = {
+  DEFAULT_FORMAT_COMMAND,
+  DEFAULT_VALIDATION_COMMAND,
   LIVE_CONFIRMATION,
   buildCodexPrompt,
   buildPrBody,
   changedFilesForPrBody,
   createPlanMarkdown,
+  forceCorepackPnpmCommand,
   formatFilesChanged,
   parseCliArgs,
   redactSensitiveText,
   runCommand,
+  runFormat,
   runStreamingCommand,
   taskKeyFromTitle,
   validateSafeBranchName,
