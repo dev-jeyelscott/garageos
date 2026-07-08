@@ -9,6 +9,7 @@ import type {
   TenantStatus,
 } from '../../../shared/tenant-context/tenant-context';
 import type { UpdateNotificationPreferencesRequest } from '../api/notification-preferences.schemas';
+import { updateNotificationPreferencesRequestSchema } from '../api/notification-preferences.schemas';
 import {
   NotificationPreferenceStore,
   type NotificationPreferenceRecord,
@@ -28,6 +29,15 @@ describe('NotificationPreferencesService', () => {
     await expect(service.getPreferences(createTenantSession([]))).rejects.toMatchObject({
       code: API_ERROR_CODES.FORBIDDEN,
       details: [{ required_permission: 'notifications.read' }],
+    });
+  });
+
+  it('allows active shop owners to read preferences through the owner bypass', async () => {
+    const { service, store } = createService();
+    store.isOwner = true;
+
+    await expect(service.getPreferences(createTenantSession([]))).resolves.toEqual({
+      preferences: [],
     });
   });
 
@@ -56,6 +66,35 @@ describe('NotificationPreferencesService', () => {
         updated_at: UPDATED_AT.toISOString(),
       },
     ]);
+  });
+
+  it('requires notifications.update_preferences permission for non-owner updates', async () => {
+    const { service, store } = createService();
+    store.isOwner = false;
+
+    await expect(
+      service.updatePreferences(createUpdateRequest(), createTenantSession([])),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.FORBIDDEN,
+      details: [{ required_permission: 'notifications.update_preferences' }],
+    });
+  });
+
+  it('allows active shop owners to update preferences through the owner bypass', async () => {
+    const { service, store } = createService();
+    store.isOwner = true;
+
+    await expect(
+      service.updatePreferences(createUpdateRequest(), createTenantSession([])),
+    ).resolves.toMatchObject({
+      preferences: [
+        {
+          notification_type: 'low_stock',
+          channel: 'in_app',
+          enabled: true,
+        },
+      ],
+    });
   });
 
   it('blocks enabled channels that are not available on the tenant plan', async () => {
@@ -136,6 +175,26 @@ describe('NotificationPreferencesService', () => {
     ).rejects.toMatchObject({
       code: API_ERROR_CODES.SUBSCRIPTION_ACCESS_BLOCKED,
     });
+  });
+
+  it('rejects duplicate notification type and channel entries at request validation', () => {
+    const result = updateNotificationPreferencesRequestSchema.safeParse({
+      preferences: [
+        {
+          notification_type: 'low_stock',
+          channel: 'in_app',
+          enabled: true,
+        },
+        {
+          notification_type: 'low_stock',
+          channel: 'in_app',
+          enabled: false,
+        },
+      ],
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.message).toBe('Duplicate notification preference.');
   });
 });
 

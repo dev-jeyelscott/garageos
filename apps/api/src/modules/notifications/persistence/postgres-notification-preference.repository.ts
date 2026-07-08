@@ -158,6 +158,10 @@ export class PostgresNotificationPreferenceRepository extends NotificationPrefer
     input: ReplaceNotificationPreferencesInput,
     client: DatabaseQueryClient,
   ): Promise<readonly NotificationPreferenceRecord[]> {
+    await client.query('select pg_advisory_xact_lock(hashtextextended($1, 0))', [
+      `notification-preferences:${input.tenantId}:${input.userId}`,
+    ]);
+
     await client.query(
       `
         delete from user_notification_preferences
@@ -167,7 +171,23 @@ export class PostgresNotificationPreferenceRepository extends NotificationPrefer
       [input.tenantId, input.userId],
     );
 
-    for (const preference of input.preferences) {
+    if (input.preferences.length > 0) {
+      const values: unknown[] = [];
+      const placeholders = input.preferences.map((preference, index) => {
+        const offset = index * 6;
+
+        values.push(
+          input.tenantId,
+          input.userId,
+          preference.notificationType,
+          preference.channel,
+          preference.enabled,
+          input.updatedAt,
+        );
+
+        return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 6})`;
+      });
+
       await client.query(
         `
           insert into user_notification_preferences (
@@ -179,16 +199,9 @@ export class PostgresNotificationPreferenceRepository extends NotificationPrefer
             created_at,
             updated_at
           )
-          values ($1, $2, $3, $4, $5, $6, $6)
+          values ${placeholders.join(', ')}
         `,
-        [
-          input.tenantId,
-          input.userId,
-          preference.notificationType,
-          preference.channel,
-          preference.enabled,
-          input.updatedAt,
-        ],
+        values,
       );
     }
 
