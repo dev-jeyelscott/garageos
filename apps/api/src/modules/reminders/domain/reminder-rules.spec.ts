@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { evaluateReminderDueStatus } from './reminder-rules';
+import {
+  PlanChannelLimitError,
+  assertNotificationChannelsAllowedByPlan,
+  assertReminderChannelsAllowedByPlan,
+  evaluateReminderDueStatus,
+  getBlockedNotificationChannels,
+  getBlockedReminderChannels,
+} from './reminder-rules';
 
 describe('evaluateReminderDueStatus', () => {
   it('marks a time-based reminder due using the tenant timezone date', () => {
@@ -103,5 +110,122 @@ describe('evaluateReminderDueStatus', () => {
       tenantCurrentDate: '2026-07-08',
       dueReasons: [],
     });
+  });
+});
+
+describe('plan channel enforcement', () => {
+  const basicPlanLimits = {
+    in_app_notifications: true,
+    push_notifications: true,
+    email_notifications: false,
+    sms_notifications: false,
+    customer_email_reminders: false,
+    customer_sms_reminders: false,
+  };
+
+  const midPlanLimits = {
+    in_app_notifications: true,
+    push_notifications: true,
+    email_notifications: true,
+    sms_notifications: false,
+    customer_email_reminders: true,
+    customer_sms_reminders: false,
+  };
+
+  const highPlanLimits = {
+    in_app_notifications: true,
+    push_notifications: true,
+    email_notifications: true,
+    sms_notifications: true,
+    customer_email_reminders: true,
+    customer_sms_reminders: true,
+  };
+
+  it('blocks customer email, customer SMS, and internal email reminders on Basic', () => {
+    expect(
+      getBlockedReminderChannels(
+        ['internal_in_app', 'internal_push', 'internal_email', 'customer_email', 'customer_sms'],
+        basicPlanLimits,
+      ),
+    ).toEqual([
+      {
+        channel: 'internal_email',
+        capability: 'email_notifications',
+      },
+      {
+        channel: 'customer_email',
+        capability: 'customer_email_reminders',
+      },
+      {
+        channel: 'customer_sms',
+        capability: 'customer_sms_reminders',
+      },
+    ]);
+  });
+
+  it('allows customer email but blocks customer SMS reminders on Mid', () => {
+    expect(
+      getBlockedReminderChannels(
+        ['internal_email', 'customer_email', 'customer_sms'],
+        midPlanLimits,
+      ),
+    ).toEqual([
+      {
+        channel: 'customer_sms',
+        capability: 'customer_sms_reminders',
+      },
+    ]);
+  });
+
+  it('allows all documented reminder channels on High', () => {
+    expect(
+      getBlockedReminderChannels(
+        ['internal_in_app', 'internal_push', 'internal_email', 'customer_email', 'customer_sms'],
+        highPlanLimits,
+      ),
+    ).toEqual([]);
+  });
+
+  it('throws a plan channel limit error without switching selected reminder channels', () => {
+    expect(() =>
+      assertReminderChannelsAllowedByPlan(['customer_email', 'customer_sms'], basicPlanLimits),
+    ).toThrow(PlanChannelLimitError);
+
+    try {
+      assertReminderChannelsAllowedByPlan(['customer_email', 'customer_sms'], basicPlanLimits);
+    } catch (error) {
+      expect(error).toBeInstanceOf(PlanChannelLimitError);
+      expect((error as PlanChannelLimitError).blockedChannels).toEqual([
+        {
+          channel: 'customer_email',
+          capability: 'customer_email_reminders',
+        },
+        {
+          channel: 'customer_sms',
+          capability: 'customer_sms_reminders',
+        },
+      ]);
+    }
+  });
+
+  it('blocks notification preference channels using notification plan capabilities', () => {
+    expect(
+      getBlockedNotificationChannels(['in_app', 'push', 'email', 'sms'], basicPlanLimits),
+    ).toEqual([
+      {
+        channel: 'email',
+        capability: 'email_notifications',
+      },
+      {
+        channel: 'sms',
+        capability: 'sms_notifications',
+      },
+    ]);
+  });
+
+  it('throws a plan channel limit error for blocked notification channels', () => {
+    expect(() =>
+      assertNotificationChannelsAllowedByPlan(['email', 'sms'], basicPlanLimits),
+    ).toThrow(PlanChannelLimitError);
   });
 });

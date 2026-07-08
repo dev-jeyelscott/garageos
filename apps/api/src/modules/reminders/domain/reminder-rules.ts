@@ -2,6 +2,44 @@ export type ReminderStatus = 'scheduled' | 'due' | 'sent' | 'failed' | 'cancelle
 
 export type ReminderDueReason = 'due_date' | 'due_mileage' | 'birthday';
 
+export type ReminderChannel =
+  'internal_in_app' | 'internal_push' | 'internal_email' | 'customer_email' | 'customer_sms';
+
+export type NotificationChannel = 'in_app' | 'push' | 'email' | 'sms';
+
+export type PlanChannelCapability =
+  | 'in_app_notifications'
+  | 'push_notifications'
+  | 'email_notifications'
+  | 'sms_notifications'
+  | 'customer_email_reminders'
+  | 'customer_sms_reminders';
+
+export interface PlanChannelLimits {
+  readonly in_app_notifications?: boolean | number | string | null;
+  readonly push_notifications?: boolean | number | string | null;
+  readonly email_notifications?: boolean | number | string | null;
+  readonly sms_notifications?: boolean | number | string | null;
+  readonly customer_email_reminders?: boolean | number | string | null;
+  readonly customer_sms_reminders?: boolean | number | string | null;
+  readonly [capabilityCode: string]: boolean | number | string | null | undefined;
+}
+
+export interface PlanChannelBlock {
+  readonly channel: ReminderChannel | NotificationChannel;
+  readonly capability: PlanChannelCapability;
+}
+
+export class PlanChannelLimitError extends Error {
+  readonly blockedChannels: readonly PlanChannelBlock[];
+
+  constructor(blockedChannels: readonly PlanChannelBlock[]) {
+    super(buildPlanChannelLimitMessage(blockedChannels));
+    this.name = 'PlanChannelLimitError';
+    this.blockedChannels = blockedChannels;
+  }
+}
+
 export interface EvaluateReminderDueStatusInput {
   readonly status: ReminderStatus;
   readonly dueDate: string | null;
@@ -48,6 +86,72 @@ export function evaluateReminderDueStatus(
     tenantCurrentDate,
     dueReasons,
   };
+}
+
+export function assertReminderChannelsAllowedByPlan(
+  channels: readonly ReminderChannel[],
+  limits: PlanChannelLimits,
+): void {
+  const blockedChannels = getBlockedReminderChannels(channels, limits);
+
+  if (blockedChannels.length > 0) {
+    throw new PlanChannelLimitError(blockedChannels);
+  }
+}
+
+export function assertNotificationChannelsAllowedByPlan(
+  channels: readonly NotificationChannel[],
+  limits: PlanChannelLimits,
+): void {
+  const blockedChannels = getBlockedNotificationChannels(channels, limits);
+
+  if (blockedChannels.length > 0) {
+    throw new PlanChannelLimitError(blockedChannels);
+  }
+}
+
+export function getBlockedReminderChannels(
+  channels: readonly ReminderChannel[],
+  limits: PlanChannelLimits,
+): PlanChannelBlock[] {
+  return getBlockedPlanChannels(channels, limits, getReminderChannelCapability);
+}
+
+export function getBlockedNotificationChannels(
+  channels: readonly NotificationChannel[],
+  limits: PlanChannelLimits,
+): PlanChannelBlock[] {
+  return getBlockedPlanChannels(channels, limits, getNotificationChannelCapability);
+}
+
+export function getReminderChannelCapability(channel: ReminderChannel): PlanChannelCapability {
+  switch (channel) {
+    case 'internal_in_app':
+      return 'in_app_notifications';
+    case 'internal_push':
+      return 'push_notifications';
+    case 'internal_email':
+      return 'email_notifications';
+    case 'customer_email':
+      return 'customer_email_reminders';
+    case 'customer_sms':
+      return 'customer_sms_reminders';
+  }
+}
+
+export function getNotificationChannelCapability(
+  channel: NotificationChannel,
+): PlanChannelCapability {
+  switch (channel) {
+    case 'in_app':
+      return 'in_app_notifications';
+    case 'push':
+      return 'push_notifications';
+    case 'email':
+      return 'email_notifications';
+    case 'sms':
+      return 'sms_notifications';
+  }
 }
 
 function resolveDueReasons(
@@ -163,4 +267,47 @@ function assertValidCurrentTimestamp(value: Date): void {
   if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
     throw new Error('A valid current timestamp is required.');
   }
+}
+
+function getBlockedPlanChannels<TChannel extends ReminderChannel | NotificationChannel>(
+  channels: readonly TChannel[],
+  limits: PlanChannelLimits,
+  resolveCapability: (channel: TChannel) => PlanChannelCapability,
+): PlanChannelBlock[] {
+  const blockedChannels: PlanChannelBlock[] = [];
+
+  for (const channel of channels) {
+    const capability = resolveCapability(channel);
+
+    if (!isPlanCapabilityEnabled(limits[capability])) {
+      blockedChannels.push({
+        channel,
+        capability,
+      });
+    }
+  }
+
+  return blockedChannels;
+}
+
+function isPlanCapabilityEnabled(value: boolean | number | string | null | undefined): boolean {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'number') {
+    return value !== 0;
+  }
+
+  if (typeof value === 'string') {
+    return value.toLowerCase() === 'true';
+  }
+
+  return false;
+}
+
+function buildPlanChannelLimitMessage(blockedChannels: readonly PlanChannelBlock[]): string {
+  const channelList = blockedChannels.map((blocked) => blocked.channel).join(', ');
+
+  return `Current tenant plan does not allow selected channel(s): ${channelList}.`;
 }
