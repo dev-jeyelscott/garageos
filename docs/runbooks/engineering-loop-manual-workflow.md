@@ -64,6 +64,19 @@ The guarded merge executor first runs `.github/scripts/pr-merge-gate.cjs`, then 
 
 GitHub branch protection, required checks, repository permissions, and maintainer decision-making remain authoritative. The executor does not approve PRs, bypass branch protection, change repository settings, or merge batch-mode tasks.
 
+## Merged PR task completion
+
+When `merge_pr=true` and `mutate_notion=true`, the workflow runs `.github/scripts/eng-loop-merged-pr-completion.cjs` after guarded merge execution.
+
+The completion step is fail-closed:
+
+- It requires guarded merge evidence from a passing deterministic merge gate.
+- It requires the guarded merge SHA to be reachable from `develop` or `origin/develop`.
+- It updates the linked Notion task to `Done` only in live mode with `ENG-LOOP-35-COMPLETE`.
+- It refreshes `docs/progress-tracker.md` from the Notion task tracker after the Notion update.
+- It records reachability and tracker-refresh evidence in the result JSON, Markdown summary, and run ledger.
+- Re-running against a task that is already `Done` does not write duplicate Notion completion evidence.
+
 ## Stop conditions
 
 - Stop when `max_tasks` is greater than `1`.
@@ -76,6 +89,8 @@ GitHub branch protection, required checks, repository permissions, and maintaine
 - Stop when the deterministic merge gate blocks the PR.
 - Stop when the PR head SHA no longer matches the merge gate result.
 - Stop when GitHub rejects the merge because branch protection, required checks, permissions, or PR state are not satisfied.
+- Stop when merged PR task completion cannot verify the merge SHA on `develop`.
+- Stop when merged PR task completion cannot refresh `docs/progress-tracker.md` after Notion completion.
 
 ## Evidence artifacts
 
@@ -94,6 +109,9 @@ The workflow uploads engineering-loop evidence files as artifacts when available
 - `.tmp/pr-merge-gate-summary.md`
 - `.tmp/pr-guarded-merge-result.json`
 - `.tmp/pr-guarded-merge-summary.md`
+- `.tmp/eng-loop-merged-pr-completion-result.json`
+- `.tmp/eng-loop-merged-pr-completion-summary.md`
+- `docs/progress-tracker.md`
 
 ## Local validation
 
@@ -101,6 +119,7 @@ Run:
 
 ```bash
 node ./.github/scripts/pr-guarded-merge.test.cjs
+node ./.github/scripts/eng-loop-merged-pr-completion.test.cjs
 node ./.github/scripts/eng-loop-workflow-preflight.test.cjs
 pnpm eng-loop:test
 pnpm validate:quick
