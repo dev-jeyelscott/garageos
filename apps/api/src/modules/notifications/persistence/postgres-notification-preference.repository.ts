@@ -158,9 +158,7 @@ export class PostgresNotificationPreferenceRepository extends NotificationPrefer
     input: ReplaceNotificationPreferencesInput,
     client: DatabaseQueryClient,
   ): Promise<readonly NotificationPreferenceRecord[]> {
-    await client.query('select pg_advisory_xact_lock(hashtextextended($1, 0))', [
-      `notification-preferences:${input.tenantId}:${input.userId}`,
-    ]);
+    await lockNotificationPreferenceReplacement(input.tenantId, input.userId, client);
 
     await client.query(
       `
@@ -207,6 +205,24 @@ export class PostgresNotificationPreferenceRepository extends NotificationPrefer
 
     return this.listForUser(input.tenantId, input.userId, client);
   }
+}
+
+async function lockNotificationPreferenceReplacement(
+  tenantId: string,
+  userId: string,
+  client: DatabaseQueryClient,
+): Promise<void> {
+  // Matches the repository advisory lock convention for tenant-scoped synthetic
+  // resources: typed UUID scope inputs plus a fixed namespace hashed to a 64-bit
+  // transaction-level lock key.
+  await client.query(
+    `
+      select pg_advisory_xact_lock(
+        hashtextextended($1::text || ':' || $2::text || ':notification_preferences', 0)
+      )
+    `,
+    [tenantId, userId],
+  );
 }
 
 function mapNotificationPreferenceRow(

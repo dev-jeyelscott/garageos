@@ -56,9 +56,9 @@ describe('PostgresNotificationPreferenceRepository', () => {
     );
 
     expect(normalizeSql(client.queries[0]?.sql ?? '')).toBe(
-      'select pg_advisory_xact_lock(hashtextextended($1, 0))',
+      "select pg_advisory_xact_lock( hashtextextended($1::text || ':' || $2::text || ':notification_preferences', 0) )",
     );
-    expect(client.queries[0]?.values).toEqual([`notification-preferences:${TENANT_ID}:${USER_ID}`]);
+    expect(client.queries[0]?.values).toEqual([TENANT_ID, USER_ID]);
     expect(normalizeSql(client.queries[1]?.sql ?? '')).toContain(
       'delete from user_notification_preferences',
     );
@@ -127,6 +127,63 @@ describe('PostgresNotificationPreferenceRepository', () => {
     );
     expect(result).toEqual([]);
   });
+
+  it('serializes concurrent replacements for the same tenant and user before mutation', async () => {
+    const client = new SerializingDatabaseClient();
+    const repository = new PostgresNotificationPreferenceRepository(client);
+
+    const first = repository.replaceForUser(
+      {
+        tenantId: TENANT_ID,
+        userId: USER_ID,
+        updatedAt: UPDATED_AT,
+        preferences: [
+          {
+            notificationType: 'low_stock',
+            channel: 'in_app',
+            enabled: true,
+            updatedAt: UPDATED_AT,
+          },
+        ],
+      },
+      client,
+    );
+    const second = repository.replaceForUser(
+      {
+        tenantId: TENANT_ID,
+        userId: USER_ID,
+        updatedAt: UPDATED_AT,
+        preferences: [
+          {
+            notificationType: 'assignment',
+            channel: 'email',
+            enabled: false,
+            updatedAt: UPDATED_AT,
+          },
+        ],
+      },
+      client,
+    );
+
+    await client.waitForBlockedLock();
+    await client.waitForFirstReplacementPaused();
+
+    expect(client.mutationOrder).toEqual(['lock-acquired:1', 'delete:1', 'insert:1']);
+
+    client.releaseFirstReplacement();
+
+    await expect(Promise.all([first, second])).resolves.toEqual([[], []]);
+    expect(client.mutationOrder).toEqual([
+      'lock-acquired:1',
+      'delete:1',
+      'insert:1',
+      'select:1',
+      'lock-acquired:2',
+      'delete:2',
+      'insert:2',
+      'select:2',
+    ]);
+  });
 });
 
 class RecordingDatabaseClient implements DatabaseQueryClient {
@@ -152,6 +209,111 @@ class RecordingDatabaseClient implements DatabaseQueryClient {
       rowCount: rows.length,
     };
   }
+}
+
+class SerializingDatabaseClient implements DatabaseQueryClient {
+  readonly mutationOrder: string[] = [];
+
+  private activeReplacement = 0;
+  private nextReplacementId = 0;
+  private blockedLockObserved = false;
+  private blockedLockResolver: (() => void) | null = null;
+  private firstReplacementPaused = false;
+  private firstReplacementPausedResolver: (() => void) | null = null;
+  private firstReplacementRelease: (() => void) | null = null;
+
+  async query<Row extends DatabaseRow = DatabaseRow>(
+    sql: string,
+    values?: readonly unknown[],
+  ): Promise<DatabaseQueryResult<Row>> {
+    const normalizedSql = normalizeSql(sql);
+
+    if (normalizedSql.includes('pg_advisory_xact_lock')) {
+      return this.acquirePreferenceLock<Row>(values);
+    }
+
+    if (normalizedSql.includes('delete from user_notification_preferences')) {
+      this.mutationOrder.push(`delete:${this.activeReplacement}`);
+
+      return emptyResult<Row>();
+    }
+
+    if (normalizedSql.includes('insert into user_notification_preferences')) {
+      this.mutationOrder.push(`insert:${this.activeReplacement}`);
+
+      if (this.activeReplacement === 1) {
+        this.firstReplacementPaused = true;
+        this.firstReplacementPausedResolver?.();
+
+        await new Promise<void>((resolve) => {
+          this.firstReplacementRelease = resolve;
+        });
+      }
+
+      return emptyResult<Row>();
+    }
+
+    if (normalizedSql.includes('from user_notification_preferences')) {
+      this.mutationOrder.push(`select:${this.activeReplacement}`);
+      this.activeReplacement = 0;
+
+      return emptyResult<Row>();
+    }
+
+    return emptyResult<Row>();
+  }
+
+  waitForBlockedLock(): Promise<void> {
+    if (this.blockedLockObserved) {
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve) => {
+      this.blockedLockResolver = resolve;
+    });
+  }
+
+  waitForFirstReplacementPaused(): Promise<void> {
+    if (this.firstReplacementPaused) {
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve) => {
+      this.firstReplacementPausedResolver = resolve;
+    });
+  }
+
+  releaseFirstReplacement(): void {
+    this.firstReplacementRelease?.();
+  }
+
+  private async acquirePreferenceLock<Row extends DatabaseRow>(
+    values: readonly unknown[] | undefined,
+  ): Promise<DatabaseQueryResult<Row>> {
+    expect(values).toEqual([TENANT_ID, USER_ID]);
+
+    if (this.activeReplacement !== 0) {
+      this.blockedLockObserved = true;
+      this.blockedLockResolver?.();
+
+      while (this.activeReplacement !== 0) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+    }
+
+    this.nextReplacementId += 1;
+    this.activeReplacement = this.nextReplacementId;
+    this.mutationOrder.push(`lock-acquired:${this.activeReplacement}`);
+
+    return emptyResult<Row>();
+  }
+}
+
+function emptyResult<Row extends DatabaseRow>(): DatabaseQueryResult<Row> {
+  return {
+    rows: [],
+    rowCount: 0,
+  };
 }
 
 function createPreferenceRow(overrides: Partial<DatabaseRow> = {}): DatabaseRow {
