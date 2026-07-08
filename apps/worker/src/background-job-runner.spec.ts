@@ -18,12 +18,13 @@ describe('worker runtime scaffold', () => {
       runtimeMode: WORKER_RUNTIME_MODE,
       workerId: 'worker-platform-admin-test',
       heartbeatIntervalMs: 15_000,
-      knownQueuedJobTypes: ['tenant_export.generate'],
+      knownQueuedJobTypes: ['tenant_export.generate', 'reminder_due.evaluate'],
       deferredCapabilities: [
         'tenant lifecycle job execution',
         'tenant export generation',
         'tenant hard deletion execution',
         'tenant deletion warning notification delivery',
+        'reminder due evaluation scheduling',
       ],
     });
   });
@@ -39,7 +40,7 @@ describe('worker runtime scaffold', () => {
       service_name: 'garageos-worker',
       runtime_mode: 'observe_only',
       worker_id: 'worker-platform-admin-test',
-      known_queued_job_types: ['tenant_export.generate'],
+      known_queued_job_types: ['tenant_export.generate', 'reminder_due.evaluate'],
       claims_jobs: false,
       executes_jobs: false,
     });

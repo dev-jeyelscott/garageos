@@ -4,13 +4,17 @@ const MAX_HEARTBEAT_INTERVAL_MS = 300_000;
 
 export const WORKER_RUNTIME_MODE = 'observe_only' as const;
 
-export const WORKER_KNOWN_QUEUED_JOB_TYPES = ['tenant_export.generate'] as const;
+export const WORKER_KNOWN_QUEUED_JOB_TYPES = [
+  'tenant_export.generate',
+  'reminder_due.evaluate',
+] as const;
 
 export const WORKER_DEFERRED_CAPABILITIES = [
   'tenant lifecycle job execution',
   'tenant export generation',
   'tenant hard deletion execution',
   'tenant deletion warning notification delivery',
+  'reminder due evaluation scheduling',
 ] as const;
 
 export type WorkerRuntimeMode = typeof WORKER_RUNTIME_MODE;
