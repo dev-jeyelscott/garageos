@@ -18,7 +18,10 @@ import {
 import { NotificationPreferencesService } from './notification-preferences.service';
 
 const TENANT_ID = '11111111-1111-4111-8111-111111111111';
+const OTHER_TENANT_ID = '22222222-2222-4222-8222-222222222222';
 const USER_ID = '33333333-3333-4333-8333-333333333333';
+const OTHER_USER_ID = '44444444-4444-4444-8444-444444444444';
+const BRANCH_ID = '55555555-5555-4555-8555-555555555555';
 const UPDATED_AT = new Date('2026-07-08T00:00:00.000Z');
 
 describe('NotificationPreferencesService', () => {
@@ -64,6 +67,28 @@ describe('NotificationPreferencesService', () => {
         channel: 'in_app',
         enabled: true,
         updated_at: UPDATED_AT.toISOString(),
+      },
+    ]);
+  });
+
+  it('allows branch-scoped users to read tenant-user scoped preferences when RBAC allows it', async () => {
+    const { service, store } = createService();
+
+    await expect(
+      service.getPreferences(
+        createTenantSession(['notifications.read'], {
+          branchIds: [BRANCH_ID],
+          tenantWideBranchAccess: false,
+        }),
+      ),
+    ).resolves.toEqual({
+      preferences: [],
+    });
+
+    expect(store.listInputs).toEqual([
+      {
+        tenantId: TENANT_ID,
+        userId: USER_ID,
       },
     ]);
   });
@@ -162,6 +187,32 @@ describe('NotificationPreferencesService', () => {
     ]);
   });
 
+  it('updates only the authenticated session user preference boundary', async () => {
+    const { service, store } = createService();
+
+    await service.updatePreferences(
+      createUpdateRequest(),
+      createTenantSession(['notifications.update_preferences'], {
+        tenantId: OTHER_TENANT_ID,
+        userId: OTHER_USER_ID,
+        branchIds: [BRANCH_ID],
+        tenantWideBranchAccess: false,
+      }),
+    );
+
+    expect(store.planLimitInputs).toEqual([OTHER_TENANT_ID]);
+    expect(store.listInputs[0]).toEqual({
+      tenantId: OTHER_TENANT_ID,
+      userId: OTHER_USER_ID,
+    });
+    expect(store.replaceInputs[0]).toEqual(
+      expect.objectContaining({
+        tenantId: OTHER_TENANT_ID,
+        userId: OTHER_USER_ID,
+      }),
+    );
+  });
+
   it('blocks preference updates in read-only tenant status', async () => {
     const { service } = createService();
 
@@ -234,25 +285,32 @@ function createService(): {
 function createTenantSession(
   permissions: readonly string[],
   overrides: {
+    readonly branchIds?: readonly string[];
+    readonly tenantId?: string;
     readonly tenantStatus?: TenantStatus;
+    readonly tenantWideBranchAccess?: boolean;
+    readonly userId?: string;
   } = {},
 ): TenantContextAuthenticatedSession {
+  const tenantId = overrides.tenantId ?? TENANT_ID;
+  const userId = overrides.userId ?? USER_ID;
+
   return {
     actor: {
-      user_id: USER_ID,
+      user_id: userId,
       user_type: 'tenant_user',
-      tenant_id: TENANT_ID,
+      tenant_id: tenantId,
       session_id: 'session-id',
       email_verified: true,
       support_access_session_id: null,
     },
     tenant: {
-      id: TENANT_ID,
+      id: tenantId,
       status: overrides.tenantStatus ?? 'active',
     },
     effective_permissions: permissions,
-    branches: [],
-    tenant_wide_branch_access: true,
+    branches: (overrides.branchIds ?? []).map((id) => ({ id })),
+    tenant_wide_branch_access: overrides.tenantWideBranchAccess ?? true,
     subscription_status_source: 'system_computed',
   };
 }
@@ -282,13 +340,17 @@ class FakeNotificationPreferenceStore extends NotificationPreferenceStore {
     sms_notifications: true,
   };
   listInputs: Array<{ tenantId: string; userId: string }> = [];
+  planLimitInputs: string[] = [];
   replaceInputs: ReplaceNotificationPreferencesInput[] = [];
 
   async isActiveShopOwner(): Promise<boolean> {
     return this.isOwner;
   }
 
-  async getEffectivePlanChannelLimits(): Promise<Record<string, boolean | number | string | null>> {
+  async getEffectivePlanChannelLimits(
+    tenantId: string,
+  ): Promise<Record<string, boolean | number | string | null>> {
+    this.planLimitInputs.push(tenantId);
     return this.planLimits;
   }
 

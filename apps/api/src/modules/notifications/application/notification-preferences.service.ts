@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 
 import { GarageOsApiException } from '../../../shared/api/api-exception';
+import { assertPermissionAccessAllowed } from '../../../shared/authorization/permission-access';
 import {
   assertTenantLifecycleAccess,
   TENANT_ACCESS_ACTIONS,
@@ -155,9 +156,18 @@ function assertNotificationPermission(
   isShopOwner: boolean,
   permission: string,
 ): void {
-  if (!isShopOwner && !context.effectivePermissions.includes(permission)) {
-    throw GarageOsApiException.forbidden(permission);
+  // Notification preferences are tenant-user scoped; branch access is enforced when a
+  // notification operation reads or mutates a branch-specific record.
+  if (isShopOwner) {
+    return;
   }
+
+  assertPermissionAccessAllowed({
+    context,
+    requirement: {
+      permissions: [permission],
+    },
+  });
 }
 
 function toPreferenceResponseItem(
