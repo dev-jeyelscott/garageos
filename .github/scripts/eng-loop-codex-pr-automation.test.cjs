@@ -74,6 +74,21 @@ function testValidationCommandGuard() {
   );
 }
 
+function testWindowsRequiredCommandResolution() {
+  assert.deepEqual(
+    automation.resolveRequiredCommandSpawnOptions('corepack', { platform: 'win32' }),
+    { command: 'corepack', shell: true },
+  );
+  assert.deepEqual(
+    automation.resolveRequiredCommandSpawnOptions('codex.cmd', { platform: 'win32' }),
+    { command: 'codex.cmd', shell: true },
+  );
+  assert.deepEqual(automation.resolveRequiredCommandSpawnOptions('git', { platform: 'win32' }), {
+    command: 'git',
+    shell: false,
+  });
+}
+
 function testRunCommandDefaultsToArgvMode() {
   const commitMessage = 'chore(engineering): m10.01 automation task';
   const result = automation.runCommand(process.execPath, [
@@ -233,6 +248,7 @@ const tests = [
   testTaskScopeAliases,
   testSafeBranchValidation,
   testValidationCommandGuard,
+  testWindowsRequiredCommandResolution,
   testRunCommandDefaultsToArgvMode,
   testPromptIncludesAutomationBoundaries,
   testPrBodyContainsRequiredSections,

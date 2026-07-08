@@ -271,6 +271,21 @@ function resolveCodexSpawnOptions() {
   };
 }
 
+function resolveRequiredCommandSpawnOptions(command, runtime = {}) {
+  const platform = runtime.platform || process.platform;
+  const value = normalizeText(command).toLowerCase();
+  const shell = runtime.shell === true;
+
+  if (
+    platform === 'win32' &&
+    (value === 'corepack' || value.endsWith('.cmd') || value.endsWith('.bat'))
+  ) {
+    return { command, shell: true };
+  }
+
+  return { command, shell };
+}
+
 async function runStreamingCommand(command, args = [], options = {}) {
   const shell = options.shell ?? false;
   const cwd = options.cwd || process.cwd();
@@ -342,9 +357,10 @@ async function runStreamingCommand(command, args = [], options = {}) {
 }
 
 function requireCommand(command, options = {}) {
+  const spawnOptions = resolveRequiredCommandSpawnOptions(command, options);
   const result = spawnSync(command, ['--version'], {
     encoding: 'utf8',
-    shell: options.shell === true,
+    shell: spawnOptions.shell,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
@@ -1049,6 +1065,7 @@ module.exports = {
   runCommand,
   runFormat,
   runStreamingCommand,
+  resolveRequiredCommandSpawnOptions,
   taskKeyFromTitle,
   validateSafeBranchName,
   validateSafeValidationCommand,
