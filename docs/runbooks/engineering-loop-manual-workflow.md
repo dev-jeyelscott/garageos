@@ -71,11 +71,13 @@ When `merge_pr=true` and `mutate_notion=true`, the workflow runs `.github/script
 The completion step is fail-closed:
 
 - It requires guarded merge evidence from a passing deterministic merge gate.
-- It requires the guarded merge SHA to be reachable from `develop` or `origin/develop`.
+- It fetches the latest remote base branch before evaluating reachability.
+- It requires the guarded merge SHA to be reachable from `origin/develop` or `develop`.
 - It updates the linked Notion task to `Done` only in live mode with `ENG-LOOP-35-COMPLETE`.
-- It refreshes `docs/progress-tracker.md` from the Notion task tracker after the Notion update.
-- It records reachability and tracker-refresh evidence in the result JSON, Markdown summary, and run ledger.
+- It records required-check, base-ref refresh, reachability, and rollback evidence in the result JSON, Markdown summary, and run ledger.
+- If post-update verification fails, it performs and verifies a compensating Notion rollback to the original task state.
 - Re-running against a task that is already `Done` does not write duplicate Notion completion evidence.
+- Notion is the sole progress source. The workflow does not generate or maintain `docs/progress-tracker.md`.
 
 ## Stop conditions
 
@@ -89,8 +91,8 @@ The completion step is fail-closed:
 - Stop when the deterministic merge gate blocks the PR.
 - Stop when the PR head SHA no longer matches the merge gate result.
 - Stop when GitHub rejects the merge because branch protection, required checks, permissions, or PR state are not satisfied.
-- Stop when merged PR task completion cannot verify the merge SHA on `develop`.
-- Stop when merged PR task completion cannot refresh `docs/progress-tracker.md` after Notion completion.
+- Stop when merged PR task completion cannot refresh the remote base branch or verify the merge SHA on `develop`.
+- Stop when a Notion completion update or its compensating rollback cannot be verified.
 
 ## Evidence artifacts
 
@@ -111,7 +113,6 @@ The workflow uploads engineering-loop evidence files as artifacts when available
 - `.tmp/pr-guarded-merge-summary.md`
 - `.tmp/eng-loop-merged-pr-completion-result.json`
 - `.tmp/eng-loop-merged-pr-completion-summary.md`
-- `docs/progress-tracker.md`
 
 ## Local validation
 
