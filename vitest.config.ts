@@ -4,6 +4,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
+    setupFiles: ['./apps/api/src/test/invoices-system-time.setup.ts'],
     include: ['**/*.test.ts', '**/*.spec.ts'],
     exclude: ['node_modules', 'dist', '.next'],
     coverage: {
