@@ -9,8 +9,8 @@ require('dotenv').config({
 const DATABASE_URL = process.env.DATABASE_URL;
 
 const EXPECTED = {
-  migrationCount: 31,
-  publicTableCount: 110,
+  migrationCount: 32,
+  publicTableCount: 111,
   subscriptionPlans: 3,
   subscriptionPlanLimits: 27,
   permissions: 128,
@@ -961,6 +961,71 @@ async function validateReminderRulesSchema(client) {
   assertEqual('reminder rules status constraint', statusConstraintCount, 1);
   assertEqual('reminder rules active type index', activeTypeIndexCount, 1);
 }
+
+async function validateNotificationPreferencesSchema(client) {
+  const columnCount = await count(
+    client,
+    `
+      select count(*)
+      from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'user_notification_preferences'
+        and column_name in (
+          'id',
+          'tenant_id',
+          'user_id',
+          'notification_type',
+          'channel',
+          'enabled',
+          'created_at',
+          'updated_at'
+        )
+    `,
+  );
+
+  const uniqueConstraintCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_constraint
+      where conname = 'ux_user_notification_preferences_scope'
+    `,
+  );
+
+  const typeConstraintCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_constraint
+      where conname = 'chk_user_notification_preferences_type'
+    `,
+  );
+
+  const channelConstraintCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_constraint
+      where conname = 'chk_user_notification_preferences_channel'
+    `,
+  );
+
+  const userIndexCount = await count(
+    client,
+    `
+      select count(*)
+      from pg_indexes
+      where schemaname = 'public'
+        and indexname = 'idx_user_notification_preferences_user'
+    `,
+  );
+
+  assertEqual('notification preferences columns', columnCount, 8);
+  assertEqual('notification preferences unique scope constraint', uniqueConstraintCount, 1);
+  assertEqual('notification preferences type constraint', typeConstraintCount, 1);
+  assertEqual('notification preferences channel constraint', channelConstraintCount, 1);
+  assertEqual('notification preferences user index', userIndexCount, 1);
+}
 async function validateMoneyPrecision(client) {
   const result = await client.query(`
     select table_name, column_name, numeric_precision, numeric_scale
@@ -1050,6 +1115,7 @@ async function main() {
     await validateEstimatesBaselineSchema(client);
     await validatePurchaseOrderLineSchema(client);
     await validateReminderRulesSchema(client);
+    await validateNotificationPreferencesSchema(client);
     await validateMoneyPrecision(client);
     await validateQuantityPrecision(client);
 

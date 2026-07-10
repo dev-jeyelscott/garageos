@@ -8,6 +8,7 @@ import { EmployeesModule } from './modules/employees/employees.module';
 import { EstimatesModule } from './modules/estimates/estimates.module';
 import { JobOrdersModule } from './modules/job-orders/job-orders.module';
 import { MechanicSessionsModule } from './modules/mechanic-sessions/mechanic-sessions.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 import { ProductsModule } from './modules/products/products.module';
 import { MotorcyclesModule } from './modules/motorcycles/motorcycles.module';
 import { ExpenseCategoriesModule } from './modules/expense-categories/expense-categories.module';
@@ -63,6 +64,7 @@ export class HealthController {
     SuppliersModule,
     AccountsModule,
     MechanicSessionsModule,
+    NotificationsModule,
     CustomersModule,
     MotorcyclesModule,
     ServicesModule,
