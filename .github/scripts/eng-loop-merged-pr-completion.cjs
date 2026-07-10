@@ -4,8 +4,11 @@
 /**
  * ENG-LOOP-35 - merged PR task completion.
  *
- * This script is intentionally narrow: after guarded merge evidence exists, it
- * marks the corresponding Notion tracker task Done and records merge evidence.
+ * After guarded merge evidence exists, this script verifies that the merge
+ * commit is reachable from the latest remote base branch, marks the linked
+ * Notion task Done exactly once, and records durable completion evidence.
+ * Notion is the sole progress source; no repository progress snapshot is
+ * generated or maintained by this workflow.
  */
 
 const fs = require('node:fs');
@@ -18,7 +21,6 @@ const DEFAULT_GUARDED_MERGE_RESULT_FILE = '.tmp/pr-guarded-merge-result.json';
 const DEFAULT_LEDGER_FILE = '.tmp/eng-loop-run-ledger.json';
 const DEFAULT_RESULT_FILE = '.tmp/eng-loop-merged-pr-completion-result.json';
 const DEFAULT_SUMMARY_FILE = '.tmp/eng-loop-merged-pr-completion-summary.md';
-const DEFAULT_PROGRESS_TRACKER_FILE = 'docs/progress-tracker.md';
 const LIVE_CONFIRMATION = 'ENG-LOOP-35-COMPLETE';
 
 function nowIso() {
@@ -96,6 +98,10 @@ function textFromProperty(property) {
       return property.checkbox ? 'true' : 'false';
     case 'url':
       return property.url || '';
+    case 'email':
+      return property.email || '';
+    case 'phone_number':
+      return property.phone_number || '';
     case 'number':
       return property.number == null ? '' : String(property.number);
     case 'date':
@@ -108,10 +114,35 @@ function textFromProperty(property) {
   }
 }
 
-function getPagePropertyText(page, names) {
-  const properties = page && page.properties ? page.properties : page || {};
-  const name = firstPropertyName(properties, names);
-  return name ? normalizeText(textFromProperty(properties[name])) : '';
+function snapshotPropertyPatch(property) {
+  if (!property || !property.type) {
+    return { rich_text: [] };
+  }
+
+  switch (property.type) {
+    case 'status':
+      return { status: property.status ? { ...property.status } : null };
+    case 'select':
+      return { select: property.select ? { ...property.select } : null };
+    case 'rich_text':
+      return { rich_text: Array.isArray(property.rich_text) ? property.rich_text : [] };
+    case 'title':
+      return { title: Array.isArray(property.title) ? property.title : [] };
+    case 'checkbox':
+      return { checkbox: Boolean(property.checkbox) };
+    case 'url':
+      return { url: property.url ?? null };
+    case 'email':
+      return { email: property.email ?? null };
+    case 'phone_number':
+      return { phone_number: property.phone_number ?? null };
+    case 'number':
+      return { number: property.number ?? null };
+    case 'date':
+      return { date: property.date ? { ...property.date } : null };
+    default:
+      return runner.propertyPatchFromExistingProperty(property, textFromProperty(property));
+  }
 }
 
 function resolveRuntimeOptions(args = {}, env = process.env, cwd = process.cwd()) {
@@ -140,7 +171,6 @@ function resolveRuntimeOptions(args = {}, env = process.env, cwd = process.cwd()
     ledgerFile,
     resultFile: args.out || args.output || DEFAULT_RESULT_FILE,
     summaryFile: args.summary || DEFAULT_SUMMARY_FILE,
-    progressTrackerFile: args.progressTracker || DEFAULT_PROGRESS_TRACKER_FILE,
     baseBranch: args.baseBranch || env.INPUT_COMPLETION_BASE_BRANCH || 'develop',
     token: firstDefined(
       args.notionToken,
@@ -157,7 +187,6 @@ function resolveRuntimeOptions(args = {}, env = process.env, cwd = process.cwd()
       env.NOTION_DATABASE_ID,
     ),
     json: Boolean(args.json),
-    refreshProgressTracker: !Boolean(args.skipProgressTrackerRefresh),
   };
 }
 
@@ -189,17 +218,21 @@ function buildResult(status, reason, message, options, extra = {}) {
       merge.gate_merge_allowed && merge.gate_status === 'merge_gate_passed',
     ),
     base_branch: options.baseBranch || null,
+    base_branch_refreshed: Boolean(extra.baseBranchRefreshed),
+    base_branch_refresh_source: extra.baseBranchRefreshSource || null,
     merge_commit_reachable: extra.mergeCommitReachable ?? null,
     merge_commit_reachability_source: extra.mergeCommitReachabilitySource || null,
-    progress_tracker_refreshed: Boolean(extra.progressTrackerRefreshed),
-    progress_tracker_path: extra.progressTrackerPath || options.progressTrackerFile || null,
-    progress_tracker_error: extra.progressTrackerError || null,
+    rollback_attempted: Boolean(extra.rollbackAttempted),
+    rollback_succeeded: extra.rollbackSucceeded ?? null,
+    rollback_error: extra.rollbackError || null,
+    progress_source: 'notion',
     non_goals: [
       'does_not_merge',
       'does_not_push',
       'does_not_change_branch_protection',
       'does_not_complete_unmerged_tasks',
       'does_not_mutate_unknown_tracker_fields',
+      'does_not_generate_repository_progress_snapshots',
     ],
   };
 }
@@ -272,16 +305,58 @@ function validatePreconditions(options) {
   return null;
 }
 
+function assertSafeBranchName(baseBranch) {
+  const value = normalizeText(baseBranch);
+  if (
+    !value ||
+    !/^[A-Za-z0-9._/-]+$/.test(value) ||
+    value.includes('..') ||
+    value.includes('@{') ||
+    value.startsWith('/') ||
+    value.endsWith('/')
+  ) {
+    throw new Error(`Unsafe base branch name: ${baseBranch}`);
+  }
+  return value;
+}
+
+function refreshBaseBranchRef({ baseBranch, cwd, execFileSync = childProcess.execFileSync }) {
+  const safeBaseBranch = assertSafeBranchName(baseBranch);
+  const commonOptions = { cwd, stdio: 'ignore' };
+  const shallow = normalizeComparable(
+    execFileSync('git', ['rev-parse', '--is-shallow-repository'], {
+      cwd,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }),
+  );
+  const fetchArgs = ['fetch', '--no-tags', '--prune'];
+  if (shallow === 'true') fetchArgs.push('--unshallow');
+  fetchArgs.push(
+    'origin',
+    `+refs/heads/${safeBaseBranch}:refs/remotes/origin/${safeBaseBranch}`,
+  );
+  execFileSync('git', fetchArgs, commonOptions);
+
+  return {
+    refreshed: true,
+    source: `git ${fetchArgs.join(' ')}`,
+    remoteRef: `origin/${safeBaseBranch}`,
+  };
+}
+
 function checkMergeCommitReachable(options, dependencies = {}) {
   const mergeSha =
     options.guardedMergeResult &&
     options.guardedMergeResult.github_response &&
     options.guardedMergeResult.github_response.sha;
-  const baseBranch = options.baseBranch || 'develop';
+  const baseBranch = assertSafeBranchName(options.baseBranch || 'develop');
 
   if (!mergeSha) {
     return {
       reachable: false,
+      refreshed: false,
+      refreshSource: null,
       source: 'git',
       message: 'Merge SHA is missing.',
     };
@@ -292,17 +367,37 @@ function checkMergeCommitReachable(options, dependencies = {}) {
   }
 
   const cwd = dependencies.cwd || process.cwd();
-  const candidates = [baseBranch, `origin/${baseBranch}`];
+  const execFileSync = dependencies.execFileSync || childProcess.execFileSync;
+  let refresh;
+  try {
+    refresh = (dependencies.refreshBaseBranchRef || refreshBaseBranchRef)({
+      baseBranch,
+      cwd,
+      execFileSync,
+    });
+  } catch (error) {
+    return {
+      reachable: false,
+      refreshed: false,
+      refreshSource: null,
+      source: 'git fetch',
+      message: `Unable to refresh origin/${baseBranch}: ${error && error.message ? error.message : String(error)}`,
+    };
+  }
+
+  const candidates = [refresh.remoteRef || `origin/${baseBranch}`, baseBranch];
   const errors = [];
 
   for (const candidate of candidates) {
     try {
-      childProcess.execFileSync('git', ['merge-base', '--is-ancestor', mergeSha, candidate], {
+      execFileSync('git', ['merge-base', '--is-ancestor', mergeSha, candidate], {
         cwd,
         stdio: 'ignore',
       });
       return {
         reachable: true,
+        refreshed: true,
+        refreshSource: refresh.source,
         source: `git merge-base --is-ancestor ${mergeSha} ${candidate}`,
         message: `Merge commit is reachable from ${candidate}.`,
       };
@@ -313,6 +408,8 @@ function checkMergeCommitReachable(options, dependencies = {}) {
 
   return {
     reachable: false,
+    refreshed: true,
+    refreshSource: refresh.source,
     source: 'git merge-base --is-ancestor',
     message: `Merge commit ${mergeSha} is not reachable from ${baseBranch}. ${errors.join('; ')}`,
   };
@@ -320,14 +417,15 @@ function checkMergeCommitReachable(options, dependencies = {}) {
 
 function buildCompletionEvidence({ task, result, timestamp }) {
   const parts = [
-    `${timestamp} - engineering-loop - PR merged; task tracker completion recorded.`,
+    `${timestamp} - engineering-loop - PR merged; Notion task completion recorded.`,
     `Task: ${task.title || task.id}.`,
     `PR: ${result.pr_number || 'unresolved'}.`,
   ];
 
   if (result.pr_url) parts.push(`URL: ${result.pr_url}.`);
   if (result.merge_sha) parts.push(`Merge SHA: ${result.merge_sha}.`);
-  parts.push('Evidence: guarded merge result succeeded.');
+  parts.push('Evidence: deterministic merge gate passed and merge SHA is reachable from develop.');
+  parts.push('Progress source: Notion.');
   parts.push('Next: none.');
   return parts.join(' ');
 }
@@ -386,108 +484,31 @@ function buildCompletionPatch(page, result, timestamp = nowIso()) {
   return patch;
 }
 
+function buildRollbackPatch(page, completionPatch) {
+  const properties = page.properties ?? {};
+  return Object.fromEntries(
+    Object.keys(completionPatch).map((name) => [name, snapshotPropertyPatch(properties[name])]),
+  );
+}
+
 function createTaskClient(options = {}) {
   return new runner.NotionTaskClient({
     token: options.token,
     databaseId: options.databaseId,
-    maxTasks: options.maxTasks || 500,
+    maxTasks: 1,
   });
 }
 
-function statusCheckbox(status) {
-  return normalizeComparable(status) === 'done' ? 'x' : ' ';
-}
-
-function progressTrackerMarkdown(pages, timestamp = nowIso()) {
-  const tasks = pages
-    .map((page) => {
-      const task = runner.taskFromPage(page);
-      return {
-        ...task,
-        milestone: getPagePropertyText(page, ['Milestone', 'milestone']) || 'No milestone',
-      };
-    })
-    .filter((task) => task.title)
-    .sort((left, right) => {
-      const milestoneCompare = normalizeText(left.milestone).localeCompare(
-        normalizeText(right.milestone),
-      );
-      if (milestoneCompare !== 0) return milestoneCompare;
-      return normalizeText(left.title).localeCompare(normalizeText(right.title));
-    });
-
-  const statusCounts = new Map();
-  const milestoneCounts = new Map();
-  for (const task of tasks) {
-    const status = task.status || 'Unspecified';
-    statusCounts.set(status, (statusCounts.get(status) || 0) + 1);
-    if (!milestoneCounts.has(task.milestone)) milestoneCounts.set(task.milestone, new Map());
-    const counts = milestoneCounts.get(task.milestone);
-    counts.set(status, (counts.get(status) || 0) + 1);
-  }
-
-  const lines = [
-    '# GarageOS Progress Tracker',
-    '',
-    `**Last Notion alignment:** ${timestamp.slice(0, 10)}`,
-    '**Source of truth:** Notion database `GarageOS - Full Build Task Tracker`',
-    '**Repository path:** `docs/progress-tracker.md`',
-    '',
-    'This tracker is a repository snapshot of the current Notion cards. Notion remains the operational source for live card status; this file should be refreshed whenever Notion card statuses change materially.',
-    '',
-    '## Status Summary',
-    '',
-    '| Status | Cards |',
-    '| --- | ---: |',
-  ];
-
-  for (const [status, count] of [...statusCounts.entries()].sort((a, b) =>
-    a[0].localeCompare(b[0]),
-  )) {
-    lines.push(`| ${status} | ${count} |`);
-  }
-  lines.push(
-    `| **Total tracked cards** | **${tasks.length}** |`,
-    '',
-    '## Milestone Status Summary',
-    '',
-  );
-  lines.push('| Milestone | Status Summary |');
-  lines.push('| --- | --- |');
-
-  for (const [milestone, counts] of [...milestoneCounts.entries()].sort((a, b) =>
-    a[0].localeCompare(b[0]),
-  )) {
-    const summary = [...counts.entries()]
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([status, count]) => `${count} ${status}`)
-      .join(', ');
-    lines.push(`| ${milestone} | ${summary || 'No cards'} |`);
-  }
-
-  let currentMilestone = null;
-  for (const task of tasks) {
-    if (task.milestone !== currentMilestone) {
-      currentMilestone = task.milestone;
-      lines.push('', `## ${currentMilestone}`, '');
-    }
-    lines.push(
-      `- [${statusCheckbox(task.status)}] **${task.status || 'Unspecified'}** - ${task.title}`,
+async function rollbackCompletion({ client, taskId, rollbackPatch, originalStatus }) {
+  await client.updatePageProperties(taskId, rollbackPatch);
+  const restoredPage = await client.fetchPage(taskId);
+  const restoredTask = runner.taskFromPage(restoredPage);
+  if (normalizeComparable(restoredTask.status) !== normalizeComparable(originalStatus)) {
+    throw new Error(
+      `Rollback verification failed: expected ${originalStatus}, received ${restoredTask.status || '(empty)'}.`,
     );
   }
-
-  lines.push('');
-  return lines.join('\n');
-}
-
-async function refreshProgressTracker({ client, filePath, timestamp }) {
-  const pages = await client.listTaskPages();
-  writeText(filePath, progressTrackerMarkdown(pages, timestamp));
-  return {
-    refreshed: true,
-    path: filePath,
-    taskCount: pages.length,
-  };
+  return restoredTask;
 }
 
 async function completeMergedPrTask(options, dependencies = {}) {
@@ -498,6 +519,8 @@ async function completeMergedPrTask(options, dependencies = {}) {
   if (!reachability.reachable) {
     return blocked('merge_commit_not_on_develop', reachability.message, options, {
       evaluatedAt: dependencies.now ? dependencies.now() : nowIso(),
+      baseBranchRefreshed: Boolean(reachability.refreshed),
+      baseBranchRefreshSource: reachability.refreshSource,
       mergeCommitReachable: false,
       mergeCommitReachabilitySource: reachability.source,
     });
@@ -507,11 +530,13 @@ async function completeMergedPrTask(options, dependencies = {}) {
     options.mode === 'dry-run' ? 'merged_pr_completion_planned' : 'merged_pr_completion_ready',
     options.mode === 'dry-run' ? 'dry_run_only' : 'preconditions_passed',
     options.mode === 'dry-run'
-      ? 'Merged PR completion is eligible. No tracker mutation performed in dry-run mode.'
+      ? 'Merged PR completion is eligible. No Notion mutation performed in dry-run mode.'
       : 'Merged PR completion preconditions passed.',
     options,
     {
       evaluatedAt: dependencies.now ? dependencies.now() : nowIso(),
+      baseBranchRefreshed: Boolean(reachability.refreshed),
+      baseBranchRefreshSource: reachability.refreshSource,
       mergeCommitReachable: true,
       mergeCommitReachabilitySource: reachability.source,
     },
@@ -528,7 +553,7 @@ async function completeMergedPrTask(options, dependencies = {}) {
     return buildResult(
       'merged_pr_task_already_done',
       'task_already_done',
-      'Task is already Done. No tracker mutation performed.',
+      'Task is already Done. No Notion mutation performed.',
       options,
       {
         evaluatedAt: dependencies.now ? dependencies.now() : nowIso(),
@@ -536,6 +561,8 @@ async function completeMergedPrTask(options, dependencies = {}) {
         previousTaskStatus: task.status,
         nextTaskStatus: task.status,
         prUrl: baseResult.pr_url,
+        baseBranchRefreshed: Boolean(reachability.refreshed),
+        baseBranchRefreshSource: reachability.refreshSource,
         mergeCommitReachable: true,
         mergeCommitReachabilitySource: reachability.source,
       },
@@ -551,6 +578,8 @@ async function completeMergedPrTask(options, dependencies = {}) {
         evaluatedAt: dependencies.now ? dependencies.now() : nowIso(),
         taskTitle: task.title,
         previousTaskStatus: task.status,
+        baseBranchRefreshed: Boolean(reachability.refreshed),
+        baseBranchRefreshSource: reachability.refreshSource,
         mergeCommitReachable: true,
         mergeCommitReachabilitySource: reachability.source,
       },
@@ -559,41 +588,121 @@ async function completeMergedPrTask(options, dependencies = {}) {
 
   const timestamp = dependencies.now ? dependencies.now() : nowIso();
   const patch = buildCompletionPatch(page, baseResult, timestamp);
-  await client.updatePageProperties(task.id, patch);
-  const updatedPage = await client.fetchPage(task.id);
-  const updatedTask = runner.taskFromPage(updatedPage);
+  const rollbackPatch = buildRollbackPatch(page, patch);
 
-  if (normalizeComparable(updatedTask.status) !== 'done') {
+  try {
+    await client.updatePageProperties(task.id, patch);
+  } catch (error) {
     return buildResult(
       'merged_pr_completion_failed',
-      'completion_verification_failed',
-      `Completion verification failed: expected Done, received ${updatedTask.status || '(empty)'}.`,
+      'notion_update_failed',
+      error && error.message ? error.message : 'Notion completion update failed.',
       options,
       {
         evaluatedAt: timestamp,
-        taskTitle: updatedTask.title || task.title,
+        taskTitle: task.title,
         previousTaskStatus: task.status,
-        nextTaskStatus: updatedTask.status,
+        nextTaskStatus: task.status,
         prUrl: baseResult.pr_url,
+        baseBranchRefreshed: Boolean(reachability.refreshed),
+        baseBranchRefreshSource: reachability.refreshSource,
         mergeCommitReachable: true,
         mergeCommitReachabilitySource: reachability.source,
+        trackerUpdated: false,
       },
     );
   }
 
-  let trackerRefresh = { refreshed: false, path: options.progressTrackerFile };
-  if (options.refreshProgressTracker !== false) {
+  let updatedPage;
+  try {
+    updatedPage = await client.fetchPage(task.id);
+  } catch (error) {
     try {
-      trackerRefresh = await (dependencies.refreshProgressTracker || refreshProgressTracker)({
+      await rollbackCompletion({
         client,
-        filePath: options.progressTrackerFile,
-        timestamp,
+        taskId: task.id,
+        rollbackPatch,
+        originalStatus: task.status,
       });
-    } catch (error) {
       return buildResult(
         'merged_pr_completion_failed',
-        'progress_tracker_refresh_failed',
-        error && error.message ? error.message : 'Progress tracker refresh failed.',
+        'completion_verification_failed',
+        `Completion verification failed and was rolled back: ${error && error.message ? error.message : String(error)}`,
+        options,
+        {
+          evaluatedAt: timestamp,
+          taskTitle: task.title,
+          previousTaskStatus: task.status,
+          nextTaskStatus: task.status,
+          prUrl: baseResult.pr_url,
+          baseBranchRefreshed: Boolean(reachability.refreshed),
+          baseBranchRefreshSource: reachability.refreshSource,
+          mergeCommitReachable: true,
+          mergeCommitReachabilitySource: reachability.source,
+          rollbackAttempted: true,
+          rollbackSucceeded: true,
+          trackerUpdated: false,
+        },
+      );
+    } catch (rollbackError) {
+      return buildResult(
+        'merged_pr_completion_failed',
+        'completion_rollback_failed',
+        'Completion verification failed and the compensating rollback also failed.',
+        options,
+        {
+          evaluatedAt: timestamp,
+          taskTitle: task.title,
+          previousTaskStatus: task.status,
+          nextTaskStatus: 'unknown',
+          prUrl: baseResult.pr_url,
+          baseBranchRefreshed: Boolean(reachability.refreshed),
+          baseBranchRefreshSource: reachability.refreshSource,
+          mergeCommitReachable: true,
+          mergeCommitReachabilitySource: reachability.source,
+          rollbackAttempted: true,
+          rollbackSucceeded: false,
+          rollbackError: rollbackError && rollbackError.message ? rollbackError.message : String(rollbackError),
+          trackerUpdated: true,
+        },
+      );
+    }
+  }
+
+  const updatedTask = runner.taskFromPage(updatedPage);
+  if (normalizeComparable(updatedTask.status) !== 'done') {
+    try {
+      await rollbackCompletion({
+        client,
+        taskId: task.id,
+        rollbackPatch,
+        originalStatus: task.status,
+      });
+      return buildResult(
+        'merged_pr_completion_failed',
+        'completion_verification_failed',
+        `Completion verification failed and was rolled back: expected Done, received ${updatedTask.status || '(empty)'}.`,
+        options,
+        {
+          evaluatedAt: timestamp,
+          taskTitle: updatedTask.title || task.title,
+          previousTaskStatus: task.status,
+          nextTaskStatus: task.status,
+          prUrl: baseResult.pr_url,
+          baseBranchRefreshed: Boolean(reachability.refreshed),
+          baseBranchRefreshSource: reachability.refreshSource,
+          mergeCommitReachable: true,
+          mergeCommitReachabilitySource: reachability.source,
+          rollbackAttempted: true,
+          rollbackSucceeded: true,
+          trackerUpdated: false,
+        },
+      );
+    } catch (rollbackError) {
+      return buildResult(
+        'merged_pr_completion_failed',
+        'completion_rollback_failed',
+        `Completion verification failed and rollback failed: ${rollbackError && rollbackError.message ? rollbackError.message : String(rollbackError)}`,
         options,
         {
           evaluatedAt: timestamp,
@@ -601,10 +710,13 @@ async function completeMergedPrTask(options, dependencies = {}) {
           previousTaskStatus: task.status,
           nextTaskStatus: updatedTask.status,
           prUrl: baseResult.pr_url,
+          baseBranchRefreshed: Boolean(reachability.refreshed),
+          baseBranchRefreshSource: reachability.refreshSource,
           mergeCommitReachable: true,
           mergeCommitReachabilitySource: reachability.source,
-          progressTrackerPath: options.progressTrackerFile,
-          progressTrackerError: error && error.message ? error.message : String(error),
+          rollbackAttempted: true,
+          rollbackSucceeded: false,
+          rollbackError: rollbackError && rollbackError.message ? rollbackError.message : String(rollbackError),
           trackerUpdated: true,
         },
       );
@@ -614,7 +726,7 @@ async function completeMergedPrTask(options, dependencies = {}) {
   return buildResult(
     'merged_pr_task_completed',
     'tracker_status_updated',
-    'Merged PR task tracker update completed.',
+    'Merged PR Notion task completion completed.',
     options,
     {
       evaluatedAt: timestamp,
@@ -622,10 +734,10 @@ async function completeMergedPrTask(options, dependencies = {}) {
       previousTaskStatus: task.status,
       nextTaskStatus: updatedTask.status,
       prUrl: baseResult.pr_url,
+      baseBranchRefreshed: Boolean(reachability.refreshed),
+      baseBranchRefreshSource: reachability.refreshSource,
       mergeCommitReachable: true,
       mergeCommitReachabilitySource: reachability.source,
-      progressTrackerRefreshed: Boolean(trackerRefresh.refreshed),
-      progressTrackerPath: trackerRefresh.path || options.progressTrackerFile,
     },
   );
 }
@@ -635,7 +747,7 @@ function buildMarkdownSummary(result) {
     '## Merged PR Task Completion',
     '',
     `Status: ${result.status}`,
-    `Tracker updated: ${result.tracker_updated ? 'yes' : 'no'}`,
+    `Notion task updated: ${result.tracker_updated ? 'yes' : 'no'}`,
     `Reason: ${result.reason}`,
     `Task: ${result.task_title || result.task_id || 'unresolved'}`,
     `Repository: ${result.repository || 'unresolved'}`,
@@ -643,18 +755,22 @@ function buildMarkdownSummary(result) {
     `PR URL: ${result.pr_url || 'unresolved'}`,
     `Merge SHA: ${result.merge_sha || 'unresolved'}`,
     `Required checks passed: ${result.required_checks_passed ? 'yes' : 'no'}`,
+    `Base branch ref refreshed: ${result.base_branch_refreshed ? 'yes' : 'no'}`,
     `Merge commit reachable from ${result.base_branch || 'develop'}: ${
       result.merge_commit_reachable ? 'yes' : 'no'
     }`,
-    `Progress tracker refreshed: ${result.progress_tracker_refreshed ? 'yes' : 'no'}`,
-    `Progress tracker path: ${result.progress_tracker_path || 'unresolved'}`,
+    `Rollback attempted: ${result.rollback_attempted ? 'yes' : 'no'}`,
+    `Rollback succeeded: ${
+      result.rollback_succeeded == null ? 'not applicable' : result.rollback_succeeded ? 'yes' : 'no'
+    }`,
+    `Progress source: ${result.progress_source}`,
     `Previous task status: ${result.previous_task_status || 'unresolved'}`,
     `Next task status: ${result.next_task_status || 'unresolved'}`,
     `Evaluated at: ${result.evaluated_at}`,
     '',
     `Message: ${result.message}`,
     '',
-    'Completion requires successful guarded merge evidence and does not merge, push, or change branch protection.',
+    'Completion requires successful guarded merge evidence and does not merge, push, change branch protection, or generate repository progress snapshots.',
     '',
   ].join('\n')}\n`;
 }
@@ -676,11 +792,14 @@ function mergeCompletionIntoLedger(existing, result, timestamp = nowIso()) {
     merge_sha: result.merge_sha,
     required_checks_passed: result.required_checks_passed,
     base_branch: result.base_branch,
+    base_branch_refreshed: result.base_branch_refreshed,
+    base_branch_refresh_source: result.base_branch_refresh_source,
     merge_commit_reachable: result.merge_commit_reachable,
     merge_commit_reachability_source: result.merge_commit_reachability_source,
-    progress_tracker_refreshed: result.progress_tracker_refreshed,
-    progress_tracker_path: result.progress_tracker_path,
-    progress_tracker_error: result.progress_tracker_error,
+    rollback_attempted: result.rollback_attempted,
+    rollback_succeeded: result.rollback_succeeded,
+    rollback_error: result.rollback_error,
+    progress_source: result.progress_source,
     evaluated_at: result.evaluated_at,
   };
   ledger.updated_at = timestamp;
@@ -744,19 +863,21 @@ if (require.main === module) {
 module.exports = {
   DEFAULT_GUARDED_MERGE_RESULT_FILE,
   DEFAULT_LEDGER_FILE,
-  DEFAULT_PROGRESS_TRACKER_FILE,
   DEFAULT_RESULT_FILE,
   DEFAULT_SUMMARY_FILE,
   LIVE_CONFIRMATION,
+  assertSafeBranchName,
   buildCompletionEvidence,
   buildCompletionPatch,
   buildMarkdownSummary,
+  buildRollbackPatch,
   checkMergeCommitReachable,
   completeMergedPrTask,
   mergeCompletionIntoLedger,
-  progressTrackerMarkdown,
-  refreshProgressTracker,
+  refreshBaseBranchRef,
   resolveRuntimeOptions,
+  rollbackCompletion,
+  snapshotPropertyPatch,
   validatePreconditions,
   writeOutputs,
 };
