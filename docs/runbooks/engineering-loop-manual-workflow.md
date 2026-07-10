@@ -64,6 +64,23 @@ The guarded merge executor first runs `.github/scripts/pr-merge-gate.cjs`, then 
 
 GitHub branch protection, required checks, repository permissions, and maintainer decision-making remain authoritative. The executor does not approve PRs, bypass branch protection, change repository settings, or merge batch-mode tasks.
 
+## Merged PR task completion
+
+When `merge_pr=true` and `mutate_notion=true`, the workflow runs `.github/scripts/eng-loop-merged-pr-completion.cjs` after guarded merge execution.
+
+The completion step is fail-closed:
+
+- It requires guarded merge evidence from a passing deterministic merge gate.
+- It fetches the latest remote base branch before evaluating reachability.
+- It requires the guarded merge SHA to be reachable from `origin/develop` or `develop`.
+- Git commands use bounded execution time and produce actionable failure evidence.
+- It updates the linked Notion task to `Done` only in live mode with `ENG-LOOP-35-COMPLETE`.
+- It records required-check, base-ref refresh, reachability, rollback, and tracker-state evidence in the result JSON, Markdown summary, and run ledger.
+- A failed or ambiguous Notion update triggers and verifies a compensating rollback of every modified property.
+- If rollback cannot be verified, completion fails with the Notion task state explicitly marked unknown.
+- Re-running against a task that is already `Done` does not write duplicate Notion completion evidence.
+- Notion is the sole progress source. The workflow does not generate or maintain `docs/progress-tracker.md`.
+
 ## Stop conditions
 
 - Stop when `max_tasks` is greater than `1`.
@@ -76,6 +93,8 @@ GitHub branch protection, required checks, repository permissions, and maintaine
 - Stop when the deterministic merge gate blocks the PR.
 - Stop when the PR head SHA no longer matches the merge gate result.
 - Stop when GitHub rejects the merge because branch protection, required checks, permissions, or PR state are not satisfied.
+- Stop when merged PR task completion cannot refresh the remote base branch or verify the merge SHA on `develop`.
+- Stop when a Notion completion update or its compensating rollback cannot be verified.
 
 ## Evidence artifacts
 
@@ -94,6 +113,8 @@ The workflow uploads engineering-loop evidence files as artifacts when available
 - `.tmp/pr-merge-gate-summary.md`
 - `.tmp/pr-guarded-merge-result.json`
 - `.tmp/pr-guarded-merge-summary.md`
+- `.tmp/eng-loop-merged-pr-completion-result.json`
+- `.tmp/eng-loop-merged-pr-completion-summary.md`
 
 ## Local validation
 
@@ -101,10 +122,13 @@ Run:
 
 ```bash
 node ./.github/scripts/pr-guarded-merge.test.cjs
+node ./.github/scripts/eng-loop-merged-pr-completion.test.cjs
 node ./.github/scripts/eng-loop-workflow-preflight.test.cjs
 pnpm eng-loop:test
 pnpm validate:quick
 ```
+
+Before merging, rerun repository-wide validation against the current `develop` merge base so unrelated base-branch failures cannot be mistaken for completion-script regressions.
 
 ## ENG-LOOP-24 first-5 batch mode
 

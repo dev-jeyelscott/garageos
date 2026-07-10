@@ -31,6 +31,7 @@
     "eng-loop:first-5:dry-run": "node ./.github/scripts/eng-loop-codex-pr-automation.cjs --mode=dry-run --limit=5",
     "eng-loop:follow-up": "node ./.github/scripts/eng-loop-follow-up-task.cjs",
     "eng-loop:follow-up:test": "node ./.github/scripts/eng-loop-follow-up-task.test.cjs",
+    "eng-loop:complete-merged-pr": "node ./.github/scripts/eng-loop-merged-pr-completion.cjs",
     "eng-loop:prepare-pr": "node ./.github/scripts/eng-loop-pr-automation.cjs",
     "eng-loop:task-scope:test": "node ./.github/scripts/eng-loop-task-scope.test.cjs",
     "eng-loop:test": "node ./.github/scripts/eng-loop-runner.test.cjs && node ./.github/scripts/eng-loop-pr-automation.test.cjs && node ./.github/scripts/eng-loop-follow-up-task.test.cjs && node ./.github/scripts/eng-loop-workflow-preflight.test.cjs && node ./.github/scripts/eng-loop-codex-pr-automation.test.cjs && node ./.github/scripts/eng-loop-task-scope.test.cjs && node ./.github/scripts/pr-merge-gate.test.cjs && node ./.github/scripts/pr-guarded-merge.test.cjs && node ./.github/scripts/eng-loop-merged-pr-completion.test.cjs && node ./.github/scripts/pr-risk-classifier.test.cjs && node ./.github/scripts/pr-ai-review.test.cjs",
