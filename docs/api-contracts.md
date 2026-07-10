@@ -1836,6 +1836,38 @@ Base path: `/api/v1/notifications`
 | `GET`  | `/preferences`               | `notifications.read`               | Get current user notification preferences.         |
 | `PUT`  | `/preferences`               | `notifications.update_preferences` | Update preferences, enforcing plan channel limits. |
 
+`GET /notifications/preferences` response:
+
+```json
+{
+  "preferences": [
+    {
+      "notification_type": "low_stock",
+      "channel": "in_app",
+      "enabled": true,
+      "updated_at": "2026-07-08T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+`PUT /notifications/preferences` request:
+
+```json
+{
+  "preferences": [
+    {
+      "notification_type": "low_stock",
+      "channel": "in_app",
+      "enabled": true
+    }
+  ]
+}
+```
+
+`PUT /notifications/preferences` replaces the current user's saved preference rows. The API must
+reject enabled channels blocked by the tenant plan and must not silently switch to another channel.
+
 ---
 
 ## 9.24 File APIs

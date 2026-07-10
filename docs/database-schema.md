@@ -1695,6 +1695,21 @@ create table in_app_notifications (
 );
 
 create index idx_in_app_notifications_unread on in_app_notifications(tenant_id, user_id, created_at desc) where read_at is null;
+
+create table user_notification_preferences (
+  id uuid primary key,
+  tenant_id uuid not null references tenants(id),
+  user_id uuid not null references users(id),
+  notification_type text not null,
+  channel text not null,
+  enabled boolean not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique(tenant_id, user_id, notification_type, channel)
+);
+
+create index idx_user_notification_preferences_user
+  on user_notification_preferences(tenant_id, user_id, notification_type, channel);
 ```
 
 ---
