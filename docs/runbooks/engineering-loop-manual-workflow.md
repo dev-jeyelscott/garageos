@@ -128,6 +128,8 @@ pnpm eng-loop:test
 pnpm validate:quick
 ```
 
+Before merging, rerun repository-wide validation against the current `develop` merge base so unrelated base-branch failures cannot be mistaken for completion-script regressions.
+
 ## ENG-LOOP-24 first-5 batch mode
 
 First-5 mode is a controlled batch mode for the GarageOS engineering loop. It is limited to five eligible tasks and must be run sequentially. Dry-run mode is the required trial path before mutation-capable execution.
