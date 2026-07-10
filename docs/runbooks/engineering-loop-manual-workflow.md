@@ -73,9 +73,11 @@ The completion step is fail-closed:
 - It requires guarded merge evidence from a passing deterministic merge gate.
 - It fetches the latest remote base branch before evaluating reachability.
 - It requires the guarded merge SHA to be reachable from `origin/develop` or `develop`.
+- Git commands use bounded execution time and produce actionable failure evidence.
 - It updates the linked Notion task to `Done` only in live mode with `ENG-LOOP-35-COMPLETE`.
-- It records required-check, base-ref refresh, reachability, and rollback evidence in the result JSON, Markdown summary, and run ledger.
-- If post-update verification fails, it performs and verifies a compensating Notion rollback to the original task state.
+- It records required-check, base-ref refresh, reachability, rollback, and tracker-state evidence in the result JSON, Markdown summary, and run ledger.
+- A failed or ambiguous Notion update triggers and verifies a compensating rollback of every modified property.
+- If rollback cannot be verified, completion fails with the Notion task state explicitly marked unknown.
 - Re-running against a task that is already `Done` does not write duplicate Notion completion evidence.
 - Notion is the sole progress source. The workflow does not generate or maintain `docs/progress-tracker.md`.
 
