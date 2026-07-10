@@ -331,6 +331,5 @@ jobs:
             .tmp/pr-*.json
             .tmp/pr-*.md
             .tmp/pr-*.txt
-            docs/progress-tracker.md
           if-no-files-found: warn
           retention-days: 14
