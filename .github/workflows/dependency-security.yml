@@ -1,4 +1,3 @@
-# ENG-LOOP-09 — portable dependency security automation
 # This workflow uses repository-local pnpm validation so it does not depend on paid GitHub security features.
 
 name: Dependency Security

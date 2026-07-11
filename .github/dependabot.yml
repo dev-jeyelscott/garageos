@@ -1,4 +1,3 @@
-# ENG-LOOP-09 — dependency update automation
 # Keeps npm workspace dependencies and GitHub Actions versions current.
 # Dependabot must run from the default branch. PRs are targeted at develop to match the GarageOS feature-integration flow.
 

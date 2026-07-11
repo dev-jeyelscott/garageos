@@ -1,4 +1,3 @@
-# ENG-LOOP-09 — static security analysis
 # Semgrep provides a portable static-analysis gate without requiring GitHub Advanced Security.
 
 name: Static Security Analysis

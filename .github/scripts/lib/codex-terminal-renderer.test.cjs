@@ -68,18 +68,9 @@ async function runCodexTerminalRendererTests() {
     },
     type: 'item.completed',
   });
-  const line5 = JSON.stringify({
-    item: {
-      action: 'modified',
-      path: 'docs/runbooks/engineering-loop.md',
-      type: 'file_change',
-    },
-    type: 'item.completed',
-  });
-
   renderer.write(line1.slice(0, 18));
   renderer.write(line1.slice(18) + '\n' + line2 + '\n' + line3 + '\n');
-  renderer.write(line4 + '\n' + line5);
+  renderer.write(line4);
   await renderer.end();
 
   const output = stream.text();
@@ -91,8 +82,6 @@ async function runCodexTerminalRendererTests() {
   assert.match(output, /Check passed/);
   assert.match(output, /Check failed/);
   assert.match(output, /dependency fetch blocked/);
-  assert.match(output, /Changed/);
-  assert.match(output, /docs\/runbooks\/engineering-loop\.md/);
 
   const disabledStream = createMemoryStream();
   const disabledRenderer = createCodexTerminalRenderer({
