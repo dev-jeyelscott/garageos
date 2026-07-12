@@ -1,8 +1,12 @@
 import type { NextConfig } from 'next';
+import { resolve } from 'node:path';
 
 const apiOrigin = process.env.GARAGEOS_API_ORIGIN ?? 'http://localhost:3001';
 
 const nextConfig: NextConfig = {
+  turbopack: {
+    root: resolve(__dirname, '../..'),
+  },
   async rewrites() {
     return [
       {
